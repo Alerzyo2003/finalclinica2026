@@ -5,16 +5,11 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Toaster, toast } from 'sonner'
 import { 
-  Activity, Search, Calendar, Users, 
-  Briefcase, BarChart3, Settings, LogOut,
-  LayoutGrid, ShieldCheck, ChevronDown,
-  Building2, Stethoscope, Package, Beaker,
-  Calculator, DoorOpen, BadgeDollarSign,
-  Library, FileSignature, Ban, FileText,
-  TrendingUp, FileSpreadsheet, PieChart, 
-  ArrowRightLeft, UserMinus, Trophy,
-  FileSearch, Users2, ChevronRight,
-  Receipt, HeartPulse, Loader2, User, UserCheck
+  Search, Calendar, Users, Briefcase, BarChart3, LogOut,
+  LayoutGrid, Stethoscope, Package, Beaker, Calculator,
+  DoorOpen, BadgeDollarSign, Library, FileSignature, Ban,
+  FileText, TrendingUp, FileSpreadsheet, ChevronRight,
+  Loader2, User, UserCheck, Building2
 } from 'lucide-react'
 import Link from 'next/link'
 import './globals.css'
@@ -76,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // --- BÚSQUEDA AVANZADA (FUZZY SEARCH + RUT) ---
+  // --- BÚSQUEDA AVANZADA ---
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (busqueda.length > 2) ejecutarBusqueda(busqueda)
@@ -142,14 +137,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="es">
-      {/* MAGIA DE IMPRESIÓN: Cambiamos de h-screen a h-auto para que la impresora lea todas las páginas */}
-      <body className="bg-slate-50 h-screen flex flex-col font-sans antialiased overflow-hidden print:h-auto print:overflow-visible print:block text-slate-800 text-left">
+      <body className="bg-slate-50 min-h-screen font-sans antialiased text-slate-800 text-left print:block print:h-auto">
         <Toaster richColors position="top-right" />
 
         {!isAuthPage && session && (
-          // MAGIA DE IMPRESIÓN: print:hidden oculta los menús al imprimir
-          <div className="flex flex-col shrink-0 print:hidden">
-            <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-8 shadow-2xl z-[40] relative border-b border-white/5">
+          /* 
+             SOLUCIÓN: Cambiamos de "fixed/sticky" a "relative".
+             Ahora el menú es parte normal de la página. Se queda arriba y no te persigue al bajar.
+          */
+          <div className="relative z-[100] flex flex-col print:hidden shadow-sm">
+            
+            {/* HEADER SUPERIOR */}
+            <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-8 border-b border-white/5">
               <div className="flex items-center gap-12 text-left">
                 <Link href="/" className="flex items-center gap-4 group transition-all text-left">
                   <div className="relative shrink-0">
@@ -172,7 +171,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
                   <AnimatePresence>
                     {mostrarResultados && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[115%] left-0 w-full bg-white rounded-3xl shadow-2xl border border-slate-100 p-3 z-[50] text-slate-900 text-left">
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[115%] left-0 w-full bg-white rounded-3xl shadow-2xl border border-slate-100 p-3 z-[150] text-slate-900 text-left">
                         {resultados.length > 0 ? (
                           <div className="flex flex-col gap-1 text-left">
                             {resultados.map((p) => (
@@ -207,7 +206,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </header>
 
-            <nav className="w-full h-14 bg-white border-b border-slate-200 flex items-center px-8 gap-10 shadow-sm z-[30] relative text-left">
+            {/* NAVBAR INFERIOR */}
+            <nav className="w-full h-14 bg-white border-b border-slate-200 flex items-center px-8 gap-10">
               {modulos.filter(m => m.roles.includes(perfil?.rol)).map((m) => (
                 <ModuleLink key={m.href} href={m.href} label={m.label} icon={m.icon} active={pathname.startsWith(m.href)} />
               ))}
@@ -220,7 +220,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </button>
                     <AnimatePresence>
                       {showReportMenu && (
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[100%] left-0 bg-white shadow-2xl rounded-[2rem] border border-slate-100 p-4 z-[100] w-[260px] mt-1 text-left">
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[100%] left-0 bg-white shadow-2xl rounded-[2rem] border border-slate-100 p-4 z-[110] w-[260px] mt-1 text-left">
                           <MenuOption href="/reportes/desempeno" label="Desempeño" icon={<TrendingUp size={14}/>} onClick={() => setShowReportMenu(false)} />
                           <MenuOption href="/reportes/excel" label="Excel" icon={<FileSpreadsheet size={14}/>} onClick={() => setShowReportMenu(false)} />
                         </motion.div>
@@ -234,7 +234,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </button>
                     <AnimatePresence>
                       {showAdminMenu && (
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[100%] left-0 bg-white shadow-2xl rounded-[2.5rem] border border-slate-100 p-8 z-[100] w-[850px] mt-1 grid grid-cols-3 gap-8 text-left">
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[100%] left-0 bg-white shadow-2xl rounded-[2.5rem] border border-slate-100 p-8 z-[110] w-[850px] mt-1 grid grid-cols-3 gap-8 text-left">
                           
                           {/* COLUMNA 1: GESTIÓN CLÍNICA */}
                           <div className="space-y-2 text-left">
@@ -273,8 +273,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
-        {/* MAGIA DE IMPRESIÓN: overflow-visible para no cortar las páginas */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 relative z-0 print:overflow-visible print:h-auto print:block print:bg-white text-left custom-scrollbar">
+        {/* 
+            SOLUCIÓN MAIN: Al ser "relative", el contenido empuja todo de manera natural.
+            Ya no necesitamos paddings falsos ni alturas forzadas.
+        */}
+        <main className="flex-1 w-full bg-slate-50 relative z-0 print:bg-white print:overflow-visible">
           {children}
         </main>
       </body>

@@ -74,10 +74,10 @@ export default function DocumentosClinicosPage() {
 
   const handlePrint = async (modo: 'imprimir' | 'descargar') => {
     const elementoWeb = document.getElementById('hoja-impresion');
-    if (!elementoWeb) return toast.error("No hay contenido");
+    if (!elementoWeb) return toast.error("No hay contenido", { id: 'no-contenido' });
     
     setGenerandoPdf(true);
-    const toastId = toast.loading("Generando documento...");
+    toast.loading("Generando documento...", { id: 'pdf-toast' });
     
     try {
       const html2pdf = (await import('html2pdf.js')).default;
@@ -164,12 +164,14 @@ export default function DocumentosClinicosPage() {
       }
 
       if (modo === 'imprimir') window.open(pdf.output('bloburl'), '_blank'); else pdf.save();
-      toast.success("Documento generado");
-    } catch (error) { toast.error("Error al generar PDF"); } finally { setGenerandoPdf(false); }
+      toast.success("Documento generado", { id: 'pdf-toast' });
+    } catch (error) { toast.error("Error al generar PDF", { id: 'pdf-toast' }); } finally { setGenerandoPdf(false); }
   };
 
   const guardarDocumentoFinal = async () => {
-    if (guardando || !tituloEdicion || !especialistaSeleccionadoId) return toast.error("Faltan datos");
+    if (guardando) return;
+    if (!tituloEdicion || !especialistaSeleccionadoId) return toast.error("Faltan datos", { id: 'datos-faltantes' });
+    
     setGuardando(true);
     try {
       const { error } = await supabase.from('documentos_clinicos').insert([{
@@ -177,8 +179,15 @@ export default function DocumentosClinicosPage() {
         llenado_por: profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId)?.nombre_completo
       }]);
       if (error) throw error;
-      toast.success("Guardado"); setDocSeleccionado(null); setMostrandoCategorias(false); fetchDocumentos();
-    } catch (e) { toast.error("Error al guardar"); } finally { setGuardando(false); }
+      toast.success("Guardado", { id: 'guardado-exito' }); 
+      setDocSeleccionado(null); 
+      setMostrandoCategorias(false); 
+      fetchDocumentos();
+    } catch (e) { 
+      toast.error("Error al guardar", { id: 'error-guardar' }); 
+    } finally { 
+      setGuardando(false); 
+    }
   }
 
   const agregarBloqueManual = (tipo: string) => {
@@ -210,10 +219,36 @@ export default function DocumentosClinicosPage() {
             <h3 className="text-xl font-black uppercase italic leading-none">Documentos</h3>
         </div>
         <div className="flex gap-2">
-          {(mostrandoCategorias || docSeleccionado) && (
-            <button onClick={() => {setMostrandoCategorias(false); setDocSeleccionado(null); setIsOpenLista(false);}} className="bg-slate-100 text-slate-600 px-5 py-3 rounded-xl font-black text-[9px] uppercase hover:bg-slate-200 transition-all">Volver</button>
+          {/* BOTONES DE IMPRESIÓN Y GUARDADO ESTILO CONSENTIMIENTOS */}
+          {docSeleccionado && (
+            <>
+              <button onClick={() => handlePrint('imprimir')} disabled={generandoPdf} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase shadow-sm hover:bg-slate-50 flex items-center gap-2 transition-all">
+                {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} 
+                {generandoPdf ? 'Preparando...' : 'Imprimir'}
+              </button>
+              <button onClick={() => handlePrint('descargar')} disabled={generandoPdf} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-700 flex items-center gap-2 transition-all">
+                {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
+                {generandoPdf ? 'Generando...' : 'Descargar PDF'}
+              </button>
+              {docSeleccionado === 'NUEVO' && (
+                <button onClick={guardarDocumentoFinal} disabled={guardando} className="px-5 py-2.5 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-emerald-600 flex items-center gap-2 transition-all">
+                  {guardando ? <Loader2 className="animate-spin" size={14}/> : <Save size={14} />} Guardar
+                </button>
+              )}
+            </>
           )}
-          <button onClick={() => {setShowModalEspecialista(true); setIsOpenLista(false);}} className="bg-blue-600 text-white px-5 py-3 rounded-xl font-black text-[9px] uppercase flex items-center gap-2 shadow-lg shadow-blue-50 active:scale-95 transition-all"><Plus size={14}/> Nuevo</button>
+
+          {/* BOTONES DE NAVEGACIÓN ORIGINALES */}
+          {(mostrandoCategorias || docSeleccionado) && (
+            <button onClick={() => {setMostrandoCategorias(false); setDocSeleccionado(null); setIsOpenLista(false);}} className="bg-slate-100 text-slate-600 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all flex items-center gap-2">
+              Volver
+            </button>
+          )}
+          {!docSeleccionado && !mostrandoCategorias && (
+            <button onClick={() => {setShowModalEspecialista(true); setIsOpenLista(false);}} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 shadow-lg shadow-blue-50 active:scale-95 transition-all">
+              <Plus size={14}/> Nuevo
+            </button>
+          )}
         </div>
       </header>
 
@@ -317,7 +352,6 @@ export default function DocumentosClinicosPage() {
                             ))}
                         </div>
                         
-                        {/* FIRMAS WEB CORREGIDAS */}
                         <div className="mt-20 pt-8 flex justify-between gap-10 text-slate-900">
                             <div className="flex-1">
                                 <div className="h-16"></div>
@@ -347,11 +381,6 @@ export default function DocumentosClinicosPage() {
                     </div>
                   </div>
 
-                  <div className="fixed bottom-10 right-10 flex flex-col gap-3">
-                    <button onClick={() => handlePrint('imprimir')} disabled={generandoPdf} className="bg-white text-slate-900 p-4 rounded-full shadow-2xl border-2 hover:scale-110 active:scale-95"><Printer size={20}/></button>
-                    <button onClick={() => handlePrint('descargar')} disabled={generandoPdf} className="bg-blue-600 text-white p-4 rounded-full shadow-2xl hover:scale-110 active:scale-95"><Download size={20}/></button>
-                    {docSeleccionado === 'NUEVO' && <button onClick={guardarDocumentoFinal} disabled={guardando} className="bg-emerald-500 text-white p-4 rounded-full shadow-2xl hover:scale-110 active:scale-95"><Save size={20}/></button>}
-                  </div>
                 </div>
               </div>
             ) : (

@@ -1,22 +1,19 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, ShieldCheck, Loader2, Download } from 'lucide-react'
-import SignatureCanvas from 'react-signature-canvas'
+import { ChevronLeft, Printer, Loader2, Download } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function DetalleConsentimientoPage() {
   const params = useParams()
   const docId = params.docId
   const pacienteId = params.id
-  const sigCanvas = useRef<any>(null)
 
   const [documento, setDocumento] = useState<any>(null)
   const [paciente, setPaciente] = useState<any>(null)
   const [especialista, setEspecialista] = useState<any>(null)
   const [cargando, setCargando] = useState(true)
-  const [guardando, setGuardando] = useState(false)
   const [generandoPdf, setGenerandoPdf] = useState(false)
 
   useEffect(() => { if (docId) fetchTodo() }, [docId])
@@ -29,18 +26,20 @@ export default function DetalleConsentimientoPage() {
 
       if (doc?.especialista_id) {
         const [profRes, perfRes] = await Promise.all([
-          supabase.from('profesionales').select('nombre, apellido, especialidades(nombre)').eq('user_id', doc.especialista_id).maybeSingle(),
+          // CORRECCIÓN: Agregamos firma_base64 a la consulta del profesional
+          supabase.from('profesionales').select('nombre, apellido, firma_base64, especialidades(nombre)').eq('user_id', doc.especialista_id).maybeSingle(),
           supabase.from('perfiles').select('rut').eq('id', doc.especialista_id).maybeSingle()
         ])
         if (profRes.data) {
           setEspecialista({
             nombre: `Dr/a. ${profRes.data.nombre} ${profRes.data.apellido}`,
             especialidad: (profRes.data as any).especialidades?.nombre || 'Especialista',
-            rut: perfRes.data?.rut || '---'
+            rut: perfRes.data?.rut || '---',
+            firma_base64: profRes.data.firma_base64 // Guardamos la firma del especialista
           })
         }
       } else if (doc?.creado_por) {
-        setEspecialista({ nombre: doc.creado_por, especialidad: 'Especialista', rut: '---' })
+        setEspecialista({ nombre: doc.creado_por, especialidad: 'Especialista', rut: '---', firma_base64: null })
       }
 
       setDocumento(doc)
@@ -57,12 +56,12 @@ export default function DetalleConsentimientoPage() {
       const element = document.getElementById('documento-pdf');
 
       const opt = {
-        margin:       15,
+        margin:       [15, 15, 20, 15], 
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' }, 
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
         jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] }
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
 
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
@@ -95,12 +94,12 @@ export default function DetalleConsentimientoPage() {
       const element = document.getElementById('documento-pdf');
 
       const opt = {
-        margin:       15,
+        margin:       [15, 15, 20, 15],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' }, 
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
         jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] }
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
 
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
@@ -121,21 +120,6 @@ export default function DetalleConsentimientoPage() {
       setGenerandoPdf(false);
     }
   };
-
-  const guardarFirmaEspecialista = async () => {
-    if (!sigCanvas.current || sigCanvas.current.isEmpty()) return toast.error("Debe firmar")
-    setGuardando(true)
-    try {
-      const dataFirma = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png')
-      await supabase.from('paciente_consentimientos').update({
-        firma_profesional: 'Firmado',
-        img_firma_especialista: dataFirma,
-        fecha_firma_especialista: new Date().toISOString()
-      }).eq('id', docId)
-      toast.success("Documento Firmado");
-      fetchTodo();
-    } catch (e) { toast.error("Error al guardar firma") } finally { setGuardando(false) }
-  }
 
   if (cargando) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
 
@@ -160,11 +144,7 @@ export default function DetalleConsentimientoPage() {
             {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
             {generandoPdf ? 'Generando...' : 'Descargar PDF'}
           </button>
-          {documento?.firma_profesional !== 'Firmado' && (
-            <button onClick={guardarFirmaEspecialista} disabled={guardando} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase flex items-center gap-2">
-              {guardando ? <Loader2 className="animate-spin" size={14}/> : <ShieldCheck size={14} />} Firmar
-            </button>
-          )}
+          {/* BOTÓN DE FIRMAR ELIMINADO AQUÍ */}
         </div>
       </nav>
 
@@ -174,6 +154,10 @@ export default function DetalleConsentimientoPage() {
         <div className="w-full max-w-[850px] shadow-2xl mx-auto bg-white rounded-3xl overflow-hidden border border-slate-200">
           
           <div id="documento-pdf" style={{ backgroundColor: '#ffffff', color: '#000000', padding: '50px', fontFamily: 'Arial, sans-serif' }}>
+            
+            <style>{`
+              #documento-pdf p, #documento-pdf li, #documento-pdf div { page-break-inside: avoid; }
+            `}</style>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #000000', paddingBottom: '20px', marginBottom: '30px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -197,7 +181,6 @@ export default function DetalleConsentimientoPage() {
                 <p style={{ fontSize: '12px', color: '#000000', margin: 0 }}>RUT: {paciente?.rut}</p>
               </div>
               
-              {/* COLUMNA CENTRAL: TRATAMIENTO LIGADO AL PRESUPUESTO_ID */}
               <div style={{ width: '33%', textAlign: 'center' }}>
                 <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Tratamiento</span>
                 <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{documento?.nombre_consentimiento}</p>
@@ -215,14 +198,21 @@ export default function DetalleConsentimientoPage() {
             </div>
 
             <div 
-              style={{ fontSize: '14px', lineHeight: '1.6', color: '#000000', textAlign: 'justify', marginBottom: '60px', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }} 
+              style={{ fontSize: '14px', lineHeight: '1.6', color: '#000000', textAlign: 'justify', marginBottom: '60px', overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap' }} 
               dangerouslySetInnerHTML={{ __html: documento?.contenido_legal }} 
             />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '40px', pageBreakInside: 'avoid' }}>
               <div style={{ width: '45%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #000000', paddingBottom: '10px', marginBottom: '10px' }}>
-                  {documento?.img_firma_especialista && <img src={documento.img_firma_especialista} style={{ maxHeight: '70px', objectFit: 'contain' }} crossOrigin="anonymous" />}
+                  {/* CORRECCIÓN: Ahora carga la firma del especialista desde la tabla profesionales automáticamente */}
+                  {(especialista?.firma_base64 || documento?.img_firma_especialista) && (
+                    <img 
+                      src={especialista?.firma_base64 || documento?.img_firma_especialista} 
+                      style={{ maxHeight: '70px', objectFit: 'contain', mixBlendMode: 'multiply' }} 
+                      crossOrigin="anonymous" 
+                    />
+                  )}
                 </div>
                 <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{especialista?.nombre}</p>
                 <p style={{ fontSize: '10px', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Firma Especialista</p>
@@ -230,7 +220,7 @@ export default function DetalleConsentimientoPage() {
               
               <div style={{ width: '45%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #000000', paddingBottom: '10px', marginBottom: '10px' }}>
-                  {documento?.img_firma_paciente && <img src={documento.img_firma_paciente} style={{ maxHeight: '70px', objectFit: 'contain' }} crossOrigin="anonymous" />}
+                  {documento?.img_firma_paciente && <img src={documento.img_firma_paciente} style={{ maxHeight: '70px', objectFit: 'contain', mixBlendMode: 'multiply' }} crossOrigin="anonymous" />}
                 </div>
                 <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{paciente?.nombre} {paciente?.apellido}</p>
                 <p style={{ fontSize: '10px', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Aceptación Paciente</p>
@@ -240,21 +230,8 @@ export default function DetalleConsentimientoPage() {
           </div>
         </div>
 
-        {/* PAD DE FIRMAS WEB */}
-        {documento?.firma_profesional !== 'Firmado' && (
-          <aside className="w-full max-w-[400px] mt-10 mx-auto">
-            <div className="bg-white p-10 rounded-[3rem] shadow-2xl border-2 border-slate-900 text-left">
-              <h3 className="text-sm font-black uppercase italic text-slate-800 mb-6 flex items-center gap-2"><ShieldCheck size={20} className="text-blue-600" /> Registrar Firma Médica</h3>
-              <div className="bg-slate-100 rounded-[2rem] border-2 border-dashed border-slate-200 overflow-hidden mb-6 h-64">
-                <SignatureCanvas ref={sigCanvas} penColor='#000' canvasProps={{className: 'w-full h-full'}} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => sigCanvas.current?.clear()} className="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl text-[10px] font-black uppercase hover:bg-red-50">Limpiar</button>
-                <button onClick={guardarFirmaEspecialista} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-blue-700">Guardar Firma</button>
-              </div>
-            </div>
-          </aside>
-        )}
+        {/* PAD DE FIRMAS ELIMINADO AQUÍ */}
+
       </main>
     </div>
   )

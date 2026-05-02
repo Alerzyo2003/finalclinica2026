@@ -96,10 +96,10 @@ export default function DetalleTratamientoPage() {
       setVistaMenu('principal'); 
     };
     window.addEventListener('click', cerrarMenu);
-    window.addEventListener('scroll', cerrarMenu, true);
+    
+    // CORRECCIÓN: Eliminamos el evento de scroll para que no se cierre el cuadro al bajar.
     return () => {
       window.removeEventListener('click', cerrarMenu);
-      window.removeEventListener('scroll', cerrarMenu, true);
     };
   }, [idURL])
 
@@ -269,14 +269,25 @@ export default function DetalleTratamientoPage() {
     toast.success("Nueva sección agregada a la lista");
   }
 
+  // CORRECCIÓN: Cálculo de coordenadas exactas relativas al contenedor
   const handleContextMenu = (e: React.MouseEvent, diente: number, cara?: string) => {
     e.preventDefault(); 
     e.stopPropagation();
+    
+    const container = document.getElementById('odontograma-container');
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    
+    // Coordenadas relativas al contenedor principal para que bajen con él.
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
     const isRightSide = e.clientX + 480 > window.innerWidth;
     
     setMenuContextual({ 
-      x: e.clientX, 
-      y: e.clientY, 
+      x, 
+      y, 
       diente, 
       lado: isRightSide ? 'izquierda' : 'derecha', 
       cara 
@@ -518,7 +529,8 @@ export default function DetalleTratamientoPage() {
   }
 
   return (
-    <div className="relative w-full text-left font-sans pb-32">
+    // CORRECCIÓN: Agregado el ID odontograma-container para el cálculo correcto.
+    <div id="odontograma-container" className="relative w-full text-left font-sans pb-32">
       <div className="space-y-8 transition-all">
           
           <section className="bg-white p-8 md:p-12 rounded-[4rem] shadow-sm border border-slate-100 relative overflow-visible flex flex-col items-center">
@@ -742,10 +754,9 @@ export default function DetalleTratamientoPage() {
           </div>
       </div>
 
-      {/* MENÚ CONTEXTUAL */}
       <AnimatePresence>
         {menuContextual && (
-          <div style={{ position: 'fixed', top: menuContextual.y + 20, left: menuContextual.lado === 'derecha' ? menuContextual.x : menuContextual.x - (vistaMenu === 'principal' ? 200 : 480), zIndex: 9999999 }}>
+          <div style={{ position: 'absolute', top: menuContextual.y + 20, left: menuContextual.lado === 'derecha' ? menuContextual.x : menuContextual.x - (vistaMenu === 'principal' ? 200 : 480), zIndex: 9999999 }}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1, width: (vistaMenu !== 'principal') ? 480 : 200 }} exit={{ opacity: 0 }} className={`bg-white border border-slate-100 shadow-[0_40px_100px_-15px_rgba(0,0,0,0.5)] rounded-[2rem] p-2 flex overflow-hidden ${menuContextual.lado === 'derecha' ? 'flex-row' : 'flex-row-reverse'}`} onClick={(e) => e.stopPropagation()}>
               
               <div className={`w-[200px] shrink-0 p-3 space-y-1 ${menuContextual.lado === 'derecha' ? 'border-r' : 'border-l'} border-slate-50`}>
