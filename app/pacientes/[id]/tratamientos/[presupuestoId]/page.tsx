@@ -6,7 +6,7 @@ import {
   Loader2, Database,
   Plus, X, Search, Trash2, CheckCircle2,
   ChevronRight, ChevronUp, ChevronDown, Info, Settings, Layers, FileSignature,
-  Stethoscope, Check
+  Stethoscope, Check, RefreshCcw, Undo2, HelpCircle, Printer, Download
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -39,6 +39,7 @@ const ICONOS_DISPONIBLES = [
   { id: "limpieza", label: "Limpieza/Pulido", icon: "limpieza" },
   { id: "caries", label: "Caries", icon: "caries" },
   { id: "sano", label: "Diente Sano", icon: "sano" },
+  { id: "otro", label: "Otro (Estrella)", icon: "otro" },
   { id: "default", label: "Círculo (Genérico)", icon: "default" }
 ];
 
@@ -50,12 +51,24 @@ export default function DetalleTratamientoPage() {
   const [pacienteId, setPacienteId] = useState<string>('')
   const [presupuestoData, setPresupuestoData] = useState<any>(null)
   const [acciones, setAcciones] = useState<any[]>([])
+  
   const [odontogramaEstado, setOdontogramaEstado] = useState<Record<string, any>>({})
+  const [historialOdontograma, setHistorialOdontograma] = useState<Record<string, any>[]>([])
+  
+  const [dientesSeleccionados, setDientesSeleccionados] = useState<number[]>([])
+  const [editandoDienteId, setEditandoDienteId] = useState<string | null>(null)
+
+  const [modalEditarItem, setModalEditarItem] = useState<{abierto: boolean, item: any}>({abierto: false, item: null})
+  const [dctoInput, setDctoInput] = useState(0)
+
+  const [mostrarLeyenda, setMostrarLeyenda] = useState(false)
+  const [modalExportar, setModalExportar] = useState<{abierto: boolean, tipo: 'imprimir'|'descargar'|null}>({abierto: false, tipo: null})
+  const [exportarOpciones, setExportarOpciones] = useState({ odontograma: true, finanzas: true })
+
   const [cargando, setCargando] = useState(true)
   const [debug, setDebug] = useState('Sincronizando...')
   
   const [verInfoDiente, setVerInfoDiente] = useState<number | null>(null)
-  
   const [menuContextual, setMenuContextual] = useState<{ x: number, y: number, diente: number, lado: 'derecha' | 'izquierda', cara?: string } | null>(null)
   const [vistaMenu, setVistaMenu] = useState<'principal' | 'preexistencias' | 'lesiones'>('principal')
 
@@ -81,58 +94,98 @@ export default function DetalleTratamientoPage() {
   const [guardandoEvolucion, setGuardandoEvolucion] = useState(false)
 
   const [modalIcono, setModalIcono] = useState<{abierto: boolean, prestacion: any, autoAdd?: boolean}>({
-    abierto: false, 
-    prestacion: null, 
-    autoAdd: false
+    abierto: false, prestacion: null, autoAdd: false
   });
 
   useEffect(() => {
-    if (idURL) { 
-      fetchDatosFinales(); 
-      fetchAuxiliares(); 
-    }
-    const cerrarMenu = () => { 
-      setMenuContextual(null); 
-      setVistaMenu('principal'); 
-    };
+    if (idURL) { fetchDatosFinales(); fetchAuxiliares(); }
+    const cerrarMenu = () => { setMenuContextual(null); setVistaMenu('principal'); };
     window.addEventListener('click', cerrarMenu);
-    
-    // CORRECCIÓN: Eliminamos el evento de scroll para que no se cierre el cuadro al bajar.
-    return () => {
-      window.removeEventListener('click', cerrarMenu);
-    };
+    return () => window.removeEventListener('click', cerrarMenu);
   }, [idURL])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        handleDeshacer();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historialOdontograma, odontogramaEstado]);
+
+  const guardarHistorial = () => {
+    setHistorialOdontograma(prev => {
+        const nuevoHistorial = [...prev, JSON.parse(JSON.stringify(odontogramaEstado))];
+        return nuevoHistorial.slice(-10);
+    });
+  }
+
+  const handleDeshacer = async () => {
+    if (historialOdontograma.length === 0) return toast.info("No hay acciones para deshacer");
+    const estadoPrevio = historialOdontograma[historialOdontograma.length - 1];
+    const nuevoHistorial = historialOdontograma.slice(0, -1);
+    
+    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: estadoPrevio }).eq('id', idURL);
+    if (!error) {
+        setOdontogramaEstado(estadoPrevio);
+        setHistorialOdontograma(nuevoHistorial);
+        toast.success("Acción deshecha");
+    } else {
+        toast.error("Error al deshacer");
+    }
+  }
+
+  // NUEVAS FUNCIONES: Drag & Drop
+  const handleDragStart = (e: React.DragEvent, itemId: string) => {
+    e.dataTransfer.setData('text/plain', itemId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); 
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, nuevaSeccion: string) => {
+    e.preventDefault();
+    const itemId = e.dataTransfer.getData('text/plain');
+    if (!itemId) return;
+
+    const item = acciones.find(a => a.id === itemId);
+    if (!item || item.seccion_nombre === nuevaSeccion) return; 
+
+    // Actualización rápida en pantalla
+    setAcciones(prev => prev.map(a => a.id === itemId ? { ...a, seccion_nombre: nuevaSeccion } : a));
+
+    // Formatear observación para base de datos
+    let partes = (item.observacion || '').split('|').map((p:string) => p.trim());
+    partes[0] = nuevaSeccion; 
+    const nuevaObs = partes.join(' | ');
+
+    // Guardado en BD silencioso
+    const { error } = await supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', itemId);
+    
+    if (error) toast.error("Error al guardar el movimiento en la base de datos");
+    else toast.success(`Movido a ${nuevaSeccion}`);
+  };
 
   async function fetchDatosFinales() {
     setCargando(true)
     try {
-      const { data: pres } = await supabase
-        .from('presupuestos')
-        .select('*')
-        .eq('id', idURL)
-        .maybeSingle();
-        
+      const { data: pres } = await supabase.from('presupuestos').select('*').eq('id', idURL).maybeSingle();
       if (pres) {
-        if (pres.odontograma_estado) {
-          setOdontogramaEstado(typeof pres.odontograma_estado === 'string' ? JSON.parse(pres.odontograma_estado) : pres.odontograma_estado);
-        }
-        if (pres.paciente_id) {
-          setPacienteId(pres.paciente_id);
-        }
-        
-        const estaAprobado = pres.aprobado || Number(pres.total_abonado || 0) > 0;
-        setPresupuestoData({ ...pres, isAprobado: estaAprobado });
+        if (pres.odontograma_estado) setOdontogramaEstado(typeof pres.odontograma_estado === 'string' ? JSON.parse(pres.odontograma_estado) : pres.odontograma_estado);
+        if (pres.paciente_id) setPacienteId(pres.paciente_id);
+        setPresupuestoData({ ...pres, isAprobado: pres.aprobado || Number(pres.total_abonado || 0) > 0 });
       }
 
       let targetID: string = idURL;
       let esNuevo = true;
-      if (pres && pres.id_dentalink) { 
-        targetID = pres.id_dentalink.toString(); 
-        esNuevo = false; 
-      }
+      if (pres && pres.id_dentalink) { targetID = pres.id_dentalink.toString(); esNuevo = false; }
 
-      let query = esNuevo
-        ? supabase.from('presupuesto_items').select(`*, prestaciones:prestacion_id(icono_tipo, "Nombre Accion", "Nombre")`).eq('presupuesto_id', idURL)
+      let query = esNuevo 
+        ? supabase.from('presupuesto_items').select(`*, prestaciones:prestacion_id(icono_tipo, "Nombre Accion", "Nombre", "Precio")`).eq('presupuesto_id', idURL) 
         : supabase.from('temp_items').select('*').eq('id_dentalink', targetID);
 
       const { data, error } = await query;
@@ -141,259 +194,213 @@ export default function DetalleTratamientoPage() {
       const itemsMapeados = (data || []).map(item => {
         const pactado = Number(item.precio_pactado || item.precio || 0);
         const abonado = Number(item.abonado || 0);
+        const partes = (item.observacion || 'Plan General').split('|').map((p: string) => p.trim());
         
-        const obsString = item.observacion || 'Plan General';
-        const partes = obsString.split('|').map((p: string) => p.trim());
-        const seccionLimpia = partes[0] || 'Plan General';
-        
-        let caraMatch = null;
-        let zonaMatch = null;
-        
+        let caraMatch = null, zonaMatch = null, iconoMatch = null, dctoMatch = 0, avanceMatch = 0;
         partes.forEach((p: string) => {
             if (p.startsWith('Cara:')) caraMatch = p.replace('Cara:', '').trim();
             if (p.startsWith('Zona:')) zonaMatch = p.replace('Zona:', '').trim();
+            if (p.startsWith('Icono:')) iconoMatch = p.replace('Icono:', '').trim();
+            if (p.startsWith('Dcto:')) dctoMatch = parseInt(p.replace('Dcto:', '').trim());
+            if (p.startsWith('Avance:')) avanceMatch = parseInt(p.replace('Avance:', '').trim());
         });
 
-        const nombreDisplay = esNuevo 
-            ? (item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || "Tratamiento Genérico") 
-            : item.nombre_prestacion;
+        const nombreDisplay = esNuevo ? (item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || "Tratamiento Genérico") : item.nombre_prestacion;
+        let precioBase = item.prestaciones?.["Precio"] || item.precio;
+        if (!precioBase) precioBase = pactado / (1 - (dctoMatch / 100));
 
         return {
           ...item,
-          seccion_nombre: seccionLimpia,
-          cara: caraMatch,
-          zona: zonaMatch,
+          seccion_nombre: partes[0] || 'Plan General',
+          cara: caraMatch, zona: zonaMatch,
           display_nombre: nombreDisplay,
-          icono_tipo: item.prestaciones?.icono_tipo,
-          display_pactado: pactado,
-          display_abonado: abonado,
-          display_saldo: pactado - abonado
+          icono_tipo: iconoMatch || item.prestaciones?.icono_tipo,
+          precio_base: precioBase,
+          descuento: dctoMatch,
+          avance: item.estado === 'realizado' ? 100 : avanceMatch,
+          display_pactado: pactado, display_abonado: abonado, display_saldo: pactado - abonado
         };
       });
 
-      const uniqueSections = Array.from(new Set(itemsMapeados.map(i => i.seccion_nombre)));
-      
-      setListaSecciones(prev => {
-        const combinadas = Array.from(new Set([...prev, ...uniqueSections]));
-        return combinadas.sort((a, b) => a.localeCompare(b));
-      });
-      
+      setListaSecciones(prev => Array.from(new Set([...prev, ...Array.from(new Set(itemsMapeados.map(i => i.seccion_nombre)))])).sort((a:any, b:any) => a.localeCompare(b)));
       setAcciones(itemsMapeados);
       setDebug(esNuevo ? "Modo Local" : `Dentalink #${targetID}`);
-    } catch (err: any) { 
-      console.error(err); 
-      setDebug("Error"); 
-    } finally { 
-      setCargando(false); 
-    }
+    } catch (err) { setDebug("Error"); } finally { setCargando(false); }
   }
 
   async function fetchAuxiliares() {
-    const { data: profs } = await supabase
-      .from('profesionales')
-      .select('user_id, nombre, apellido')
-      .eq('activo', true);
-      
+    const { data: profs } = await supabase.from('profesionales').select('user_id, nombre, apellido').eq('activo', true);
     if (profs) setProfesionales(profs);
     
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+       const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
+       if (perfil && perfil.rol !== 'ADMIN' && perfil.rol !== 'RECEPCIONISTA') {
+          setProfesionalSeleccionado(session.user.id);
+       }
+    }
+    
     let allPrests: any[] = [];
-    let fetchMore = true;
-    let from = 0;
-    const pageSize = 1000;
-
+    let fetchMore = true, from = 0;
     while (fetchMore) {
-        const { data, error } = await supabase
-          .from('prestaciones')
-          .select('*')
-          .range(from, from + pageSize - 1);
-          
+        const { data, error } = await supabase.from('prestaciones').select('*').range(from, from + 999);
         if (error) break;
-        
-        if (data && data.length > 0) {
-            allPrests = [...allPrests, ...data];
-            from += pageSize;
-        } else {
-            fetchMore = false;
-        }
+        if (data && data.length > 0) { allPrests = [...allPrests, ...data]; from += 1000; } else fetchMore = false;
     }
 
     if (allPrests.length > 0) {
       const agrupado = allPrests.reduce((acc: any, curr: any) => {
-        const valorHabilitado = curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado;
-        const textoHabilitado = String(valorHabilitado || '').trim().toLowerCase();
-
-        if (textoHabilitado === 'no' || valorHabilitado === false) {
-            return acc; 
-        }
-
+        if (String(curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado || '').trim().toLowerCase() === 'no' || (curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado) === false) return acc; 
         const cat = (curr["Nombre Categoria"] || "OTROS").trim();
         if (!acc[cat]) acc[cat] = [];
-        
         curr.display_nombre = curr["Nombre Accion"] || curr["Nombre"] || "Prestación sin nombre";
-        
         acc[cat].push(curr);
         return acc;
       }, {});
-      
-      Object.keys(agrupado).forEach(key => {
-         agrupado[key].sort((a:any, b:any) => a.display_nombre.localeCompare(b.display_nombre));
-      });
-
+      Object.keys(agrupado).forEach(key => agrupado[key].sort((a:any, b:any) => a.display_nombre.localeCompare(b.display_nombre)));
       setSeccionesPrests(agrupado);
     }
   }
 
   const aprobarPlanManualmente = async () => {
-    const { error } = await supabase
-      .from('presupuestos')
-      .update({ aprobado: true })
-      .eq('id', idURL);
-      
-    if (!error) {
-      setPresupuestoData({ ...presupuestoData, isAprobado: true });
-      toast.success("Plan de tratamiento aprobado");
-    }
+    const { error } = await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL);
+    if (!error) { setPresupuestoData({ ...presupuestoData, isAprobado: true }); toast.success("Plan de tratamiento aprobado"); }
   }
 
   const handleCrearSeccion = () => {
     if(!nuevaSeccionNombre.trim()) return toast.error("El nombre de la sección no puede estar vacío");
     const nombre = nuevaSeccionNombre.trim();
-    
-    if(!listaSecciones.includes(nombre)) {
-      setListaSecciones(prev => [...prev, nombre].sort((a, b) => a.localeCompare(b)));
-    }
-    
-    setSeccionInput(nombre);
-    setModalNuevaSeccion(false);
-    setNuevaSeccionNombre('');
-    toast.success("Nueva sección agregada a la lista");
-  }
-
-  // CORRECCIÓN: Cálculo de coordenadas exactas relativas al contenedor
-  const handleContextMenu = (e: React.MouseEvent, diente: number, cara?: string) => {
-    e.preventDefault(); 
-    e.stopPropagation();
-    
-    const container = document.getElementById('odontograma-container');
-    if (!container) return;
-    
-    const rect = container.getBoundingClientRect();
-    
-    // Coordenadas relativas al contenedor principal para que bajen con él.
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    const isRightSide = e.clientX + 480 > window.innerWidth;
-    
-    setMenuContextual({ 
-      x, 
-      y, 
-      diente, 
-      lado: isRightSide ? 'izquierda' : 'derecha', 
-      cara 
-    });
-    setVistaMenu('principal');
-  };
-
-  const aplicarHallazgo = async (tipo: string) => {
-    if (!menuContextual) return;
-    const dId = menuContextual.diente.toString();
-    let actual = odontogramaEstado[dId]?.hallazgos || [];
-    
-    if (odontogramaEstado[dId]?.center) {
-      actual = [odontogramaEstado[dId].center];
-    }
-
-    const t = tipo.toLowerCase();
-    
-    if (t.includes('sano')) { 
-      actual = ['Diente sano']; 
-    } else {
-        actual = actual.filter((h:string) => !h.toLowerCase().includes('sano'));
-        if (!actual.some((h:string) => h.toLowerCase() === t)) {
-          actual.push(tipo);
-        }
-    }
-
-    const nuevoEstado = { 
-      ...odontogramaEstado, 
-      [dId]: { ...odontogramaEstado[dId], hallazgos: actual } 
-    };
-    
-    const { error } = await supabase
-      .from('presupuestos')
-      .update({ odontograma_estado: nuevoEstado })
-      .eq('id', idURL);
-      
-    if (!error) { 
-      setOdontogramaEstado(nuevoEstado); 
-      toast.success("Hallazgo registrado"); 
-    }
-  };
-
-  const aplicarLesionCara = async () => {
-    if (!menuContextual || !menuContextual.cara) return;
-    
-    const dId = menuContextual.diente.toString();
-    const carasActuales = odontogramaEstado[dId]?.caras || {};
-    
-    const nuevaCara = carasActuales[menuContextual.cara] === 'lesion' ? null : 'lesion';
-    const nuevoEstado = { 
-      ...odontogramaEstado, 
-      [dId]: { ...odontogramaEstado[dId], caras: { ...carasActuales, [menuContextual.cara]: nuevaCara } } 
-    };
-
-    const { error } = await supabase
-      .from('presupuestos')
-      .update({ odontograma_estado: nuevoEstado })
-      .eq('id', idURL);
-      
-    if (!error) { 
-      setOdontogramaEstado(nuevoEstado); 
-      toast.success("Cara actualizada"); 
-      setMenuContextual(null); 
-    }
-  }
-
-  const eliminarHallazgoEspecifico = async (diente: number, hallazgoNombre: string) => {
-    const dId = diente.toString();
-    const nuevosHallazgos = odontogramaEstado[dId].hallazgos.filter((h: string) => h !== hallazgoNombre);
-    const nuevoEstado = { ...odontogramaEstado };
-    
-    if (nuevosHallazgos.length === 0) {
-      delete nuevoEstado[dId];
-    } else {
-      nuevoEstado[dId] = { hallazgos: nuevosHallazgos };
-    }
-    
-    const { error } = await supabase
-      .from('presupuestos')
-      .update({ odontograma_estado: nuevoEstado })
-      .eq('id', idURL);
-      
-    if (!error) { 
-      setOdontogramaEstado(nuevoEstado); 
-      toast.info("Eliminado"); 
-    }
-  };
-
-  const eliminarPrestacionLocal = async (id: string) => {
-    const { error } = await supabase
-      .from('presupuesto_items')
-      .delete()
-      .eq('id', id);
-      
-    if (!error) {
-      setAcciones(prev => prev.filter(a => a.id !== id));
-      toast.info("Acción eliminada");
-    }
+    if(!listaSecciones.includes(nombre)) setListaSecciones(prev => [...prev, nombre].sort((a, b) => a.localeCompare(b)));
+    setSeccionInput(nombre); setModalNuevaSeccion(false); setNuevaSeccionNombre(''); toast.success("Nueva sección agregada a la lista");
   }
 
   const abrirPanelAgregar = (dientePreseleccionado: number | null = null, cara: string = '', zona: string = '') => {
-    setDienteInput(dientePreseleccionado ? dientePreseleccionado.toString() : '');
-    setCaraInput(cara);
-    setZonaInput(zona);
-    setPanelAgregarAbierto(true);
+    if (zona) { setDienteInput(''); setZonaInput(zona); setDientesSeleccionados([]); } 
+    else if (dientePreseleccionado !== null) { setDienteInput(dientePreseleccionado.toString()); setZonaInput(''); setDientesSeleccionados([dientePreseleccionado]); } 
+    else {
+        if (dientesSeleccionados.length > 0) setDienteInput(dientesSeleccionados.join(', ')); else setDienteInput('');
+        setZonaInput('');
+    }
+    setCaraInput(cara); setPanelAgregarAbierto(true);
+  }
+
+  const handleDienteClick = (id: number, e?: React.MouseEvent) => {
+    if (e?.shiftKey) {
+        setDientesSeleccionados(prev => {
+            const newSelection = prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id];
+            if (panelAgregarAbierto && !zonaInput && !caraInput) setDienteInput(newSelection.join(', '));
+            return newSelection;
+        });
+    } else {
+        setDientesSeleccionados([id]); abrirPanelAgregar(id);
+    }
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, diente: number, cara?: string) => {
+    e.preventDefault(); e.stopPropagation();
+    if(dientesSeleccionados.length > 1) return; 
+    const container = document.getElementById('odontograma-container');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    setMenuContextual({ x: e.clientX - rect.left, y: e.clientY - rect.top, diente, lado: e.clientX + 480 > window.innerWidth ? 'izquierda' : 'derecha', cara });
+    setVistaMenu('principal');
+  };
+
+  const procesarAplicacionHallazgo = async (dientesArreglo: number[], tipo: string, esMulti = false) => {
+    guardarHistorial();
+    let nuevoEstado = { ...odontogramaEstado };
+    const t = tipo.toLowerCase();
+
+    dientesArreglo.forEach(diente => {
+        const dId = diente.toString();
+        let actual = nuevoEstado[dId]?.hallazgos || [];
+        if (nuevoEstado[dId]?.center) actual = [nuevoEstado[dId].center];
+        
+        if (t.includes('sano')) { actual = ['Diente sano']; } 
+        else { actual = actual.filter((h:string) => !h.toLowerCase().includes('sano')); if (!actual.some((h:string) => h.toLowerCase() === t)) actual.push(tipo); }
+        nuevoEstado[dId] = { ...nuevoEstado[dId], hallazgos: actual };
+    });
+
+    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
+    if (!error) { setOdontogramaEstado(nuevoEstado); toast.success(esMulti ? "Hallazgo aplicado a la selección" : "Hallazgo registrado"); if(esMulti) setDientesSeleccionados([]); }
+  }
+
+  const aplicarHallazgo = (tipo: string) => { if (menuContextual) procesarAplicacionHallazgo([menuContextual.diente], tipo); };
+
+  const aplicarLesionCara = async () => {
+    if (!menuContextual || !menuContextual.cara) return;
+    guardarHistorial();
+    const dId = menuContextual.diente.toString();
+    const carasActuales = odontogramaEstado[dId]?.caras || {};
+    const nuevaCara = carasActuales[menuContextual.cara] === 'lesion' ? null : 'lesion';
+    const nuevoEstado = { ...odontogramaEstado, [dId]: { ...odontogramaEstado[dId], caras: { ...carasActuales, [menuContextual.cara]: nuevaCara } } };
+    
+    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
+    if (!error) { setOdontogramaEstado(nuevoEstado); toast.success("Cara actualizada"); setMenuContextual(null); }
+  }
+
+  const eliminarHallazgoEspecifico = async (diente: number, hallazgoNombre: string) => {
+    guardarHistorial();
+    const dId = diente.toString();
+    const nuevosHallazgos = odontogramaEstado[dId].hallazgos.filter((h: string) => h !== hallazgoNombre);
+    const nuevoEstado = { ...odontogramaEstado };
+    if (nuevosHallazgos.length === 0) delete nuevoEstado[dId]; else nuevoEstado[dId] = { hallazgos: nuevosHallazgos };
+    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
+    if (!error) { setOdontogramaEstado(nuevoEstado); toast.info("Eliminado"); }
+  };
+
+  const eliminarPrestacionLocal = async (id: string) => {
+    const { error } = await supabase.from('presupuesto_items').delete().eq('id', id);
+    if (!error) { setAcciones(prev => prev.filter(a => a.id !== id)); toast.info("Acción eliminada"); }
+  }
+
+  const handleCambiarDiente = async (id: string, nuevoDiente: string) => {
+    setEditandoDienteId(null);
+    const val = nuevoDiente.trim();
+    const dId = val ? parseInt(val) : null;
+    if (val !== '' && isNaN(dId as any)) return toast.error("Número de pieza inválido");
+    const { error } = await supabase.from('presupuesto_items').update({ diente_id: dId }).eq('id', id);
+    if (!error) { setAcciones(prev => prev.map(a => a.id === id ? { ...a, diente_id: dId } : a)); toast.success("Pieza actualizada"); } 
+    else toast.error("Error al actualizar la pieza");
+  }
+
+  const handleCambiarAvance = async (id: string, nuevoAvance: number) => {
+    const item = acciones.find(a => a.id === id);
+    if (!item) return;
+
+    let nuevaObs = item.observacion || '';
+    nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, '');
+    if (nuevoAvance > 0) nuevaObs += ` | Avance: ${nuevoAvance}`;
+
+    const { error } = await supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', id);
+    if (!error) setAcciones(prev => prev.map(a => a.id === id ? { ...a, avance: nuevoAvance, observacion: nuevaObs } : a));
+    else toast.error("Error al actualizar el avance");
+  }
+
+  const handleGuardarDescuento = async () => {
+    const id = modalEditarItem.item.id;
+    const dcto = dctoInput;
+    const item = modalEditarItem.item;
+    
+    const precioBase = item.precio_base || item.precio || 0;
+    const nuevoPactado = precioBase * (1 - (dcto / 100));
+
+    let nuevaObs = item.observacion || '';
+    nuevaObs = nuevaObs.replace(/ \| Dcto: [0-9]+/g, '');
+    if (dcto > 0) nuevaObs += ` | Dcto: ${dcto}`;
+
+    const { error } = await supabase.from('presupuesto_items').update({
+        precio_pactado: nuevoPactado,
+        observacion: nuevaObs
+    }).eq('id', id);
+
+    if (!error) {
+        setAcciones(prev => prev.map(a => a.id === id ? {
+            ...a, descuento: dcto, observacion: nuevaObs, precio_pactado: nuevoPactado, display_pactado: nuevoPactado, display_saldo: nuevoPactado - a.display_abonado
+        } : a));
+        setModalEditarItem({abierto: false, item: null});
+        toast.success("Descuento aplicado correctamente");
+    } else toast.error("Error al aplicar el descuento");
   }
 
   const handleSeleccionarTratamiento = async (prestacion: any, skipIconCheck = false) => {
@@ -402,47 +409,35 @@ export default function DetalleTratamientoPage() {
     
     if (!skipIconCheck && !prestacion.icono_tipo) {
         const h = prestacion.display_nombre.toLowerCase();
-        
-        const isKnown = LESIONES_LISTA.some(l => l.toLowerCase() === h) ||
-            ["ausente", "extraccion", "extracción", "exodoncia", "sano", "erupcionar", "residuo", "rr", "corona", "endodoncia", "restauración", "restauracion", "tapadura", "implante", "perno", "muñón", "munon", "rayos", "radiografia", "radiografía", "rx", "removible", "protesis", "prótesis", "pulido", "destartraje", "limpieza", "profilaxis", "amalgama", "sellante", "default", "otro"].some(k => h.includes(k));
-        
-        if (!isKnown) {
-            setModalIcono({ abierto: true, prestacion: prestacion, autoAdd: true });
-            return;
-        }
+        const isKnown = LESIONES_LISTA.some(l => l.toLowerCase() === h) || ["ausente", "extraccion", "extracción", "exodoncia", "sano", "erupcionar", "residuo", "rr", "corona", "endodoncia", "restauración", "restauracion", "tapadura", "implante", "perno", "muñón", "munon", "rayos", "radiografia", "radiografía", "rx", "removible", "protesis", "prótesis", "pulido", "destartraje", "limpieza", "profilaxis", "amalgama", "sellante", "default", "otro"].some(k => h.includes(k));
+        if (!isKnown) { setModalIcono({ abierto: true, prestacion: prestacion, autoAdd: true }); return; }
     }
 
-    const dId = (dienteInput && !zonaInput) ? parseInt(dienteInput) : null;
-    const observacionFinal = seccionInput.trim() + (caraInput ? ` | Cara: ${caraInput}` : '') + (zonaInput ? ` | Zona: ${zonaInput}` : '');
+    const dIds = dienteInput.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+    const observacionFinal = seccionInput.trim() + (caraInput ? ` | Cara: ${caraInput}` : '') + (zonaInput ? ` | Zona: ${zonaInput}` : '') + (prestacion.icono_tipo ? ` | Icono: ${prestacion.icono_tipo}` : '');
 
-    const { data, error } = await supabase.from('presupuesto_items').insert([{
-        presupuesto_id: idURL, 
-        prestacion_id: prestacion.id, 
-        diente_id: dId,
-        precio_pactado: prestacion["Precio"], 
-        abonado: 0, 
-        estado: 'pendiente', 
-        profesional_id: profesionalSeleccionado,
-        observacion: observacionFinal
-    }]).select('*, prestaciones:prestacion_id(*)').single();
+    const baseItem = {
+        presupuesto_id: idURL, prestacion_id: prestacion.id, precio_pactado: prestacion["Precio"], abonado: 0, 
+        estado: 'pendiente', profesional_id: profesionalSeleccionado, observacion: observacionFinal
+    };
+
+    let inserts = [];
+    if (dIds.length > 0 && !zonaInput) inserts = dIds.map(dId => ({ ...baseItem, diente_id: dId }));
+    else inserts = [{ ...baseItem, diente_id: null }];
+
+    const { data, error } = await supabase.from('presupuesto_items').insert(inserts).select('*, prestaciones:prestacion_id(*)');
 
     if (!error && data) {
-        setAcciones(prev => [...prev, { 
-          ...data, 
-          seccion_nombre: seccionInput.trim(),
-          cara: caraInput || null,
-          zona: zonaInput || null,
-          display_nombre: prestacion.display_nombre, 
-          icono_tipo: prestacion.icono_tipo,
-          display_pactado: data.precio_pactado, 
-          display_abonado: 0, 
-          display_saldo: data.precio_pactado 
-        }]);
-        setPanelAgregarAbierto(false);
-        toast.success("Prestación agregada exitosamente");
-    } else {
-        toast.error("Error al guardar en base de datos. Verifica la columna 'observacion'.");
-    }
+        const nuevosItems = data.map((d:any) => ({
+            ...d, seccion_nombre: seccionInput.trim(), cara: caraInput || null, zona: zonaInput || null,
+            display_nombre: prestacion.display_nombre, icono_tipo: prestacion.icono_tipo || d.prestaciones?.icono_tipo, 
+            precio_base: prestacion["Precio"], descuento: 0, avance: 0,
+            display_pactado: d.precio_pactado, display_abonado: 0, display_saldo: d.precio_pactado 
+        }));
+        setAcciones(prev => [...prev, ...nuevosItems]);
+        setPanelAgregarAbierto(false); setDientesSeleccionados([]); 
+        toast.success(`Prestación agregada exitosamente ${inserts.length > 1 ? `(${inserts.length} piezas)` : ''}`);
+    } else toast.error("Error al guardar en base de datos. Verifica la columna 'observacion'.");
   };
 
   const handleEvolucionar = async () => {
@@ -452,127 +447,131 @@ export default function DetalleTratamientoPage() {
 
     setGuardandoEvolucion(true);
     try {
-      const { error: evoError } = await supabase.from('evoluciones').insert([{
-        paciente_id: pacienteId || null,
-        profesional_id: profesionalSeleccionado,
-        descripcion_procedimiento: evolucionNota.trim(),
-        observaciones: `Evolución del presupuesto asociado: ${idURL}`
-      }]);
-      
+      const { error: evoError } = await supabase.from('evoluciones').insert([{ paciente_id: pacienteId || null, profesional_id: profesionalSeleccionado, descripcion_procedimiento: evolucionNota.trim(), observaciones: `Evolución del presupuesto asociado: ${idURL}` }]);
       if (evoError) throw evoError;
-
-      for (const itemId of itemsAEvolucionar) {
-        await supabase.from('presupuesto_items').update({ estado: 'realizado' }).eq('id', itemId);
-      }
-
-      if (!presupuestoData.isAprobado) {
-        await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL);
-        setPresupuestoData({ ...presupuestoData, isAprobado: true });
-      }
-
-      setAcciones(prev => prev.map(a => itemsAEvolucionar.includes(a.id) ? { ...a, estado: 'realizado' } : a));
-      
-      toast.success("Evolución registrada. El plan está en curso.");
-      setModalEvolucion(false);
-      setEvolucionNota('');
-      setItemsAEvolucionar([]);
-    } catch (err) {
-      toast.error("Error al registrar la evolución");
-    } finally {
-      setGuardandoEvolucion(false);
-    }
+      for (const itemId of itemsAEvolucionar) await supabase.from('presupuesto_items').update({ estado: 'realizado' }).eq('id', itemId);
+      if (!presupuestoData.isAprobado) { await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL); setPresupuestoData({ ...presupuestoData, isAprobado: true }); }
+      setAcciones(prev => prev.map(a => itemsAEvolucionar.includes(a.id) ? { ...a, estado: 'realizado', avance: 100 } : a));
+      toast.success("Evolución registrada."); setModalEvolucion(false); setEvolucionNota(''); setItemsAEvolucionar([]);
+    } catch (err) { toast.error("Error al registrar la evolución"); } finally { setGuardandoEvolucion(false); }
   }
 
-  const handleGuardarIcono = async (iconoId: string) => {
+  const handleGuardarIcono = async (iconoId: string | null) => {
     const prestacionActual = modalIcono.prestacion;
     const autoAdd = modalIcono.autoAdd;
     if(!prestacionActual) return;
 
-    const { error } = await supabase
-      .from('prestaciones')
-      .update({ icono_tipo: iconoId })
-      .eq('id', prestacionActual.id);
-      
-    if (!error) {
-       const nuevasSecciones = { ...seccionesPrests };
-       for (const cat in nuevasSecciones) {
-          const index = nuevasSecciones[cat].findIndex((p:any) => p.id === prestacionActual.id);
-          if (index !== -1) nuevasSecciones[cat][index].icono_tipo = iconoId;
-       }
-       setSeccionesPrests(nuevasSecciones);
-       
-       setModalIcono({ abierto: false, prestacion: null, autoAdd: false });
-       toast.success("Icono asignado y guardado permanentemente");
-
-       if (autoAdd) {
-           handleSeleccionarTratamiento({ ...prestacionActual, icono_tipo: iconoId }, true);
-       }
-    } else {
-       toast.error("No se pudo guardar el icono en la base de datos.");
+    await supabase.from('prestaciones').update({ icono_tipo: iconoId }).eq('id', prestacionActual.id);
+    const nuevasSecciones = { ...seccionesPrests };
+    for (const cat in nuevasSecciones) {
+       const index = nuevasSecciones[cat].findIndex((p:any) => p.id === prestacionActual.id);
+       if (index !== -1) nuevasSecciones[cat][index].icono_tipo = iconoId;
     }
+    setSeccionesPrests(nuevasSecciones);
+    
+    setAcciones(prev => {
+        return prev.map(a => {
+            if (a.prestacion_id === prestacionActual.id) {
+                let nuevaObs = a.observacion || '';
+                nuevaObs = nuevaObs.replace(/ \| Icono: [a-zA-Z0-9_-]+/g, ''); 
+                if (iconoId) nuevaObs += ` | Icono: ${iconoId}`; 
+                supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', a.id).then();
+                return { ...a, icono_tipo: iconoId, observacion: nuevaObs };
+            }
+            return a;
+        });
+    });
+
+    setModalIcono({ abierto: false, prestacion: null, autoAdd: false });
+    if (autoAdd && iconoId) handleSeleccionarTratamiento({ ...prestacionActual, icono_tipo: iconoId }, true);
+    else toast.success(iconoId ? "Icono actualizado" : "Logo restablecido");
+  }
+
+  const procesarExportacion = async () => {
+    setModalExportar({...modalExportar, abierto: false});
+    const modo = modalExportar.tipo;
+    const toastId = toast.loading(`Preparando documento...`);
+    
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      const element = document.getElementById('odontograma-container');
+
+      const opt = {
+        margin:       [15, 15, 20, 15], 
+        filename:     `Plan_Tratamiento_${pacienteId || 'General'}.pdf`,
+        image:        { type: 'jpeg', quality: 1 },
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
+        jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      const pdf = await html2pdf().set(opt).from(element).toPdf().get('pdf');
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+          pdf.setPage(i);
+          pdf.setFontSize(9);
+          pdf.setTextColor(120, 120, 120); 
+          pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
+      }
+        
+      if(modo === 'imprimir') window.open(pdf.output('bloburl'), '_blank');
+      else pdf.save();
+      
+      toast.success("Documento generado con éxito", { id: toastId });
+    } catch (error) { toast.error("Error al procesar la exportación", { id: toastId }); }
   }
 
   const totalPlan = acciones.reduce((acc, curr) => acc + curr.display_pactado, 0) || Number(presupuestoData?.total || 0);
   const abonadoPlan = acciones.reduce((acc, curr) => acc + curr.display_abonado, 0) || Number(presupuestoData?.total_abonado || 0);
   const deudaPlan = totalPlan - abonadoPlan;
 
-  const totalPorSeccion = (seccion: string) => {
-    return acciones.filter(a => a.seccion_nombre === seccion).reduce((acc, curr) => acc + curr.display_pactado, 0);
-  }
+  const totalPorSeccion = (seccion: string) => { return acciones.filter(a => a.seccion_nombre === seccion).reduce((acc, curr) => acc + curr.display_pactado, 0); }
 
-  if (cargando) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-white">
-        <Loader2 className="animate-spin text-blue-600" size={48} />
-      </div>
-    );
-  }
+  if (cargando) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
-    // CORRECCIÓN: Agregado el ID odontograma-container para el cálculo correcto.
     <div id="odontograma-container" className="relative w-full text-left font-sans pb-32">
       <div className="space-y-8 transition-all">
           
-          <section className="bg-white p-8 md:p-12 rounded-[4rem] shadow-sm border border-slate-100 relative overflow-visible flex flex-col items-center">
+          <section data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="bg-white p-8 md:p-12 rounded-[4rem] shadow-sm border border-slate-100 relative overflow-visible flex flex-col items-center">
             
-            <div className="flex justify-center gap-5 mb-8 bg-slate-50 py-2 px-6 rounded-full border border-slate-200 shadow-sm">
-               <div className="flex items-center gap-1.5">
-                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></div>
-                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Realizado</span>
-               </div>
-               <div className="flex items-center gap-1.5">
-                 <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div>
-                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pendiente</span>
-               </div>
-               <div className="flex items-center gap-1.5">
-                 <div className="w-2.5 h-2.5 rounded-full bg-slate-900 shadow-sm"></div>
-                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Lesión</span>
-               </div>
+            <div className="w-full flex justify-between items-center mb-8 px-4" data-html2canvas-ignore="true">
+                <button onClick={handleDeshacer} className="p-3 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2" title="Deshacer (Ctrl + Z)">
+                    <Undo2 size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Deshacer</span>
+                </button>
+                <button onClick={() => setMostrarLeyenda(true)} className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all shadow-sm flex items-center gap-2">
+                    <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Ver Leyenda</span>
+                </button>
             </div>
 
-            {/* ODONTOGRAMA COMPACTO Y ANATÓMICO */}
+            <div className="flex justify-center gap-5 mb-8 bg-slate-50 py-2 px-6 rounded-full border border-slate-200 shadow-sm">
+               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Realizado</span></div>
+               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pendiente</span></div>
+               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-900 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Lesión</span></div>
+            </div>
+
             <div className="flex flex-col items-center gap-6 min-w-max">
                 <div className="flex gap-4">
                   <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
                     {c1.map(id => (
-                      <DienteVisual key={id} id={id} onSelect={() => abrirPanelAgregar(id)} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                   <div className="flex gap-0.5">
                     {c2.map(id => (
-                      <DienteVisual key={id} id={id} onSelect={() => abrirPanelAgregar(id)} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                 </div>
                 <div className="flex gap-4">
                   <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
                     {c3.map(id => (
-                      <DienteVisual key={id} id={id} invert onSelect={() => abrirPanelAgregar(id)} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                   <div className="flex gap-0.5">
                     {c4.map(id => (
-                      <DienteVisual key={id} id={id} invert onSelect={() => abrirPanelAgregar(id)} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                 </div>
@@ -613,12 +612,34 @@ export default function DetalleTratamientoPage() {
                 </div>
               </div>
             </div>
+            
+            <AnimatePresence>
+                {(dientesSeleccionados.length > 1 || (dientesSeleccionados.length === 1 && !panelAgregarAbierto)) && (
+                    <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-3xl shadow-2xl z-[99999] flex items-center gap-4" data-html2canvas-ignore="true">
+                        <div className="px-4 text-white">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Seleccionados</p>
+                            <p className="font-bold">{dientesSeleccionados.length} piezas</p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl">
+                            <button onClick={() => procesarAplicacionHallazgo(dientesSeleccionados, 'Sano', true)} className="px-4 py-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-xl text-[10px] font-black uppercase transition-all">
+                                Sano
+                            </button>
+                            <button onClick={() => abrirPanelAgregar()} className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-500 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-1.5">
+                                <Plus size={14}/> Tratar
+                            </button>
+                        </div>
+                        <button onClick={() => { setDientesSeleccionados([]); if(panelAgregarAbierto) setDienteInput(''); }} className="p-2 text-slate-400 hover:text-red-400 bg-slate-800 rounded-full transition-colors mr-1">
+                            <X size={18}/>
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            <div className="w-full flex items-center justify-center mt-12 mb-8 opacity-20">
+            <div className="w-full flex items-center justify-center mt-12 mb-8 opacity-20" data-html2canvas-ignore="true">
                <div className="h-[3px] w-[60%] bg-slate-900 rounded-full"></div>
             </div>
 
-            <div className="flex justify-center gap-4 w-full max-w-2xl">
+            <div className="flex justify-center gap-4 w-full max-w-2xl" data-html2canvas-ignore="true">
                <button onClick={() => setModalNuevaSeccion(true)} className="flex-1 bg-white border-2 border-slate-200 text-slate-600 px-6 py-4 rounded-[1.2rem] font-black text-[11px] uppercase shadow-sm hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center gap-2">
                  <Layers size={16} /> Crear Fase Clínica
                </button>
@@ -632,7 +653,7 @@ export default function DetalleTratamientoPage() {
 
           </section>
 
-          <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 overflow-hidden text-left flex flex-col">
+          <div data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 overflow-hidden text-left flex flex-col">
             
             <div className="p-10 md:p-12 bg-slate-900 text-white flex flex-col xl:flex-row justify-between items-start xl:items-center rounded-t-[3.5rem] gap-6">
                 <div>
@@ -669,10 +690,19 @@ export default function DetalleTratamientoPage() {
                        <p className={`text-xl font-black ${deudaPlan > 0 && presupuestoData?.isAprobado ? 'text-red-400' : 'text-slate-300'}`}>${deudaPlan.toLocaleString('es-CL')}</p>
                     </div>
                 </div>
+                
+                <div className="shrink-0 flex flex-col gap-2" data-html2canvas-ignore="true">
+                    <button onClick={() => setModalExportar({abierto: true, tipo: 'imprimir'})} className="px-5 py-3 bg-white text-slate-900 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                        <Printer size={16}/> Imprimir
+                    </button>
+                    <button onClick={() => setModalExportar({abierto: true, tipo: 'descargar'})} className="px-5 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-500 transition-all flex items-center justify-center gap-2">
+                        <Download size={16}/> Descargar PDF
+                    </button>
+                </div>
             </div>
 
             {!presupuestoData?.isAprobado && (
-              <div className="bg-slate-50 border-b border-slate-100 p-4 flex justify-center">
+              <div className="bg-slate-50 border-b border-slate-100 p-4 flex justify-center" data-html2canvas-ignore="true">
                 <button onClick={aprobarPlanManualmente} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-600 transition-colors flex items-center gap-2">
                   <CheckCircle2 size={16}/> Forzar Aprobación Manual (Sin Pago)
                 </button>
@@ -689,8 +719,13 @@ export default function DetalleTratamientoPage() {
                 listaSecciones.map((seccion) => {
                   const itemsSeccion = acciones.filter(a => a.seccion_nombre === seccion);
                   return (
-                  <div key={seccion} className="mb-10 last:mb-0">
-                    <h3 className="px-6 py-4 bg-slate-50 border-l-4 border-blue-500 font-black text-xs uppercase text-slate-700 tracking-widest rounded-r-2xl mb-4 flex justify-between items-center">
+                  <div 
+                    key={seccion} 
+                    className="mb-10 last:mb-0 rounded-3xl transition-all border-2 border-transparent hover:border-dashed hover:border-slate-300"
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, seccion)}
+                  >
+                    <h3 className="px-6 py-4 bg-slate-50 border-l-4 border-blue-500 font-black text-xs uppercase text-slate-700 tracking-widest rounded-r-2xl mb-4 flex justify-between items-center pointer-events-none">
                       <div className="flex items-center gap-3">
                         <Layers size={16} className="text-blue-500" /> {seccion}
                       </div>
@@ -698,33 +733,68 @@ export default function DetalleTratamientoPage() {
                     </h3>
                     
                     {itemsSeccion.length === 0 ? (
-                      <div className="px-8 py-6 border-2 border-dashed border-slate-100 rounded-3xl text-center">
-                         <p className="text-[10px] font-black text-slate-300 uppercase italic">No hay prestaciones asignadas a esta fase</p>
+                      <div className="px-8 py-6 border-2 border-dashed border-slate-100 rounded-3xl text-center pointer-events-none">
+                         <p className="text-[10px] font-black text-slate-300 uppercase italic">Arrastra tratamientos aquí</p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left">
                           <thead>
                             <tr className="border-b border-slate-100">
-                              <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic w-28 text-center">Zona / Pieza</th>
+                              <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic w-24 text-center">Zona / Pieza</th>
                               <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic">Prestación</th>
+                              <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-24">Avance</th>
                               <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Pactado</th>
                               <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Abonado</th>
                               <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Saldo</th>
                               <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center">Estado</th>
-                              <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-16">Acción</th>
+                              <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-20" data-html2canvas-ignore="true">Acciones</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
                             {itemsSeccion.map((item, idx) => (
-                              <tr key={idx} className="hover:bg-blue-50/40 transition-all group">
+                              <tr 
+                                key={idx} 
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, item.id)}
+                                className="hover:bg-blue-50/40 transition-all group cursor-grab active:cursor-grabbing"
+                              >
                                 <td className="px-6 py-5 text-center">
                                   <div className={`px-2 py-2 mx-auto rounded-full bg-slate-100 flex flex-col items-center justify-center font-black text-xs text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all leading-none ${item.zona ? 'w-auto' : 'w-10 h-10'}`}>
-                                    <span>{item.zona ? item.zona : (item.diente_id || 'GRAL')}</span>
+                                    {editandoDienteId === item.id ? (
+                                      <input 
+                                         type="text" 
+                                         autoFocus 
+                                         className="w-8 h-6 bg-white text-slate-900 text-center rounded outline-none" 
+                                         defaultValue={item.diente_id || ''} 
+                                         onBlur={(e) => handleCambiarDiente(item.id, e.target.value)} 
+                                         onKeyDown={(e) => { if(e.key === 'Enter') handleCambiarDiente(item.id, e.currentTarget.value) }} 
+                                      />
+                                    ) : (
+                                      <span className="cursor-pointer" onClick={() => setEditandoDienteId(item.id)} title="Click para cambiar pieza">
+                                        {item.zona ? item.zona : (item.diente_id || <Plus size={14} strokeWidth={4} />)}
+                                      </span>
+                                    )}
                                     {item.cara && <span className="text-[8px] opacity-70 mt-1">CARA {item.cara}</span>}
                                   </div>
                                 </td>
                                 <td className="px-6 py-5 font-black uppercase text-slate-800 text-[11px]">{item.display_nombre}</td>
+                                
+                                <td className="px-6 py-5 text-center">
+                                  <select 
+                                    disabled={item.estado === 'realizado'}
+                                    value={item.avance || 0} 
+                                    onChange={(e) => handleCambiarAvance(item.id, parseInt(e.target.value))} 
+                                    className="bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none p-1 text-blue-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:border-transparent"
+                                  >
+                                     <option value={0}>0%</option>
+                                     <option value={25}>25%</option>
+                                     <option value={50}>50%</option>
+                                     <option value={75}>75%</option>
+                                     <option value={100}>100%</option>
+                                  </select>
+                                </td>
+
                                 <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
                                 <td className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
                                 <td className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
@@ -733,11 +803,18 @@ export default function DetalleTratamientoPage() {
                                     {item.estado || 'Pendiente'}
                                   </span>
                                 </td>
-                                <td className="px-6 py-5 text-center">
-                                  {item.estado !== 'realizado' && (
-                                    <button onClick={() => eliminarPrestacionLocal(item.id)} className="text-red-300 hover:text-red-500 transition-colors p-2">
-                                      <Trash2 size={16}/>
-                                    </button>
+                                <td className="px-6 py-5 text-center flex items-center justify-center gap-1" data-html2canvas-ignore="true">
+                                  {item.estado !== 'realizado' ? (
+                                    <>
+                                      <button onClick={() => { setModalEditarItem({abierto: true, item}); setDctoInput(item.descuento || 0); }} className="text-slate-400 hover:text-blue-600 transition-colors p-2" title="Aplicar Descuento">
+                                        <Settings size={14}/>
+                                      </button>
+                                      <button onClick={() => eliminarPrestacionLocal(item.id)} className="text-red-300 hover:text-red-500 transition-colors p-2" title="Eliminar Prestación">
+                                        <Trash2 size={14}/>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="px-4 py-1.5 rounded-full text-[8px] font-black uppercase border bg-emerald-50 text-emerald-600 border-emerald-100">Realizado</span>
                                   )}
                                 </td>
                               </tr>
@@ -753,6 +830,105 @@ export default function DetalleTratamientoPage() {
             </div>
           </div>
       </div>
+
+      {/* MODAL EDITAR DESCUENTO */}
+      <AnimatePresence>
+        {modalEditarItem.abierto && (
+          <div className="fixed inset-0 z-[999999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter">Ajustes Clínicos</h3>
+                  <button onClick={() => setModalEditarItem({abierto: false, item: null})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                </div>
+                <div className="p-8 space-y-6">
+                   <div>
+                       <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Prestación Seleccionada</p>
+                       <p className="text-sm font-bold text-slate-800 leading-tight">{modalEditarItem.item?.display_nombre}</p>
+                   </div>
+                   
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Descuento (%)</label>
+                      <select value={dctoInput} onChange={(e) => setDctoInput(parseInt(e.target.value))} className="w-full p-5 rounded-2xl bg-slate-50 font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer">
+                          <option value={0}>Sin Descuento (0%)</option>
+                          <option value={5}>5%</option>
+                          <option value={10}>10%</option>
+                          <option value={15}>15%</option>
+                          <option value={20}>20%</option>
+                          <option value={25}>25%</option>
+                          <option value={30}>30%</option>
+                          <option value={40}>40%</option>
+                          <option value={50}>50%</option>
+                          <option value={75}>75%</option>
+                          <option value={100}>100% (Cortesía)</option>
+                      </select>
+                   </div>
+
+                   <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex justify-between items-center">
+                       <span className="text-[10px] font-black uppercase text-blue-800">Precio Final:</span>
+                       <span className="text-lg font-black text-blue-600">${((modalEditarItem.item?.precio_base || modalEditarItem.item?.precio || 0) * (1 - (dctoInput / 100))).toLocaleString('es-CL')}</span>
+                   </div>
+
+                   <button onClick={handleGuardarDescuento} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 transition-all">
+                     Guardar Cambios
+                   </button>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL LEYENDA */}
+      <AnimatePresence>
+        {mostrarLeyenda && (
+          <div className="fixed inset-0 z-[999999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col max-h-[85vh]">
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter">Leyenda del Odontograma</h3>
+                  <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                </div>
+                <div className="p-8 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-6 custom-scrollbar">
+                   {ICONOS_DISPONIBLES.map(ico => (
+                      <div key={ico.id} className="flex items-center gap-4">
+                        <div className="w-12 h-12 shrink-0 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center p-2">
+                           <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={ico.icon} colorOverride="#2563eb" /></svg>
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-600 leading-tight">{ico.label}</span>
+                      </div>
+                   ))}
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL OPCIONES DE EXPORTACIÓN */}
+      <AnimatePresence>
+        {modalExportar.abierto && (
+          <div className="fixed inset-0 z-[999999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter">Opciones de Exportación</h3>
+                  <button onClick={() => setModalExportar({abierto: false, tipo: null})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                </div>
+                <div className="p-8 space-y-6">
+                   <div className="space-y-4">
+                      <label className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all">
+                          <span className="text-xs font-black uppercase text-slate-700">Incluir Odontograma</span>
+                          <input type="checkbox" checked={exportarOpciones.odontograma} onChange={(e) => setExportarOpciones({...exportarOpciones, odontograma: e.target.checked})} className="w-5 h-5 accent-blue-600" />
+                      </label>
+                      <label className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all">
+                          <span className="text-xs font-black uppercase text-slate-700">Incluir Tabla Financiera</span>
+                          <input type="checkbox" checked={exportarOpciones.finanzas} onChange={(e) => setExportarOpciones({...exportarOpciones, finanzas: e.target.checked})} className="w-5 h-5 accent-blue-600" />
+                      </label>
+                   </div>
+                   <button onClick={procesarExportacion} disabled={!exportarOpciones.odontograma && !exportarOpciones.finanzas} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                     Continuar ({modalExportar.tipo === 'imprimir' ? 'Imprimir' : 'Descargar'})
+                   </button>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {menuContextual && (
@@ -922,6 +1098,16 @@ export default function DetalleTratamientoPage() {
                       </button>
                    ))}
                 </div>
+                
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
+                   <button onClick={() => handleGuardarIcono(null)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                      <Trash2 size={14}/> Quitar Logo Actual
+                   </button>
+                   <button onClick={() => setModalIcono({abierto: false, prestacion: null, autoAdd: false})} className="px-5 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all rounded-xl text-[10px] font-black uppercase">
+                      Cancelar
+                   </button>
+                </div>
+
              </motion.div>
           </div>
         )}
@@ -959,7 +1145,7 @@ export default function DetalleTratamientoPage() {
                {zonaInput ? (
                   <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded-lg border border-emerald-200">Añadiendo a: {zonaInput}</span>
                ) : <span className="text-xs font-black uppercase text-slate-400">Menú Prestaciones</span>}
-               <button onClick={() => setPanelAgregarAbierto(false)} className="w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all text-slate-500 shadow-sm"><X size={16}/></button>
+               <button onClick={() => { setPanelAgregarAbierto(false); setDientesSeleccionados([]); }} className="w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all text-slate-500 shadow-sm"><X size={16}/></button>
             </div>
 
             <div className="p-5 space-y-4 border-b border-slate-100 bg-white shrink-0 shadow-sm z-10">
@@ -1037,20 +1223,24 @@ export default function DetalleTratamientoPage() {
                                 <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden space-y-2 mt-2">
                                     {filtradas.map((p:any) => (
                                         <div key={p.id} className="w-full flex items-center bg-white border-2 border-slate-100 hover:border-blue-400 hover:bg-blue-50 rounded-xl transition-all shadow-sm group">
-                                            {/* BOTÓN DEL LOGO QUE ABRE EL MODAL */}
+                                            
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); setModalIcono({abierto: true, prestacion: p}); }}
                                                 title="Cambiar Logo Permanentemente"
                                                 className="w-12 h-12 flex shrink-0 items-center justify-center bg-slate-100 hover:bg-blue-600 rounded-l-lg transition-colors overflow-hidden group/logo relative"
                                             >
-                                               <div className="w-8 h-8 group-hover/logo:scale-110 transition-transform">
+                                               <div className="w-8 h-8 group-hover/logo:opacity-0 transition-opacity">
                                                   <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-sm">
                                                      <LogoRender iconoKey={p.icono_tipo} hallazgo={p.display_nombre} colorOverride="#ef4444" />
                                                   </svg>
                                                </div>
+                                               
+                                               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity text-white flex-col">
+                                                  <RefreshCcw size={16} />
+                                                  <span className="text-[6px] font-black uppercase mt-0.5 tracking-widest">Editar</span>
+                                               </div>
                                             </button>
                                             
-                                            {/* BOTÓN PARA SELECCIONAR LA PRESTACIÓN */}
                                             <button onClick={() => handleSeleccionarTratamiento(p)} className="flex-1 text-left py-3 px-3 flex justify-between items-center h-full">
                                                 <span className="text-xs font-black uppercase text-slate-800 group-hover:text-blue-700 leading-snug">{p.display_nombre}</span>
                                                 <Plus size={18} className="shrink-0 text-slate-300 group-hover:text-blue-600"/>
@@ -1149,8 +1339,8 @@ export default function DetalleTratamientoPage() {
 
 function LogoRender({ hallazgo, iconoKey, colorOverride }: { hallazgo?: string, iconoKey?: string, colorOverride?: string }) {
   const originalName = (hallazgo || "").toLowerCase();
-  const explicitIcon = (iconoKey && iconoKey !== "default" && iconoKey !== "otro" ? iconoKey : "").toLowerCase();
   
+  const explicitIcon = (iconoKey || "").toLowerCase();
   const h = explicitIcon || originalName; 
   
   const isLesion = LESIONES_LISTA.some(l => l.toLowerCase() === originalName);
@@ -1163,146 +1353,49 @@ function LogoRender({ hallazgo, iconoKey, colorOverride }: { hallazgo?: string, 
   let matched = true; 
 
   switch (true) {
-    case h.includes("caries"): 
-      shape = <path d="M45,10 Q65,-5 80,15 Q95,35 75,45 Q50,45 45,10 Z" fill={color} opacity="0.95" />; 
-      break; 
-    case h.includes("fractura"): 
-      shape = <path d="M 25,10 L 45,45 L 30,55 L 75,90" stroke={color} strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>; 
-      break;
-    case h.includes("infección") || h.includes("infeccion"): 
-      shape = <g><circle cx="50" cy="50" r="18" fill="none" stroke={color} strokeWidth="6" strokeDasharray="4 4"/><circle cx="50" cy="50" r="6" fill={color}/></g>; 
-      break;
-    case h.includes("movilidad"): 
-      shape = <g stroke={color} strokeWidth="6" fill="none" strokeLinecap="round"><path d="M 15,30 Q 5,50 15,70 M 85,30 Q 95,50 85,70"/></g>; 
-      break;
-    case h.includes("atrición") || h.includes("atricion"): 
-      shape = <rect x="25" y="5" width="50" height="15" fill={color} rx="4"/>; 
-      break;
-    case h.includes("abfracción") || h.includes("abfraccion"): 
-      shape = <polygon points="10,40 35,50 10,60" fill={color} />; 
-      break;
-    case h.includes("erosión") || h.includes("erosion"): 
-      shape = <path d="M25,25 Q50,45 75,25" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"/>; 
-      break;
-    case h.includes("residuo radicular") || h.includes("rr"): 
-      shape = <text x="50" y="75" textAnchor="middle" fontSize="45" fontWeight="900" fill={color} letterSpacing="-2">RR</text>; 
-      break;
+    case h.includes("caries"): shape = <path d="M45,10 Q65,-5 80,15 Q95,35 75,45 Q50,45 45,10 Z" fill={color} opacity="0.95" />; break; 
+    case h.includes("fractura"): shape = <path d="M 25,10 L 45,45 L 30,55 L 75,90" stroke={color} strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>; break;
+    case h.includes("infección") || h.includes("infeccion"): shape = <g><circle cx="50" cy="50" r="18" fill="none" stroke={color} strokeWidth="6" strokeDasharray="4 4"/><circle cx="50" cy="50" r="6" fill={color}/></g>; break;
+    case h.includes("movilidad"): shape = <g stroke={color} strokeWidth="6" fill="none" strokeLinecap="round"><path d="M 15,30 Q 5,50 15,70 M 85,30 Q 95,50 85,70"/></g>; break;
+    case h.includes("atrición") || h.includes("atricion"): shape = <rect x="25" y="5" width="50" height="15" fill={color} rx="4"/>; break;
+    case h.includes("abfracción") || h.includes("abfraccion"): shape = <polygon points="10,40 35,50 10,60" fill={color} />; break;
+    case h.includes("erosión") || h.includes("erosion"): shape = <path d="M25,25 Q50,45 75,25" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"/>; break;
+    case h.includes("residuo radicular") || h.includes("rr"): shape = <text x="50" y="75" textAnchor="middle" fontSize="45" fontWeight="900" fill={color} letterSpacing="-2">RR</text>; break;
     case h.includes("ausente"): 
-    case h.includes("extraccion") || h.includes("extracción") || h.includes("exodoncia"):
-      shape = <g stroke={color} strokeWidth="12" strokeLinecap="round"><line x1="20" y1="20" x2="80" y2="80"/><line x1="80" y1="20" x2="20" y2="80"/></g>; 
-      break;
-    case h.includes("sano"): 
-      shape = <text x="50" y="75" textAnchor="middle" fontSize="60" fontStyle="italic" fontWeight="900" fill={color}>S</text>; 
-      break;
-    case h.includes("erupcionar"): 
-      shape = <line x1="10" y1="50" x2="90" y2="50" stroke={color} strokeWidth="12" strokeLinecap="round" />; 
-      break;
-    case h.includes("corona"): 
-      shape = <g><circle cx="50" cy="40" r="35" fill="none" stroke={color} strokeWidth="8" strokeDasharray={h.includes("provisoria") ? "8 4" : "0"} /><circle cx="50" cy="40" r="20" fill="none" stroke={color} strokeWidth="4" opacity="0.4" /></g>; 
-      break;
-    case h.includes("endodoncia"): 
-      shape = <g><line x1="40" y1="30" x2="35" y2="90" stroke={color} strokeWidth="10" strokeLinecap="round" /><line x1="60" y1="30" x2="65" y2="90" stroke={color} strokeWidth="10" strokeLinecap="round" /><path d="M30,30 Q50,15 70,30" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"/></g>; 
-      break;
-    case h.includes("restauración") || h.includes("restauracion") || h.includes("tapadura"): 
-      shape = <rect x="30" y="25" width="40" height="30" rx="8" fill={color} opacity="0.9" />; 
-      break;
-    case h.includes("implante"): 
-      shape = <g fill={color}><rect x="42" y="55" width="16" height="40" rx="2"/><path d="M35,60 H65 M35,75 H65 M35,90 H65" stroke="white" strokeWidth="4"/><polygon points="35,50 65,50 50,20" fill={color}/></g>; 
-      break;
-    case h.includes("perno") || h.includes("muñón") || h.includes("munon"): 
-      shape = <path d="M50,90 V40 M30,40 H70 L50,10 Z" fill="none" stroke={color} strokeWidth="10" strokeLinejoin="round" />; 
-      break;
-    case h.includes("rayos") || h.includes("radiografia") || h.includes("radiografía") || h.includes("rx"): 
-      shape = <g stroke={color} strokeWidth="8" fill="none" strokeLinecap="round"><rect x="20" y="25" width="60" height="50" rx="6"/><circle cx="50" cy="50" r="10"/><path d="M50,15 V25 M50,75 V85"/></g>; 
-      break;
-    case h.includes("removible") || h.includes("protesis") || h.includes("prótesis"): 
-      shape = <path d="M15,55 Q50,95 85,55 Q50,75 15,55 Z" fill={color} stroke={color} strokeWidth="4"/>; 
-      break;
-    case h.includes("pulido") || h.includes("destartraje") || h.includes("limpieza") || h.includes("profilaxis"): 
-      shape = <g stroke={color} strokeWidth="8" strokeLinecap="round"><path d="M35,65 L65,35 M55,20 L80,45 M20,55 L45,80" /></g>; 
-      break;
-    case h.includes("amalgama"): 
-      shape = <rect x="30" y="25" width="40" height="30" rx="4" fill="#64748b" />; 
-      break;
-    case h.includes("sellante"): 
-      shape = <path d="M20,20 Q50,40 80,20 Q50,0 20,20 Z" fill={color} opacity="0.6"/>; 
-      break;
-    case (iconoKey === "otro" || h === "default"): 
-      shape = <circle cx="50" cy="50" r="20" fill={color} opacity="0.8" />; 
-      break;
-    default: 
-      matched = false; 
-      break;
+    case h.includes("extraccion") || h.includes("extracción") || h.includes("exodoncia"): shape = <g stroke={color} strokeWidth="12" strokeLinecap="round"><line x1="20" y1="20" x2="80" y2="80"/><line x1="80" y1="20" x2="20" y2="80"/></g>; break;
+    case h.includes("sano"): shape = <text x="50" y="75" textAnchor="middle" fontSize="60" fontStyle="italic" fontWeight="900" fill={color}>S</text>; break;
+    case h.includes("erupcionar"): shape = <line x1="10" y1="50" x2="90" y2="50" stroke={color} strokeWidth="12" strokeLinecap="round" />; break;
+    case h.includes("corona"): shape = <g><circle cx="50" cy="40" r="35" fill="none" stroke={color} strokeWidth="8" strokeDasharray={h.includes("provisoria") ? "8 4" : "0"} /><circle cx="50" cy="40" r="20" fill="none" stroke={color} strokeWidth="4" opacity="0.4" /></g>; break;
+    case h.includes("endodoncia"): shape = <g><line x1="40" y1="30" x2="35" y2="90" stroke={color} strokeWidth="10" strokeLinecap="round" /><line x1="60" y1="30" x2="65" y2="90" stroke={color} strokeWidth="10" strokeLinecap="round" /><path d="M30,30 Q50,15 70,30" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"/></g>; break;
+    case h.includes("restauración") || h.includes("restauracion") || h.includes("tapadura"): shape = <rect x="30" y="25" width="40" height="30" rx="8" fill={color} opacity="0.9" />; break;
+    case h.includes("implante"): shape = <g fill={color}><rect x="42" y="55" width="16" height="40" rx="2"/><path d="M35,60 H65 M35,75 H65 M35,90 H65" stroke="white" strokeWidth="4"/><polygon points="35,50 65,50 50,20" fill={color}/></g>; break;
+    case h.includes("perno") || h.includes("muñón") || h.includes("munon"): shape = <path d="M50,90 V40 M30,40 H70 L50,10 Z" fill="none" stroke={color} strokeWidth="10" strokeLinejoin="round" />; break;
+    case h.includes("rayos") || h.includes("radiografia") || h.includes("radiografía") || h.includes("rx"): shape = <g stroke={color} strokeWidth="8" fill="none" strokeLinecap="round"><rect x="20" y="25" width="60" height="50" rx="6"/><circle cx="50" cy="50" r="10"/><path d="M50,15 V25 M50,75 V85"/></g>; break;
+    case h.includes("removible") || h.includes("protesis") || h.includes("prótesis"): shape = <path d="M15,55 Q50,95 85,55 Q50,75 15,55 Z" fill={color} stroke={color} strokeWidth="4"/>; break;
+    case h.includes("pulido") || h.includes("destartraje") || h.includes("limpieza") || h.includes("profilaxis"): shape = <g stroke={color} strokeWidth="8" strokeLinecap="round"><path d="M35,65 L65,35 M55,20 L80,45 M20,55 L45,80" /></g>; break;
+    case h.includes("amalgama"): shape = <rect x="30" y="25" width="40" height="30" rx="4" fill="#64748b" />; break;
+    case h.includes("sellante"): shape = <path d="M20,20 Q50,40 80,20 Q50,0 20,20 Z" fill={color} opacity="0.6"/>; break;
+    case h.includes("otro") || h === "otro": shape = <polygon points="50,15 61,35 88,35 67,52 75,78 50,62 25,78 33,52 12,35 39,35" fill={color} opacity="0.9" strokeLinejoin="round" />; break;
+    case h === "default": shape = <circle cx="50" cy="50" r="20" fill={color} opacity="0.8" />; break;
+    default: matched = false; break;
   }
 
   if (!matched) {
-    shape = (
-      <g>
-        <circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="6" strokeDasharray="8 6" opacity="0.5"/>
-        <text x="50" y="70" textAnchor="middle" fontSize="55" fontWeight="900" fill={color} opacity="0.5">?</text>
-      </g>
-    );
+    shape = <g><circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="6" strokeDasharray="8 6" opacity="0.5"/><text x="50" y="70" textAnchor="middle" fontSize="55" fontWeight="900" fill={color} opacity="0.5">?</text></g>;
   }
 
-  return (
-    <g>
-      {isMalEstado ? (
-        <g>
-          <circle cx="50" cy="50" r="48" fill="none" stroke="#ef4444" strokeWidth="8" strokeDasharray="6 4" />
-          {shape}
-        </g>
-      ) : shape}
-    </g>
-  )
+  return <g>{isMalEstado ? <g><circle cx="50" cy="50" r="48" fill="none" stroke="#ef4444" strokeWidth="8" strokeDasharray="6 4" />{shape}</g> : shape}</g>;
 }
 
-const commonSvgProps = { 
-  viewBox: "0 0 100 100", 
-  className: "w-4 h-4 text-slate-400 group-hover:text-blue-500", 
-  stroke: "currentColor", 
-  fill: "none", 
-  strokeWidth: "10" 
-};
-
-function LogoSextante1() {
-  return <svg {...commonSvgProps}><polyline points="10,0 100,100 0,100"/></svg>;
-}
-
-function LogoSextante2() {
-  return <svg {...commonSvgProps}><polyline points="10,20 50,100 90,20"/></svg>;
-}
-
-function LogoSextante3() {
-  return <svg {...commonSvgProps}><polyline points="90,0 0,100 100,100"/></svg>;
-}
-
-function LogoSextante4() {
-  return <svg {...commonSvgProps}><polyline points="10,0 100,0 20,100"/></svg>;
-}
-
-function LogoSextante5() {
-  return <svg {...commonSvgProps}><polyline points="10,80 50,0 90,80"/></svg>;
-}
-
-function LogoSextante6() {
-  return <svg {...commonSvgProps}><polyline points="90,0 0,0 80,100"/></svg>;
-}
-
-function LogoArcadaSup() {
-  return (
-    <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500">
-      <path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" />
-    </svg>
-  );
-}
-
-function LogoArcadaInf() {
-  return (
-    <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500 rotate-180">
-      <path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" />
-    </svg>
-  );
-}
+const commonSvgProps = { viewBox: "0 0 100 100", className: "w-4 h-4 text-slate-400 group-hover:text-blue-500", stroke: "currentColor", fill: "none", strokeWidth: "10" };
+function LogoSextante1() { return <svg {...commonSvgProps}><polyline points="10,0 100,100 0,100"/></svg>; }
+function LogoSextante2() { return <svg {...commonSvgProps}><polyline points="10,20 50,100 90,20"/></svg>; }
+function LogoSextante3() { return <svg {...commonSvgProps}><polyline points="90,0 0,100 100,100"/></svg>; }
+function LogoSextante4() { return <svg {...commonSvgProps}><polyline points="10,0 100,0 20,100"/></svg>; }
+function LogoSextante5() { return <svg {...commonSvgProps}><polyline points="10,80 50,0 90,80"/></svg>; }
+function LogoSextante6() { return <svg {...commonSvgProps}><polyline points="90,0 0,0 80,100"/></svg>; }
+function LogoArcadaSup() { return <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500"><path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" /></svg>; }
+function LogoArcadaInf() { return <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500 rotate-180"><path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" /></svg>; }
 
 function CarasDentales({ id, items, estado, abrirPanelAgregar, invert }: any) {
   const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48);
@@ -1310,142 +1403,50 @@ function CarasDentales({ id, items, estado, abrirPanelAgregar, invert }: any) {
   const faceRight = screenLeft ? 'M' : 'D';
 
   const getFill = (c: string) => {
-    const isLesionCara = estado?.caras?.[c] === 'lesion';
-    const hasGeneralCaries = estado?.hallazgos?.some((h: string) => h.toLowerCase().includes('caries'));
-
-    const hasRealizado = items.some((i:any) => i.cara === c && i.estado === 'realizado');
-    const hasPendiente = items.some((i:any) => i.cara === c && i.estado !== 'realizado');
-
-    if (isLesionCara || hasGeneralCaries) return "#0f172a"; 
-    if (hasRealizado) return "#3b82f6"; 
-    if (hasPendiente) return "#ef4444"; 
+    if (estado?.caras?.[c] === 'lesion' || estado?.hallazgos?.some((h: string) => h.toLowerCase().includes('caries'))) return "#0f172a"; 
+    if (items.some((i:any) => i.cara === c && i.estado === 'realizado')) return "#3b82f6"; 
+    if (items.some((i:any) => i.cara === c && i.estado !== 'realizado')) return "#ef4444"; 
     return "white";
   }
 
   return (
     <svg viewBox="0 0 100 100" className={`w-9 h-9 drop-shadow-sm ${invert ? 'rotate-180' : ''}`}>
-       <path 
-          d="M 16 16 A 48 48 0 0 1 84 16 L 64 36 A 20 20 0 0 0 36 36 Z" 
-          fill={getFill('V')} 
-          stroke="#cbd5e1" 
-          strokeWidth="3" 
-          className="hover:opacity-70 cursor-pointer transition-opacity"
-          onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'V'); }}
-       >
-          <title>Cara Vestibular (V)</title>
-       </path>
-       <path 
-          d="M 84 84 A 48 48 0 0 1 16 84 L 36 64 A 20 20 0 0 0 64 64 Z" 
-          fill={getFill('L')} 
-          stroke="#cbd5e1" 
-          strokeWidth="3" 
-          className="hover:opacity-70 cursor-pointer transition-opacity"
-          onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'L'); }}
-       >
-          <title>Cara Lingual / Palatina (L)</title>
-       </path>
-       <path 
-          d="M 16 84 A 48 48 0 0 1 16 16 L 36 36 A 20 20 0 0 0 36 64 Z" 
-          fill={getFill(faceLeft)} 
-          stroke="#cbd5e1" 
-          strokeWidth="3" 
-          className="hover:opacity-70 cursor-pointer transition-opacity"
-          onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, faceLeft); }}
-       >
-          <title>{`Cara ${faceLeft === 'M' ? 'Mesial' : 'Distal'} (${faceLeft})`}</title>
-       </path>
-       <path 
-          d="M 84 16 A 48 48 0 0 1 84 84 L 64 64 A 20 20 0 0 0 64 36 Z" 
-          fill={getFill(faceRight)} 
-          stroke="#cbd5e1" 
-          strokeWidth="3" 
-          className="hover:opacity-70 cursor-pointer transition-opacity"
-          onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, faceRight); }}
-       >
-          <title>{`Cara ${faceRight === 'M' ? 'Mesial' : 'Distal'} (${faceRight})`}</title>
-       </path>
-       <circle 
-          cx="50" 
-          cy="50" 
-          r="20" 
-          fill={getFill('O')} 
-          stroke="#cbd5e1" 
-          strokeWidth="3" 
-          className="hover:opacity-70 cursor-pointer transition-opacity"
-          onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'O'); }}
-       >
-          <title>Cara Oclusal / Incisal (O)</title>
-       </circle>
+       <path d="M 16 16 A 48 48 0 0 1 84 16 L 64 36 A 20 20 0 0 0 36 36 Z" fill={getFill('V')} stroke="#cbd5e1" strokeWidth="3" className="hover:opacity-70 cursor-pointer transition-opacity" onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'V'); }}><title>Cara Vestibular (V)</title></path>
+       <path d="M 84 84 A 48 48 0 0 1 16 84 L 36 64 A 20 20 0 0 0 64 64 Z" fill={getFill('L')} stroke="#cbd5e1" strokeWidth="3" className="hover:opacity-70 cursor-pointer transition-opacity" onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'L'); }}><title>Cara Lingual / Palatina (L)</title></path>
+       <path d="M 16 84 A 48 48 0 0 1 16 16 L 36 36 A 20 20 0 0 0 36 64 Z" fill={getFill(faceLeft)} stroke="#cbd5e1" strokeWidth="3" className="hover:opacity-70 cursor-pointer transition-opacity" onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, faceLeft); }}><title>{`Cara ${faceLeft === 'M' ? 'Mesial' : 'Distal'} (${faceLeft})`}</title></path>
+       <path d="M 84 16 A 48 48 0 0 1 84 84 L 64 64 A 20 20 0 0 0 64 36 Z" fill={getFill(faceRight)} stroke="#cbd5e1" strokeWidth="3" className="hover:opacity-70 cursor-pointer transition-opacity" onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, faceRight); }}><title>{`Cara ${faceRight === 'M' ? 'Mesial' : 'Distal'} (${faceRight})`}</title></path>
+       <circle cx="50" cy="50" r="20" fill={getFill('O')} stroke="#cbd5e1" strokeWidth="3" className="hover:opacity-70 cursor-pointer transition-opacity" onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'O'); }}><title>Cara Oclusal / Incisal (O)</title></circle>
     </svg>
   )
 }
 
-function DienteVisual({ id, onSelect, onContextMenu, invert = false, itemsDiente = [], estadoDiente, abrirPanelAgregar, handleContextMenu }: any) {
+function DienteVisual({ id, seleccionado, onSelect, onContextMenu, invert = false, itemsDiente = [], estadoDiente, abrirPanelAgregar }: any) {
   const tieneTratamiento = itemsDiente.some((i:any) => !i.cara && !i.zona); 
   const hallazgos = estadoDiente?.hallazgos || (estadoDiente?.estado_general ? [estadoDiente.estado_general] : (estadoDiente?.center ? [estadoDiente.center] : []));
   
   const getToothPath = (num: number) => {
     const n = num % 10;
-    if (n === 1 || n === 2) {
-      return "M 35 15 Q 50 5 65 15 L 75 55 Q 80 80 75 95 L 25 95 Q 20 80 25 55 Z";
-    } else if (n === 3) {
-      return "M 35 15 Q 50 5 65 15 L 75 50 Q 80 75 50 95 Q 20 75 25 50 Z";
-    } else if (n >= 4 && n <= 5) {
-      return "M 30 15 Q 50 0 70 15 L 75 50 Q 85 75 70 95 Q 50 100 30 95 Q 15 75 25 50 Z";
-    } else {
-      return "M 20 15 Q 30 0 45 15 L 50 40 L 55 15 Q 70 0 80 15 L 85 50 Q 95 75 80 95 Q 50 100 20 95 Q 5 75 15 50 Z";
-    }
+    if (n === 1 || n === 2) return "M 35 15 Q 50 5 65 15 L 75 55 Q 80 80 75 95 L 25 95 Q 20 80 25 55 Z";
+    else if (n === 3) return "M 35 15 Q 50 5 65 15 L 75 50 Q 80 75 50 95 Q 20 75 25 50 Z";
+    else if (n >= 4 && n <= 5) return "M 30 15 Q 50 0 70 15 L 75 50 Q 85 75 70 95 Q 50 100 30 95 Q 15 75 25 50 Z";
+    else return "M 20 15 Q 30 0 45 15 L 50 40 L 55 15 Q 70 0 80 15 L 85 50 Q 95 75 80 95 Q 50 100 20 95 Q 5 75 15 50 Z";
   }
 
   return (
-    <div className={`flex flex-col items-center group ${invert ? 'flex-col-reverse' : ''}`}>
-      <span className="text-[9px] font-black text-slate-300 mb-1.5 italic group-hover:text-blue-500 transition-all cursor-pointer" onClick={() => onSelect(id)}>
-        {id}
-      </span>
-      
-      <div className={`${invert ? 'mt-1.5' : 'mb-1.5'}`}>
-        <CarasDentales 
-          id={id} 
-          items={itemsDiente} 
-          estado={estadoDiente} 
-          abrirPanelAgregar={abrirPanelAgregar} 
-          invert={invert} 
-        />
-      </div>
-
-      <div 
-        onClick={() => onSelect(id)} 
-        onContextMenu={onContextMenu} 
-        className={`relative w-11 h-11 cursor-pointer transition-all duration-300 drop-shadow-sm hover:drop-shadow-md`}
-      >
+    <div className={`flex flex-col items-center group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''}`}>
+      <span className="text-[9px] font-black text-slate-300 mb-1.5 italic group-hover:text-blue-500 transition-all cursor-pointer" onClick={(e) => onSelect(id, e)}>{id}</span>
+      <div className={`${invert ? 'mt-1.5' : 'mb-1.5'}`}><CarasDentales id={id} items={itemsDiente} estado={estadoDiente} abrirPanelAgregar={abrirPanelAgregar} invert={invert} /></div>
+      <div onClick={(e) => onSelect(id, e)} onContextMenu={onContextMenu} className={`relative w-11 h-11 cursor-pointer transition-all duration-300 drop-shadow-sm hover:drop-shadow-md`}>
         <svg viewBox="0 0 100 100" className={`w-full h-full ${invert ? 'rotate-180' : ''}`}>
-          
           <defs>
             <linearGradient id={`gradDiente-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor={tieneTratamiento || hallazgos.length > 0 ? "#eff6ff" : "#ffffff"} />
               <stop offset="100%" stopColor={tieneTratamiento || hallazgos.length > 0 ? "#dbeafe" : "#f1f5f9"} />
             </linearGradient>
           </defs>
-
-          <path 
-            d={getToothPath(id)} 
-            fill={`url(#gradDiente-${id})`} 
-            stroke={tieneTratamiento || hallazgos.length > 0 ? "#3b82f6" : "#cbd5e1"} 
-            strokeWidth="4" 
-            strokeLinejoin="round"
-          />
-          
-          {hallazgos.map((h: string, i: number) => (
-            <LogoRender key={`h-${i}`} hallazgo={h} />
-          ))}
-          {itemsDiente.filter((i:any) => !i.cara && !i.zona).map((item: any, i: number) => (
-            <LogoRender 
-              key={`t-${i}`} 
-              hallazgo={item.display_nombre} 
-              iconoKey={item.icono_tipo} 
-              colorOverride={item.estado === 'realizado' ? "#2563eb" : "#ef4444"} 
-            />
-          ))}
+          <path d={getToothPath(id)} fill={`url(#gradDiente-${id})`} stroke={tieneTratamiento || hallazgos.length > 0 ? "#3b82f6" : "#cbd5e1"} strokeWidth="4" strokeLinejoin="round" />
+          {hallazgos.map((h: string, i: number) => <LogoRender key={`h-${i}`} hallazgo={h} />)}
+          {itemsDiente.filter((i:any) => !i.cara && !i.zona).map((item: any, i: number) => <LogoRender key={`t-${i}`} hallazgo={item.display_nombre} iconoKey={item.icono_tipo} colorOverride={item.estado === 'realizado' ? "#2563eb" : "#ef4444"} />)}
         </svg>
       </div>
     </div>

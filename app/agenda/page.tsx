@@ -111,6 +111,7 @@ export default function AgendaPage() {
   const [cargandoDeudas, setCargandoDeudas] = useState(false)
   const [montoIngresado, setMontoIngresado] = useState<number | ''>('')
   const [metodoPago, setMetodoPago] = useState('tarjeta')
+  const [codigoTransaccion, setCodigoTransaccion] = useState('')
 
   const duracionesDisponibles = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300];
 
@@ -382,7 +383,7 @@ export default function AgendaPage() {
   const resetEstados = () => { setPaso(1); setHorasSeleccionadas([]); setPacienteSeleccionado(null); setBusqueda(''); setModoNuevoPaciente(false); setNuevoTratamientoNombre(''); setCitasOcupadas([]); setCitaEnReprogramacion(null); setSemanaInicio(new Date()); setTratamientosPaciente([]); setTratamientoSeleccionadoId(null); setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); setBloqueosSemana([]); }
 
   // ==========================================
-  // LÓGICA DEL MÓDULO DE CAJA (RECAUDACIÓN) CORREGIDA (SOLO PLANES APROBADOS)
+  // LÓGICA DEL MÓDULO DE CAJA (RECAUDACIÓN)
   // ==========================================
 
   const abrirCaja = async (cita: any) => {
@@ -393,16 +394,16 @@ export default function AgendaPage() {
     setPacientePago(cita.pacientes);
     setMontoIngresado('');
     setMetodoPago('tarjeta');
+    setCodigoTransaccion('');
     setModalPagoAbierto(true);
     setCargandoDeudas(true);
 
     try {
-        // PASO 1: Buscar TODOS los presupuestos del paciente que estén APROBADOS
         const { data: presupuestosPaciente, error: errPres } = await supabase
             .from('presupuestos')
             .select('id')
             .eq('paciente_id', cita.pacientes.id)
-            .eq('aprobado', true); // <--- FILTRO VITAL: Solo cobrar si el plan está aprobado
+            .eq('aprobado', true);
 
         if (errPres) throw errPres;
 
@@ -410,7 +411,6 @@ export default function AgendaPage() {
 
         let itemsData: any[] = [];
         
-        // PASO 2: Si tiene presupuestos aprobados, buscar los tratamientos dentro
         if (idsPresupuestos.length > 0) {
             const { data, error } = await supabase
                 .from('presupuesto_items')
@@ -429,7 +429,6 @@ export default function AgendaPage() {
             itemsData = data || [];
         }
 
-        // PASO 3: Filtrar solo los que tienen deuda y ordenar para dar prioridad a lo "realizado"
         const itemsConDeuda = itemsData.map(item => {
             const precio = Number(item.precio_pactado || 0);
             const abonado = Number(item.abonado || 0);
@@ -445,7 +444,6 @@ export default function AgendaPage() {
             return { ...item, deuda, nombreDisplay };
         }).filter(item => item.deuda > 0)
           .sort((a, b) => {
-              // Prioridad 1: Los que ya se hicieron (realizados) se cobran primero
               if (a.estado === 'realizado' && b.estado !== 'realizado') return -1;
               if (a.estado !== 'realizado' && b.estado === 'realizado') return 1;
               return 0;
@@ -466,19 +464,26 @@ export default function AgendaPage() {
         return toast.error("Ingrese un monto válido a recaudar");
     }
 
+    if ((metodoPago === 'tarjeta' || metodoPago === 'transferencia') && !codigoTransaccion.trim()) {
+        return toast.error("Ingrese el código de transacción o comprobante");
+    }
+
     setCargandoAccion(true);
     let montoRestante = Number(montoIngresado);
     
     try {
+        // ACTUALIZADO: Haciendo match exacto con el esquema de la tabla public.pagos
         const { error: errPago } = await supabase.from('pagos').insert([{
             paciente_id: pacientePago.id,
             monto: Number(montoIngresado),
-            metodo: metodoPago,
-            fecha: new Date().toISOString()
+            metodo_pago: metodoPago, // Nombre de columna exacto
+            numero_referencia: codigoTransaccion.trim() || null, // Nombre de columna exacto
+            fecha_pago: new Date().toISOString() // Nombre de columna exacto
         }]);
         
         if (errPago) {
-            console.warn("No se pudo guardar en la tabla 'pagos'. Continuaremos actualizando la deuda.", errPago);
+            console.warn("Error al registrar en tabla pagos. Revisa consola.", errPago);
+            toast.error("El pago no pudo ser registrado en el historial, pero se intentará actualizar la deuda.");
         }
 
         for (const item of deudasPaciente) {
@@ -494,9 +499,10 @@ export default function AgendaPage() {
             montoRestante -= aAbonar;
         }
 
-        toast.success(`Pago de $${Number(montoIngresado).toLocaleString('es-CL')} registrado correctamente.`);
+        toast.success(`Pago de $${Number(montoIngresado).toLocaleString('es-CL')} procesado.`);
         setModalPagoAbierto(false);
         setMontoIngresado('');
+        setCodigoTransaccion('');
         
     } catch (e) {
         toast.error("Ocurrió un error al procesar el pago");
@@ -631,8 +637,8 @@ export default function AgendaPage() {
       <AnimatePresence>
         {modalPagoAbierto && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl flex flex-col overflow-hidden">
-                <div className="p-8 bg-emerald-500 text-white flex justify-between items-center">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden">
+                <div className="p-8 bg-emerald-500 text-white flex justify-between items-center shrink-0">
                    <div className="flex items-center gap-4">
                       <div className="p-3 bg-emerald-600 rounded-2xl shadow-inner"><ReceiptText size={28}/></div>
                       <div>
@@ -679,7 +685,8 @@ export default function AgendaPage() {
                               </div>
                            </div>
 
-                           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
+                           {/* FORMULARIO DE PAGO */}
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200">
                               <div className="space-y-2">
                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Método de Pago</label>
                                  <select className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-emerald-500" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
@@ -692,12 +699,20 @@ export default function AgendaPage() {
                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Monto a Recaudar ($)</label>
                                  <input type="number" placeholder="Ej: 50000" className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-black text-lg text-emerald-600 outline-none focus:border-emerald-500 placeholder:text-slate-300" value={montoIngresado} onChange={(e) => setMontoIngresado(Number(e.target.value))} />
                               </div>
+                              
+                              {/* CÓDIGO TRANSACCIÓN (Oculto si es efectivo) */}
+                              {(metodoPago === 'tarjeta' || metodoPago === 'transferencia') && (
+                                <div className="space-y-2 md:col-span-2">
+                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Código Transacción / Comprobante</label>
+                                   <input type="text" placeholder="Ej: TX-123456789" className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-emerald-500 placeholder:text-slate-300 uppercase" value={codigoTransaccion} onChange={(e) => setCodigoTransaccion(e.target.value)} />
+                                </div>
+                              )}
                            </div>
                         </div>
                     )}
                 </div>
 
-                <div className="p-8 border-t border-slate-100 bg-white">
+                <div className="p-8 border-t border-slate-100 bg-white shrink-0">
                    <button 
                       onClick={procesarPagoCaja}
                       disabled={cargandoAccion || deudasPaciente.length === 0 || !montoIngresado}
