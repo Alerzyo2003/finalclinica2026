@@ -89,30 +89,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setBuscando(true)
     setMostrarResultados(true)
 
-    // 1. Limpiamos espacios extras y separamos por palabras
     const palabras = term.trim().split(/\s+/)
-
     let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
 
-    // 2. Procesamos cada palabra escrita
     palabras.forEach(palabra => {
-      // Búsqueda difusa para nombres (ej: "ols" -> "%o%l%s%")
       const fuzzy = `%${palabra.split('').join('%')}%`
-      
-      // Limpiamos la palabra de puntos y guiones por si están escribiendo un RUT (ej: "12.345" -> "12345")
       const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase()
       
-      // Si la palabra contiene números/K, la buscamos también en el RUT
       if (palabraRut.length > 0) {
         query = query.or(`nombre.ilike.${fuzzy},apellido.ilike.${fuzzy},rut.ilike.%${palabraRut}%`)
       } else {
-        // Si son solo letras, buscamos solo en nombre y apellido
         query = query.or(`nombre.ilike.${fuzzy},apellido.ilike.${fuzzy}`)
       }
     })
 
     const { data } = await query.limit(6)
-    
     setResultados(data || [])
     setBuscando(false)
   }
@@ -151,11 +142,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="es">
-      <body className="bg-slate-50 h-screen flex flex-col font-sans antialiased overflow-hidden text-slate-800 text-left">
+      {/* MAGIA DE IMPRESIÓN: Cambiamos de h-screen a h-auto para que la impresora lea todas las páginas */}
+      <body className="bg-slate-50 h-screen flex flex-col font-sans antialiased overflow-hidden print:h-auto print:overflow-visible print:block text-slate-800 text-left">
         <Toaster richColors position="top-right" />
 
         {!isAuthPage && session && (
-          <div className="flex flex-col shrink-0">
+          // MAGIA DE IMPRESIÓN: print:hidden oculta los menús al imprimir
+          <div className="flex flex-col shrink-0 print:hidden">
             <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-8 shadow-2xl z-[40] relative border-b border-white/5">
               <div className="flex items-center gap-12 text-left">
                 <Link href="/" className="flex items-center gap-4 group transition-all text-left">
@@ -280,7 +273,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto bg-slate-50 relative z-0 print:bg-white text-left custom-scrollbar">
+        {/* MAGIA DE IMPRESIÓN: overflow-visible para no cortar las páginas */}
+        <main className="flex-1 overflow-y-auto bg-slate-50 relative z-0 print:overflow-visible print:h-auto print:block print:bg-white text-left custom-scrollbar">
           {children}
         </main>
       </body>

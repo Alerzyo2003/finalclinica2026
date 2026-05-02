@@ -106,18 +106,19 @@ export default function HistorialPage() {
         color: 'cyan'
       }))
 
-      // 6. NORMALIZAR CITAS
+      // 6. NORMALIZAR CITAS (CORREGIDO PARA ORDENAR POR CREACIÓN)
       const cts = (citas || []).map(c => ({
         ...c,
         tipo: 'cita',
-        fecha: c.inicio,
+        fecha: c.created_at || c.inicio, // Usamos created_at para la línea de tiempo
         titulo: `Cita Agendada: ${c.estado}`,
-        descripcion: `Motivo: ${c.motivo || 'Consulta General'}`,
+        // Agregamos cuándo será la cita en la descripción
+        descripcion: `Para el ${new Date(c.inicio).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' })} a las ${new Date(c.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} hrs. Motivo: ${c.motivo || 'Consulta General'}`,
         icon: <CalendarDays size={16} />,
         color: 'slate'
       }))
 
-      // UNIR TODO Y ORDENAR
+      // UNIR TODO Y ORDENAR (Manda el más reciente en base a la creación)
       const total = [...evs, ...pres, ...arcs, ...docs, ...pgs, ...cts].sort((a, b) => 
         new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime()
       )
@@ -206,6 +207,7 @@ export default function HistorialPage() {
                         </h4>
                         <div className="flex items-center gap-2 text-[9px] text-slate-400 font-bold uppercase mt-1 text-left">
                           <Calendar size={10} />
+                          {/* Aquí mostramos cuándo se registró la acción en el sistema */}
                           {item.fecha ? new Date(item.fecha).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' }) : 'S/F'}
                           <span className="mx-1">•</span>
                           <Clock size={10} />
