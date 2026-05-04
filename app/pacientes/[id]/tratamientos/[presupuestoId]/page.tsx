@@ -1,20 +1,28 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   Loader2, Database,
   Plus, X, Search, Trash2, CheckCircle2,
-  ChevronRight, ChevronUp, ChevronDown, Info, Settings, Layers, FileSignature,
-  Stethoscope, Check, RefreshCcw, Undo2, HelpCircle, Printer, Download
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Info, Settings, Layers, FileSignature,
+  Stethoscope, Check, RefreshCcw, Undo2, HelpCircle, Printer, Download, User, Baby
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
+// DENTICIÓN PERMANENTE
 const c1 = [18, 17, 16, 15, 14, 13, 12, 11];
 const c2 = [21, 22, 23, 24, 25, 26, 27, 28];
 const c3 = [48, 47, 46, 45, 44, 43, 42, 41];
 const c4 = [31, 32, 33, 34, 35, 36, 37, 38];
+
+// DENTICIÓN TEMPORAL
+const t1 = [55, 54, 53, 52, 51];
+const t2 = [61, 62, 63, 64, 65];
+const t3 = [85, 84, 83, 82, 81];
+const t4 = [71, 72, 73, 74, 75];
 
 const PREEXISTENCIAS_LISTA = [
   "Corona", "Corona provisoria", "Endodoncia", "Restauración", "Implante", "Perno muñon",
@@ -50,13 +58,16 @@ export default function DetalleTratamientoPage() {
   
   const [pacienteId, setPacienteId] = useState<string>('')
   const [presupuestoData, setPresupuestoData] = useState<any>(null)
-  const [acciones, setAcciones] = useState<any[]>([])
+  
+  const [acciones, setAcciones] = useState<any[]>([]) 
+  const [historialPaciente, setHistorialPaciente] = useState<any[]>([]) 
   
   const [odontogramaEstado, setOdontogramaEstado] = useState<Record<string, any>>({})
   const [historialOdontograma, setHistorialOdontograma] = useState<Record<string, any>[]>([])
   
   const [dientesSeleccionados, setDientesSeleccionados] = useState<number[]>([])
   const [editandoDienteId, setEditandoDienteId] = useState<string | null>(null)
+  const [vistaTemporal, setVistaTemporal] = useState(false) 
 
   const [modalEditarItem, setModalEditarItem] = useState<{abierto: boolean, item: any}>({abierto: false, item: null})
   const [dctoInput, setDctoInput] = useState(0)
@@ -93,9 +104,14 @@ export default function DetalleTratamientoPage() {
   const [itemsAEvolucionar, setItemsAEvolucionar] = useState<string[]>([])
   const [guardandoEvolucion, setGuardandoEvolucion] = useState(false)
 
-  const [modalIcono, setModalIcono] = useState<{abierto: boolean, prestacion: any, autoAdd?: boolean}>({
-    abierto: false, prestacion: null, autoAdd: false
+  const [modalIcono, setModalIcono] = useState<{abierto: boolean, prestacion: any, autoAdd?: boolean, itemTargetId?: string}>({
+    abierto: false, prestacion: null, autoAdd: false, itemTargetId: undefined
   });
+
+  const todasLasAccionesBoca = useMemo(() => {
+    const historicasFiltradas = historialPaciente.filter(h => !acciones.some(a => a.id === h.id || a.tempId === h.tempId));
+    return [...historicasFiltradas, ...acciones];
+  }, [acciones, historialPaciente]);
 
   useEffect(() => {
     if (idURL) { fetchDatosFinales(); fetchAuxiliares(); }
@@ -136,7 +152,6 @@ export default function DetalleTratamientoPage() {
     }
   }
 
-  // NUEVAS FUNCIONES: Drag & Drop
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     e.dataTransfer.setData('text/plain', itemId);
     e.dataTransfer.effectAllowed = 'move';
@@ -152,22 +167,18 @@ export default function DetalleTratamientoPage() {
     const itemId = e.dataTransfer.getData('text/plain');
     if (!itemId) return;
 
-    const item = acciones.find(a => a.id === itemId);
+    const item = acciones.find(a => a.id === itemId || a.tempId === itemId);
     if (!item || item.seccion_nombre === nuevaSeccion) return; 
 
-    // Actualización rápida en pantalla
-    setAcciones(prev => prev.map(a => a.id === itemId ? { ...a, seccion_nombre: nuevaSeccion } : a));
+    setAcciones(prev => prev.map(a => (a.id === itemId || a.tempId === itemId) ? { ...a, seccion_nombre: nuevaSeccion } : a));
 
-    // Formatear observación para base de datos
     let partes = (item.observacion || '').split('|').map((p:string) => p.trim());
     partes[0] = nuevaSeccion; 
     const nuevaObs = partes.join(' | ');
 
-    // Guardado en BD silencioso
-    const { error } = await supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', itemId);
-    
-    if (error) toast.error("Error al guardar el movimiento en la base de datos");
-    else toast.success(`Movido a ${nuevaSeccion}`);
+    if (item.id) {
+       supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', item.id).then();
+    }
   };
 
   async function fetchDatosFinales() {
@@ -191,26 +202,57 @@ export default function DetalleTratamientoPage() {
       const { data, error } = await query;
       if (error) throw error;
 
-      const itemsMapeados = (data || []).map(item => {
-        const pactado = Number(item.precio_pactado || item.precio || 0);
-        const abonado = Number(item.abonado || 0);
-        const partes = (item.observacion || 'Plan General').split('|').map((p: string) => p.trim());
-        
-        let caraMatch = null, zonaMatch = null, iconoMatch = null, dctoMatch = 0, avanceMatch = 0;
-        partes.forEach((p: string) => {
-            if (p.startsWith('Cara:')) caraMatch = p.replace('Cara:', '').trim();
-            if (p.startsWith('Zona:')) zonaMatch = p.replace('Zona:', '').trim();
-            if (p.startsWith('Icono:')) iconoMatch = p.replace('Icono:', '').trim();
-            if (p.startsWith('Dcto:')) dctoMatch = parseInt(p.replace('Dcto:', '').trim());
-            if (p.startsWith('Avance:')) avanceMatch = parseInt(p.replace('Avance:', '').trim());
-        });
+      const itemsMapeados = (data || []).map(item => mapearItem({...item, tempId: item.id || Math.random().toString()}, esNuevo));
 
-        const nombreDisplay = esNuevo ? (item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || "Tratamiento Genérico") : item.nombre_prestacion;
-        let precioBase = item.prestaciones?.["Precio"] || item.precio;
-        if (!precioBase) precioBase = pactado / (1 - (dctoMatch / 100));
+      setListaSecciones(prev => Array.from(new Set([...prev, ...Array.from(new Set(itemsMapeados.map(i => i.seccion_nombre)))])).sort((a:any, b:any) => a.localeCompare(b)));
+      setAcciones(itemsMapeados);
+      setDebug(esNuevo ? "Modo Local" : `Dentalink #${targetID}`);
 
-        return {
+      if (pres?.paciente_id) {
+          const { data: presupuestosPaciente } = await supabase.from('presupuestos').select('id').eq('paciente_id', pres.paciente_id);
+          if (presupuestosPaciente) {
+              const ids = presupuestosPaciente.map(p => p.id);
+              const { data: historial } = await supabase.from('presupuesto_items').select(`*, prestaciones:prestacion_id(icono_tipo, "Nombre Accion", "Nombre", "Precio")`).in('presupuesto_id', ids).neq('presupuesto_id', idURL);
+              if (historial) setHistorialPaciente(historial.map(h => mapearItem({...h, tempId: h.id}, true)));
+          }
+      }
+
+    } catch (err) { setDebug("Error"); } finally { setCargando(false); }
+  }
+
+  // 🔥 DIAGNÓSTICO PROFUNDO: Mapeo de ítems con Logs Extremos
+  const mapearItem = (item: any, esNuevo: boolean) => {
+      const pactado = Number(item.precio_pactado || item.precio || 0);
+      const abonado = Number(item.abonado || 0);
+      const partes = (item.observacion || 'Plan General').split('|').map((p: string) => p.trim());
+      
+      let caraMatch = null, zonaMatch = null, iconoMatch = null, dctoMatch = 0, avanceMatch = 0;
+      
+      let dienteParseado = item.diente_id ? parseInt(item.diente_id) : null; 
+      if (isNaN(dienteParseado as any)) dienteParseado = null;
+
+      partes.forEach((p: string) => {
+          if (p.startsWith('Cara:')) caraMatch = p.replace('Cara:', '').trim();
+          if (p.startsWith('Zona:')) zonaMatch = p.replace('Zona:', '').trim();
+          if (p.startsWith('Icono:')) iconoMatch = p.replace('Icono:', '').trim();
+          if (p.startsWith('Dcto:')) dctoMatch = parseInt(p.replace('Dcto:', '').trim());
+          if (p.startsWith('Avance:')) avanceMatch = parseInt(p.replace('Avance:', '').trim());
+      });
+
+      const nombreDisplay = item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || item.nombre_prestacion || item.observacion || "Tratamiento Genérico";
+
+      if (!caraMatch && nombreDisplay) {
+          const regexCara = /\b([VLMDvlmd])\b/; 
+          const matchC = String(nombreDisplay).match(regexCara);
+          if (matchC) caraMatch = matchC[1].toUpperCase();
+      }
+
+      let precioBase = item.prestaciones?.["Precio"] || item.precio;
+      if (!precioBase) precioBase = pactado / (1 - (dctoMatch / 100));
+
+      const finalItem = {
           ...item,
+          diente_id: dienteParseado, 
           seccion_nombre: partes[0] || 'Plan General',
           cara: caraMatch, zona: zonaMatch,
           display_nombre: nombreDisplay,
@@ -218,14 +260,16 @@ export default function DetalleTratamientoPage() {
           precio_base: precioBase,
           descuento: dctoMatch,
           avance: item.estado === 'realizado' ? 100 : avanceMatch,
+          tempId: item.tempId || item.id || Math.random().toString(),
           display_pactado: pactado, display_abonado: abonado, display_saldo: pactado - abonado
-        };
-      });
+      };
 
-      setListaSecciones(prev => Array.from(new Set([...prev, ...Array.from(new Set(itemsMapeados.map(i => i.seccion_nombre)))])).sort((a:any, b:any) => a.localeCompare(b)));
-      setAcciones(itemsMapeados);
-      setDebug(esNuevo ? "Modo Local" : `Dentalink #${targetID}`);
-    } catch (err) { setDebug("Error"); } finally { setCargando(false); }
+      // 🚨 LOGS DE DETECTIVES 🚨
+      if (finalItem.estado === 'realizado') {
+          console.log(`🔎 [ITEM] Nombre: "${finalItem.display_nombre}" | Diente: ${finalItem.diente_id} | Cara: ${finalItem.cara || 'NINGUNA'} | Zona: ${finalItem.zona || 'NINGUNA'}`);
+      }
+
+      return finalItem;
   }
 
   async function fetchAuxiliares() {
@@ -349,36 +393,41 @@ export default function DetalleTratamientoPage() {
     if (!error) { setOdontogramaEstado(nuevoEstado); toast.info("Eliminado"); }
   };
 
-  const eliminarPrestacionLocal = async (id: string) => {
-    const { error } = await supabase.from('presupuesto_items').delete().eq('id', id);
-    if (!error) { setAcciones(prev => prev.filter(a => a.id !== id)); toast.info("Acción eliminada"); }
+  const eliminarPrestacionLocal = async (id: string, tempId: string) => {
+    if (id) {
+        const { error } = await supabase.from('presupuesto_items').delete().eq('id', id);
+        if (!error) { setAcciones(prev => prev.filter(a => a.id !== id)); toast.info("Acción eliminada"); }
+    } else {
+        setAcciones(prev => prev.filter(a => a.tempId !== tempId)); toast.info("Acción quitada de la vista");
+    }
   }
 
-  const handleCambiarDiente = async (id: string, nuevoDiente: string) => {
+  const handleCambiarDiente = async (tempId: string, id: string | null, nuevoDiente: string) => {
     setEditandoDienteId(null);
     const val = nuevoDiente.trim();
     const dId = val ? parseInt(val) : null;
     if (val !== '' && isNaN(dId as any)) return toast.error("Número de pieza inválido");
-    const { error } = await supabase.from('presupuesto_items').update({ diente_id: dId }).eq('id', id);
-    if (!error) { setAcciones(prev => prev.map(a => a.id === id ? { ...a, diente_id: dId } : a)); toast.success("Pieza actualizada"); } 
-    else toast.error("Error al actualizar la pieza");
+    
+    if (id) await supabase.from('presupuesto_items').update({ diente_id: dId }).eq('id', id);
+    setAcciones(prev => prev.map(a => (a.id === id || a.tempId === tempId) ? { ...a, diente_id: dId } : a)); 
+    toast.success("Pieza actualizada");
   }
 
-  const handleCambiarAvance = async (id: string, nuevoAvance: number) => {
-    const item = acciones.find(a => a.id === id);
+  const handleCambiarAvance = async (tempId: string, id: string | null, nuevoAvance: number) => {
+    const item = acciones.find(a => a.tempId === tempId);
     if (!item) return;
 
     let nuevaObs = item.observacion || '';
     nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, '');
     if (nuevoAvance > 0) nuevaObs += ` | Avance: ${nuevoAvance}`;
 
-    const { error } = await supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', id);
-    if (!error) setAcciones(prev => prev.map(a => a.id === id ? { ...a, avance: nuevoAvance, observacion: nuevaObs } : a));
-    else toast.error("Error al actualizar el avance");
+    if (id) await supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', id);
+    setAcciones(prev => prev.map(a => a.tempId === tempId ? { ...a, avance: nuevoAvance, observacion: nuevaObs } : a));
   }
 
   const handleGuardarDescuento = async () => {
     const id = modalEditarItem.item.id;
+    const tempId = modalEditarItem.item.tempId;
     const dcto = dctoInput;
     const item = modalEditarItem.item;
     
@@ -389,18 +438,13 @@ export default function DetalleTratamientoPage() {
     nuevaObs = nuevaObs.replace(/ \| Dcto: [0-9]+/g, '');
     if (dcto > 0) nuevaObs += ` | Dcto: ${dcto}`;
 
-    const { error } = await supabase.from('presupuesto_items').update({
-        precio_pactado: nuevoPactado,
-        observacion: nuevaObs
-    }).eq('id', id);
+    if (id) await supabase.from('presupuesto_items').update({ precio_pactado: nuevoPactado, observacion: nuevaObs }).eq('id', id);
 
-    if (!error) {
-        setAcciones(prev => prev.map(a => a.id === id ? {
-            ...a, descuento: dcto, observacion: nuevaObs, precio_pactado: nuevoPactado, display_pactado: nuevoPactado, display_saldo: nuevoPactado - a.display_abonado
-        } : a));
-        setModalEditarItem({abierto: false, item: null});
-        toast.success("Descuento aplicado correctamente");
-    } else toast.error("Error al aplicar el descuento");
+    setAcciones(prev => prev.map(a => a.tempId === tempId ? {
+        ...a, descuento: dcto, observacion: nuevaObs, precio_pactado: nuevoPactado, display_pactado: nuevoPactado, display_saldo: nuevoPactado - a.display_abonado
+    } : a));
+    setModalEditarItem({abierto: false, item: null});
+    toast.success("Descuento aplicado correctamente");
   }
 
   const handleSeleccionarTratamiento = async (prestacion: any, skipIconCheck = false) => {
@@ -409,7 +453,7 @@ export default function DetalleTratamientoPage() {
     
     if (!skipIconCheck && !prestacion.icono_tipo) {
         const h = prestacion.display_nombre.toLowerCase();
-        const isKnown = LESIONES_LISTA.some(l => l.toLowerCase() === h) || ["ausente", "extraccion", "extracción", "exodoncia", "sano", "erupcionar", "residuo", "rr", "corona", "endodoncia", "restauración", "restauracion", "tapadura", "implante", "perno", "muñón", "munon", "rayos", "radiografia", "radiografía", "rx", "removible", "protesis", "prótesis", "pulido", "destartraje", "limpieza", "profilaxis", "amalgama", "sellante", "default", "otro"].some(k => h.includes(k));
+        const isKnown = LESIONES_LISTA.some(l => l.toLowerCase() === h) || ["ausente", "extraccion", "extracción", "exodoncia", "sano", "erupcionar", "residuo", "rr", "corona", "endodoncia", "restauración", "restauracion", "tapadura", "implante", "perno", "muñón", "munon", "rayos", "radiografia", "radiografía", "rx", "removible", "protesis", "prótesis", "pulido", "destartraje", "limpieza", "profilaxis", "amalgama", "sellante", "resina", "ionomero", "default", "otro", "ortodoncia", "contención"].some(k => h.includes(k));
         if (!isKnown) { setModalIcono({ abierto: true, prestacion: prestacion, autoAdd: true }); return; }
     }
 
@@ -431,7 +475,7 @@ export default function DetalleTratamientoPage() {
         const nuevosItems = data.map((d:any) => ({
             ...d, seccion_nombre: seccionInput.trim(), cara: caraInput || null, zona: zonaInput || null,
             display_nombre: prestacion.display_nombre, icono_tipo: prestacion.icono_tipo || d.prestaciones?.icono_tipo, 
-            precio_base: prestacion["Precio"], descuento: 0, avance: 0,
+            precio_base: prestacion["Precio"], descuento: 0, avance: 0, tempId: d.id,
             display_pactado: d.precio_pactado, display_abonado: 0, display_saldo: d.precio_pactado 
         }));
         setAcciones(prev => [...prev, ...nuevosItems]);
@@ -459,30 +503,48 @@ export default function DetalleTratamientoPage() {
   const handleGuardarIcono = async (iconoId: string | null) => {
     const prestacionActual = modalIcono.prestacion;
     const autoAdd = modalIcono.autoAdd;
-    if(!prestacionActual) return;
+    const targetId = modalIcono.itemTargetId; 
 
-    await supabase.from('prestaciones').update({ icono_tipo: iconoId }).eq('id', prestacionActual.id);
-    const nuevasSecciones = { ...seccionesPrests };
-    for (const cat in nuevasSecciones) {
-       const index = nuevasSecciones[cat].findIndex((p:any) => p.id === prestacionActual.id);
-       if (index !== -1) nuevasSecciones[cat][index].icono_tipo = iconoId;
-    }
-    setSeccionesPrests(nuevasSecciones);
-    
-    setAcciones(prev => {
-        return prev.map(a => {
-            if (a.prestacion_id === prestacionActual.id) {
+    if (targetId) {
+        setAcciones(prev => prev.map(a => {
+            if (a.tempId === targetId) {
                 let nuevaObs = a.observacion || '';
                 nuevaObs = nuevaObs.replace(/ \| Icono: [a-zA-Z0-9_-]+/g, ''); 
                 if (iconoId) nuevaObs += ` | Icono: ${iconoId}`; 
-                supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', a.id).then();
+                if (a.id) supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', a.id).then();
                 return { ...a, icono_tipo: iconoId, observacion: nuevaObs };
             }
             return a;
-        });
-    });
+        }));
+        toast.success(iconoId ? "Logo asignado al tratamiento en pantalla" : "Logo restablecido");
+        setModalIcono({ abierto: false, prestacion: null, autoAdd: false, itemTargetId: undefined });
+        return;
+    }
 
-    setModalIcono({ abierto: false, prestacion: null, autoAdd: false });
+    if (prestacionActual?.id) {
+        await supabase.from('prestaciones').update({ icono_tipo: iconoId }).eq('id', prestacionActual.id);
+        const nuevasSecciones = { ...seccionesPrests };
+        for (const cat in nuevasSecciones) {
+           const index = nuevasSecciones[cat].findIndex((p:any) => p.id === prestacionActual.id);
+           if (index !== -1) nuevasSecciones[cat][index].icono_tipo = iconoId;
+        }
+        setSeccionesPrests(nuevasSecciones);
+        
+        setAcciones(prev => {
+            return prev.map(a => {
+                if (a.prestacion_id === prestacionActual.id) {
+                    let nuevaObs = a.observacion || '';
+                    nuevaObs = nuevaObs.replace(/ \| Icono: [a-zA-Z0-9_-]+/g, ''); 
+                    if (iconoId) nuevaObs += ` | Icono: ${iconoId}`; 
+                    if (a.id) supabase.from('presupuesto_items').update({ observacion: nuevaObs }).eq('id', a.id).then();
+                    return { ...a, icono_tipo: iconoId, observacion: nuevaObs };
+                }
+                return a;
+            });
+        });
+    }
+
+    setModalIcono({ abierto: false, prestacion: null, autoAdd: false, itemTargetId: undefined });
     if (autoAdd && iconoId) handleSeleccionarTratamiento({ ...prestacionActual, icono_tipo: iconoId }, true);
     else toast.success(iconoId ? "Icono actualizado" : "Logo restablecido");
   }
@@ -530,9 +592,25 @@ export default function DetalleTratamientoPage() {
   if (cargando) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
-    <div id="odontograma-container" className="relative w-full text-left font-sans pb-32">
-      <div className="space-y-8 transition-all">
+    <div id="odontograma-container" className="relative w-full text-left font-sans pb-32 bg-[#F8FAFC]">
+      <div className="space-y-8 transition-all px-8 pt-8 max-w-7xl mx-auto">
           
+          <div className="flex justify-between items-center">
+            <Link href={`/pacientes/${pacienteId}`} className="group inline-flex items-center gap-3 font-black text-[10px] text-slate-400 uppercase hover:text-blue-600 transition-all">
+                <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center group-hover:bg-blue-50"><ChevronLeft size={16}/></div> 
+                Volver a la ficha
+            </Link>
+            
+            <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1">
+                <button onClick={() => setVistaTemporal(false)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!vistaTemporal ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <User size={14}/> Adulto
+                </button>
+                <button onClick={() => setVistaTemporal(true)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${vistaTemporal ? 'bg-purple-50 text-purple-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <Baby size={14}/> Niño
+                </button>
+            </div>
+          </div>
+
           <section data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="bg-white p-8 md:p-12 rounded-[4rem] shadow-sm border border-slate-100 relative overflow-visible flex flex-col items-center">
             
             <div className="w-full flex justify-between items-center mb-8 px-4" data-html2canvas-ignore="true">
@@ -551,27 +629,30 @@ export default function DetalleTratamientoPage() {
             </div>
 
             <div className="flex flex-col items-center gap-6 min-w-max">
+                {/* ARCADA SUPERIOR */}
                 <div className="flex gap-4">
                   <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
-                    {c1.map(id => (
-                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                    {(!vistaTemporal ? c1 : t1).map(id => (
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                   <div className="flex gap-0.5">
-                    {c2.map(id => (
-                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                    {(!vistaTemporal ? c2 : t2).map(id => (
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                 </div>
-                <div className="flex gap-4">
+
+                {/* ARCADA INFERIOR (invertida) */}
+                <div className="flex gap-4 mt-8">
                   <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
-                    {c3.map(id => (
-                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                    {(!vistaTemporal ? c3 : t3).map(id => (
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                   <div className="flex gap-0.5">
-                    {c4.map(id => (
-                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={acciones.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
+                    {(!vistaTemporal ? c4 : t4).map(id => (
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} />
                     ))}
                   </div>
                 </div>
@@ -756,22 +837,22 @@ export default function DetalleTratamientoPage() {
                               <tr 
                                 key={idx} 
                                 draggable
-                                onDragStart={(e) => handleDragStart(e, item.id)}
+                                onDragStart={(e) => handleDragStart(e, item.tempId)}
                                 className="hover:bg-blue-50/40 transition-all group cursor-grab active:cursor-grabbing"
                               >
                                 <td className="px-6 py-5 text-center">
                                   <div className={`px-2 py-2 mx-auto rounded-full bg-slate-100 flex flex-col items-center justify-center font-black text-xs text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all leading-none ${item.zona ? 'w-auto' : 'w-10 h-10'}`}>
-                                    {editandoDienteId === item.id ? (
+                                    {editandoDienteId === item.tempId ? (
                                       <input 
                                          type="text" 
                                          autoFocus 
                                          className="w-8 h-6 bg-white text-slate-900 text-center rounded outline-none" 
                                          defaultValue={item.diente_id || ''} 
-                                         onBlur={(e) => handleCambiarDiente(item.id, e.target.value)} 
-                                         onKeyDown={(e) => { if(e.key === 'Enter') handleCambiarDiente(item.id, e.currentTarget.value) }} 
+                                         onBlur={(e) => handleCambiarDiente(item.tempId, item.id, e.target.value)} 
+                                         onKeyDown={(e) => { if(e.key === 'Enter') handleCambiarDiente(item.tempId, item.id, e.currentTarget.value) }} 
                                       />
                                     ) : (
-                                      <span className="cursor-pointer" onClick={() => setEditandoDienteId(item.id)} title="Click para cambiar pieza">
+                                      <span className="cursor-pointer" onClick={() => setEditandoDienteId(item.tempId)} title="Click para cambiar pieza">
                                         {item.zona ? item.zona : (item.diente_id || <Plus size={14} strokeWidth={4} />)}
                                       </span>
                                     )}
@@ -784,7 +865,7 @@ export default function DetalleTratamientoPage() {
                                   <select 
                                     disabled={item.estado === 'realizado'}
                                     value={item.avance || 0} 
-                                    onChange={(e) => handleCambiarAvance(item.id, parseInt(e.target.value))} 
+                                    onChange={(e) => handleCambiarAvance(item.tempId, item.id, parseInt(e.target.value))} 
                                     className="bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none p-1 text-blue-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:border-transparent"
                                   >
                                      <option value={0}>0%</option>
@@ -809,7 +890,7 @@ export default function DetalleTratamientoPage() {
                                       <button onClick={() => { setModalEditarItem({abierto: true, item}); setDctoInput(item.descuento || 0); }} className="text-slate-400 hover:text-blue-600 transition-colors p-2" title="Aplicar Descuento">
                                         <Settings size={14}/>
                                       </button>
-                                      <button onClick={() => eliminarPrestacionLocal(item.id)} className="text-red-300 hover:text-red-500 transition-colors p-2" title="Eliminar Prestación">
+                                      <button onClick={() => eliminarPrestacionLocal(item.id, item.tempId)} className="text-red-300 hover:text-red-500 transition-colors p-2" title="Eliminar Prestación">
                                         <Trash2 size={14}/>
                                       </button>
                                     </>
@@ -890,7 +971,7 @@ export default function DetalleTratamientoPage() {
                    {ICONOS_DISPONIBLES.map(ico => (
                       <div key={ico.id} className="flex items-center gap-4">
                         <div className="w-12 h-12 shrink-0 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center p-2">
-                           <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={ico.icon} colorOverride="#2563eb" /></svg>
+                           <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={ico.icon} colorOverride="#2563eb" /></svg>
                         </div>
                         <span className="text-[10px] font-black uppercase text-slate-600 leading-tight">{ico.label}</span>
                       </div>
@@ -981,7 +1062,7 @@ export default function DetalleTratamientoPage() {
                       {(vistaMenu === 'preexistencias' ? PREEXISTENCIAS_LISTA : LESIONES_LISTA).map((op) => (
                         <button key={op} onClick={() => { aplicarHallazgo(op); setMenuContextual(null); }} className="flex flex-col items-center justify-center p-3 bg-white hover:border-blue-300 rounded-[1.5rem] border border-slate-100 shadow-sm transition-all group">
                           <div className="w-8 h-10 mb-1 group-hover:scale-110 transition-transform">
-                             <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-sm">
+                             <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
                                 <LogoRender hallazgo={op} colorOverride="#2563eb" />
                              </svg>
                           </div>
@@ -997,7 +1078,7 @@ export default function DetalleTratamientoPage() {
         )}
       </AnimatePresence>
 
-      {/* PANEL DE INFORMACIÓN DEL DIENTE */}
+      {/* PANEL DE INFORMACIÓN DEL DIENTE CON EDICIÓN DE LOGO */}
       <AnimatePresence>
         {verInfoDiente && (
           <motion.aside initial={{ x: -450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -450, opacity: 0 }} className="fixed top-[130px] left-0 h-[calc(100vh-130px)] w-[420px] bg-white shadow-[20px_0_50px_rgba(0,0,0,0.1)] z-[99999] flex flex-col border-r border-slate-100 overflow-hidden text-left">
@@ -1020,7 +1101,7 @@ export default function DetalleTratamientoPage() {
                   <div key={idx} className="p-4 bg-blue-50 rounded-[1.5rem] border border-blue-100 flex items-center justify-between group shadow-sm">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                        <svg viewBox="0 0 100 120" className="w-full h-full p-1.5"><LogoRender hallazgo={h} /></svg>
+                        <svg viewBox="-10 -10 120 140" className="w-full h-full p-1.5"><LogoRender hallazgo={h} /></svg>
                       </div>
                       <p className="text-[11px] font-black uppercase text-blue-900 italic leading-none">{h}</p>
                     </div>
@@ -1034,17 +1115,28 @@ export default function DetalleTratamientoPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-slate-400 border-b border-slate-100 pb-2">
                   <Stethoscope size={14} className="text-emerald-500"/>
-                  <span className="text-[10px] font-black uppercase tracking-widest">Tratamientos</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Historial de Tratamientos</span>
                 </div>
-                {acciones.filter(a => String(a.diente_id) === String(verInfoDiente)).length > 0 ? (
-                  acciones.filter(a => String(a.diente_id) === String(verInfoDiente)).map((item, i) => (
+                {todasLasAccionesBoca.filter(a => String(a.diente_id) === String(verInfoDiente)).length > 0 ? (
+                  todasLasAccionesBoca.filter(a => String(a.diente_id) === String(verInfoDiente)).map((item, i) => (
                     <div key={i} className="p-5 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm relative group transition-all hover:border-blue-300 hover:shadow-md">
-                      {item.estado !== 'realizado' && (
-                        <button onClick={() => eliminarPrestacionLocal(item.id)} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 transition-all bg-white rounded-full p-1">
-                          <Trash2 size={14}/>
+                      
+                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
+                        <button 
+                            onClick={() => setModalIcono({abierto: true, prestacion: { display_nombre: item.display_nombre }, itemTargetId: item.tempId})} 
+                            className="text-slate-400 hover:text-blue-500 transition-all bg-white rounded-full p-1.5 shadow-sm border border-slate-100" 
+                            title="Asignar o Cambiar Logo"
+                        >
+                            <RefreshCcw size={14}/>
                         </button>
-                      )}
-                      <p className="text-[10px] font-black uppercase text-slate-800 leading-tight mb-3 pr-6">{item.display_nombre}</p>
+                        {item.estado !== 'realizado' && item.presupuesto_id === idURL && (
+                            <button onClick={() => eliminarPrestacionLocal(item.id, item.tempId)} className="text-red-400 hover:text-red-600 transition-all bg-white rounded-full p-1.5 shadow-sm border border-slate-100" title="Eliminar Prestación">
+                              <Trash2 size={14}/>
+                            </button>
+                        )}
+                      </div>
+
+                      <p className="text-[10px] font-black uppercase text-slate-800 leading-tight mb-3 pr-12">{item.display_nombre}</p>
                       <div className="flex justify-between items-center">
                         <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase border ${item.estado === 'realizado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
                           {item.estado || 'Pendiente'}
@@ -1076,7 +1168,7 @@ export default function DetalleTratamientoPage() {
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col max-h-[70vh]">
                 <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <h3 className="text-lg font-black uppercase italic tracking-tighter">Asignar Logo a Prestación</h3>
-                  <button onClick={() => setModalIcono({abierto: false, prestacion: null, autoAdd: false})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                  <button onClick={() => setModalIcono({abierto: false, prestacion: null, autoAdd: false, itemTargetId: undefined})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
                 </div>
                 <div className="p-6 bg-slate-50 border-b border-slate-100 shrink-0">
                   <p className="text-xs font-bold text-slate-600 text-center">
@@ -1092,7 +1184,7 @@ export default function DetalleTratamientoPage() {
                    {ICONOS_DISPONIBLES.map(ico => (
                       <button key={ico.id} onClick={() => handleGuardarIcono(ico.id)} className="flex flex-col items-center justify-center p-3 bg-white hover:border-blue-400 rounded-2xl border-2 border-slate-100 shadow-sm transition-all group hover:bg-blue-50">
                         <div className="w-10 h-10 mb-2 group-hover:scale-110 transition-transform">
-                           <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={ico.icon} colorOverride="#2563eb" /></svg>
+                           <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={ico.icon} colorOverride="#2563eb" /></svg>
                         </div>
                         <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600 text-center leading-tight">{ico.label}</span>
                       </button>
@@ -1103,7 +1195,7 @@ export default function DetalleTratamientoPage() {
                    <button onClick={() => handleGuardarIcono(null)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 rounded-xl transition-all">
                       <Trash2 size={14}/> Quitar Logo Actual
                    </button>
-                   <button onClick={() => setModalIcono({abierto: false, prestacion: null, autoAdd: false})} className="px-5 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all rounded-xl text-[10px] font-black uppercase">
+                   <button onClick={() => setModalIcono({abierto: false, prestacion: null, autoAdd: false, itemTargetId: undefined})} className="px-5 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all rounded-xl text-[10px] font-black uppercase">
                       Cancelar
                    </button>
                 </div>
@@ -1230,7 +1322,7 @@ export default function DetalleTratamientoPage() {
                                                 className="w-12 h-12 flex shrink-0 items-center justify-center bg-slate-100 hover:bg-blue-600 rounded-l-lg transition-colors overflow-hidden group/logo relative"
                                             >
                                                <div className="w-8 h-8 group-hover/logo:opacity-0 transition-opacity">
-                                                  <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-sm">
+                                                  <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
                                                      <LogoRender iconoKey={p.icono_tipo} hallazgo={p.display_nombre} colorOverride="#ef4444" />
                                                   </svg>
                                                </div>
@@ -1337,54 +1429,150 @@ export default function DetalleTratamientoPage() {
   )
 }
 
-function LogoRender({ hallazgo, iconoKey, colorOverride }: { hallazgo?: string, iconoKey?: string, colorOverride?: string }) {
+function LogoRender({ hallazgo, iconoKey, colorOverride, logContext = "General" }: { hallazgo?: string, iconoKey?: string, colorOverride?: string, logContext?: string }) {
   const originalName = (hallazgo || "").toLowerCase();
-  
   const explicitIcon = (iconoKey || "").toLowerCase();
   const h = explicitIcon || originalName; 
   
   const isLesion = LESIONES_LISTA.some(l => l.toLowerCase() === originalName);
   const isMalEstado = originalName.includes("(mal estado)");
   
-  let color = isLesion ? "#0f172a" : (isMalEstado ? "#ef4444" : "#2563eb");
+  let color = isLesion ? "#0f172a" : "#2563eb"; 
   if (colorOverride && !isLesion) color = colorOverride; 
+
+  const patternId = `pattern-hash-${color.replace('#', '')}`;
+  const fillStyle = isMalEstado ? `url(#${patternId})` : color;
+  
+  const HashPattern = () => (
+    <defs>
+      <pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="8" stroke={color} strokeWidth="3" />
+      </pattern>
+    </defs>
+  );
 
   let shape = null;
   let matched = true; 
 
+  // 🚨 LOG DETECTIVE DE PALABRAS
+  if (h && h !== "default") {
+     console.log(`🎨 [${logContext}] Analizando para dibujar: Palabra="${h}" | IconoExplícito="${explicitIcon}"`);
+  }
+
   switch (true) {
-    case h.includes("caries"): shape = <path d="M45,10 Q65,-5 80,15 Q95,35 75,45 Q50,45 45,10 Z" fill={color} opacity="0.95" />; break; 
-    case h.includes("fractura"): shape = <path d="M 25,10 L 45,45 L 30,55 L 75,90" stroke={color} strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>; break;
-    case h.includes("infección") || h.includes("infeccion"): shape = <g><circle cx="50" cy="50" r="18" fill="none" stroke={color} strokeWidth="6" strokeDasharray="4 4"/><circle cx="50" cy="50" r="6" fill={color}/></g>; break;
-    case h.includes("movilidad"): shape = <g stroke={color} strokeWidth="6" fill="none" strokeLinecap="round"><path d="M 15,30 Q 5,50 15,70 M 85,30 Q 95,50 85,70"/></g>; break;
-    case h.includes("atrición") || h.includes("atricion"): shape = <rect x="25" y="5" width="50" height="15" fill={color} rx="4"/>; break;
-    case h.includes("abfracción") || h.includes("abfraccion"): shape = <polygon points="10,40 35,50 10,60" fill={color} />; break;
-    case h.includes("erosión") || h.includes("erosion"): shape = <path d="M25,25 Q50,45 75,25" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"/>; break;
-    case h.includes("residuo radicular") || h.includes("rr"): shape = <text x="50" y="75" textAnchor="middle" fontSize="45" fontWeight="900" fill={color} letterSpacing="-2">RR</text>; break;
-    case h.includes("ausente"): 
-    case h.includes("extraccion") || h.includes("extracción") || h.includes("exodoncia"): shape = <g stroke={color} strokeWidth="12" strokeLinecap="round"><line x1="20" y1="20" x2="80" y2="80"/><line x1="80" y1="20" x2="20" y2="80"/></g>; break;
-    case h.includes("sano"): shape = <text x="50" y="75" textAnchor="middle" fontSize="60" fontStyle="italic" fontWeight="900" fill={color}>S</text>; break;
-    case h.includes("erupcionar"): shape = <line x1="10" y1="50" x2="90" y2="50" stroke={color} strokeWidth="12" strokeLinecap="round" />; break;
-    case h.includes("corona"): shape = <g><circle cx="50" cy="40" r="35" fill="none" stroke={color} strokeWidth="8" strokeDasharray={h.includes("provisoria") ? "8 4" : "0"} /><circle cx="50" cy="40" r="20" fill="none" stroke={color} strokeWidth="4" opacity="0.4" /></g>; break;
-    case h.includes("endodoncia"): shape = <g><line x1="40" y1="30" x2="35" y2="90" stroke={color} strokeWidth="10" strokeLinecap="round" /><line x1="60" y1="30" x2="65" y2="90" stroke={color} strokeWidth="10" strokeLinecap="round" /><path d="M30,30 Q50,15 70,30" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"/></g>; break;
-    case h.includes("restauración") || h.includes("restauracion") || h.includes("tapadura"): shape = <rect x="30" y="25" width="40" height="30" rx="8" fill={color} opacity="0.9" />; break;
-    case h.includes("implante"): shape = <g fill={color}><rect x="42" y="55" width="16" height="40" rx="2"/><path d="M35,60 H65 M35,75 H65 M35,90 H65" stroke="white" strokeWidth="4"/><polygon points="35,50 65,50 50,20" fill={color}/></g>; break;
-    case h.includes("perno") || h.includes("muñón") || h.includes("munon"): shape = <path d="M50,90 V40 M30,40 H70 L50,10 Z" fill="none" stroke={color} strokeWidth="10" strokeLinejoin="round" />; break;
-    case h.includes("rayos") || h.includes("radiografia") || h.includes("radiografía") || h.includes("rx"): shape = <g stroke={color} strokeWidth="8" fill="none" strokeLinecap="round"><rect x="20" y="25" width="60" height="50" rx="6"/><circle cx="50" cy="50" r="10"/><path d="M50,15 V25 M50,75 V85"/></g>; break;
-    case h.includes("removible") || h.includes("protesis") || h.includes("prótesis"): shape = <path d="M15,55 Q50,95 85,55 Q50,75 15,55 Z" fill={color} stroke={color} strokeWidth="4"/>; break;
-    case h.includes("pulido") || h.includes("destartraje") || h.includes("limpieza") || h.includes("profilaxis"): shape = <g stroke={color} strokeWidth="8" strokeLinecap="round"><path d="M35,65 L65,35 M55,20 L80,45 M20,55 L45,80" /></g>; break;
-    case h.includes("amalgama"): shape = <rect x="30" y="25" width="40" height="30" rx="4" fill="#64748b" />; break;
-    case h.includes("sellante"): shape = <path d="M20,20 Q50,40 80,20 Q50,0 20,20 Z" fill={color} opacity="0.6"/>; break;
-    case h.includes("otro") || h === "otro": shape = <polygon points="50,15 61,35 88,35 67,52 75,78 50,62 25,78 33,52 12,35 39,35" fill={color} opacity="0.9" strokeLinejoin="round" />; break;
-    case h === "default": shape = <circle cx="50" cy="50" r="20" fill={color} opacity="0.8" />; break;
-    default: matched = false; break;
+    case h.includes("caries") || h.includes("restauración") || h.includes("restauracion") || h.includes("tapadura") || h.includes("amalgama") || h.includes("resina") || h.includes("ionomero"): 
+        shape = <path d="M 35 75 Q 50 60 65 75 Q 75 90 50 100 Q 25 90 35 75 Z" fill={fillStyle} />; 
+        break; 
+
+    case h.includes("corona provisoria"): 
+        shape = <g>
+            <circle cx="50" cy="80" r="30" fill={isMalEstado ? fillStyle : "none"} stroke={color} strokeWidth="4" />
+            <text x="50" y="88" textAnchor="middle" fontSize="24" fontWeight="900" fill={isMalEstado ? "#fff" : color}>P</text>
+        </g>; 
+        break;
+
+    case h.includes("corona"): 
+        shape = <circle cx="50" cy="80" r="30" fill={isMalEstado ? fillStyle : "none"} stroke={color} strokeWidth="4" />; 
+        break;
+
+    case h.includes("endodoncia") || h.includes("infección") || h.includes("infeccion"): 
+        shape = <path d="M 40 15 L 40 45 A 10 10 0 0 0 60 45 L 60 15" fill={isMalEstado ? fillStyle : "none"} stroke={color} strokeWidth="8" strokeLinecap="round" />; 
+        break;
+
+    case h.includes("implante"): 
+        shape = <g fill={fillStyle}>
+            <path d="M 45 15 L 55 15 L 55 50 L 50 60 L 45 50 Z" />
+            <line x1="38" y1="25" x2="62" y2="25" stroke={color} strokeWidth="4" strokeLinecap="round" />
+            <line x1="38" y1="35" x2="62" y2="35" stroke={color} strokeWidth="4" strokeLinecap="round" />
+            <line x1="42" y1="45" x2="58" y2="45" stroke={color} strokeWidth="4" strokeLinecap="round" />
+        </g>; 
+        break;
+
+    case h.includes("perno") || h.includes("muñón") || h.includes("munon"): 
+        shape = <path d="M 45 15 L 55 15 L 55 60 L 65 85 L 35 85 L 45 60 Z" fill={fillStyle} stroke={color} strokeWidth="2" strokeLinejoin="round" />; 
+        break;
+
+    case h.includes("removible") || h.includes("protesis") || h.includes("prótesis"): 
+        shape = <g stroke={color} strokeWidth="4" strokeLinecap="round">
+            <line x1="30" y1="110" x2="70" y2="110" />
+            <line x1="30" y1="118" x2="70" y2="118" />
+        </g>; 
+        break;
+
+    case h.includes("sellante"): 
+        shape = <path d="M 25 95 Q 37 85 50 95 T 75 95" fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" />; 
+        break;
+
+    case h.includes("fractura"): 
+        shape = <path d="M 60 10 L 40 60 L 60 60 L 40 110" stroke={color} strokeWidth="6" fill="none" strokeLinejoin="miter" />; 
+        break;
+
+    case h.includes("movilidad"): 
+        shape = <g stroke={color} strokeWidth="4" fill="none" strokeLinecap="round">
+            <path d="M 15 50 Q 0 75 15 100" />
+            <path d="M 5 55 Q -10 75 5 95" />
+            <path d="M 85 50 Q 100 75 85 100" />
+            <path d="M 95 55 Q 110 75 95 95" />
+        </g>; 
+        break;
+
+    case h.includes("residuo radicular") || h.includes("rr"): 
+        shape = <g>
+            <rect x="30" y="65" width="40" height="25" rx="6" fill={color} />
+            <text x="50" y="83" fill="#fff" fontSize="16" fontWeight="900" textAnchor="middle">RR</text>
+        </g>; 
+        break;
+
+    case h.includes("erosión") || h.includes("erosion"): 
+        shape = <line x1="30" y1="80" x2="70" y2="80" stroke={color} strokeWidth="8" strokeLinecap="round" />; 
+        break;
+
+    case h.includes("atrición") || h.includes("atricion"): 
+        shape = <path d="M 20 95 Q 50 115 80 95" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" />; 
+        break;
+
+    case h.includes("abfracción") || h.includes("abfraccion"): 
+        shape = <line x1="25" y1="55" x2="75" y2="55" stroke={color} strokeWidth="6" strokeLinecap="round" />; 
+        break;
+
+    case h.includes("ausente") || h.includes("extraccion") || h.includes("extracción") || h.includes("exodoncia"): 
+        shape = <g stroke={color} strokeWidth="8" strokeLinecap="round">
+            <line x1="20" y1="20" x2="80" y2="100" />
+            <line x1="80" y1="20" x2="20" y2="100" />
+        </g>; 
+        break;
+
+    case h.includes("sano"): 
+        shape = <text x="50" y="85" textAnchor="middle" fontSize="60" fontStyle="italic" fontWeight="900" fill={color}>S</text>; 
+        break;
+
+    case h.includes("otro") || h === "otro": 
+        shape = <polygon points="50,105 53,112 60,112 55,117 57,125 50,120 43,125 45,117 40,112 47,112" fill={color} />; 
+        break;
+
+    case h === "default": 
+        shape = <circle cx="50" cy="50" r="20" fill={color} opacity="0.8" />; 
+        break;
+
+    default: 
+        matched = false;
+        console.log(`❌ [LOGO NO RECONOCIDO EN ${logContext}] Palabra="${h}". Cayó al caso Genérico (?)`);
+        break;
   }
 
   if (!matched) {
-    shape = <g><circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="6" strokeDasharray="8 6" opacity="0.5"/><text x="50" y="70" textAnchor="middle" fontSize="55" fontWeight="900" fill={color} opacity="0.5">?</text></g>;
+    shape = <g>
+        <circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="6" strokeDasharray="8 6" opacity="0.5"/>
+        <text x="50" y="70" textAnchor="middle" fontSize="55" fontWeight="900" fill={color} opacity="0.5">?</text>
+    </g>;
   }
 
-  return <g>{isMalEstado ? <g><circle cx="50" cy="50" r="48" fill="none" stroke="#ef4444" strokeWidth="8" strokeDasharray="6 4" />{shape}</g> : shape}</g>;
+  return (
+    <g>
+      {isMalEstado && <HashPattern />}
+      {shape}
+    </g>
+  );
 }
 
 const commonSvgProps = { viewBox: "0 0 100 100", className: "w-4 h-4 text-slate-400 group-hover:text-blue-500", stroke: "currentColor", fill: "none", strokeWidth: "10" };
@@ -1398,14 +1586,20 @@ function LogoArcadaSup() { return <svg viewBox="0 0 100 100" className="w-5 h-5 
 function LogoArcadaInf() { return <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500 rotate-180"><path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" /></svg>; }
 
 function CarasDentales({ id, items, estado, abrirPanelAgregar, invert }: any) {
-  const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48);
+  const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
   const faceLeft = screenLeft ? 'D' : 'M';
   const faceRight = screenLeft ? 'M' : 'D';
 
   const getFill = (c: string) => {
     if (estado?.caras?.[c] === 'lesion' || estado?.hallazgos?.some((h: string) => h.toLowerCase().includes('caries'))) return "#0f172a"; 
-    if (items.some((i:any) => i.cara === c && i.estado === 'realizado')) return "#3b82f6"; 
-    if (items.some((i:any) => i.cara === c && i.estado !== 'realizado')) return "#ef4444"; 
+    
+    // 🔥 Pinta las caras del diente basándose en las letras detectadas ("V", "M", etc.)
+    if (items.some((i:any) => i.cara?.includes(c) && i.estado === 'realizado')) {
+        // console.log(`🟩 [CARA VERDE] Pintando cara ${c} en diente ${id}`); 
+        return "#10b981"; 
+    }
+    if (items.some((i:any) => i.cara?.includes(c) && i.estado !== 'realizado')) return "#ef4444"; 
+    
     return "white";
   }
 
@@ -1424,31 +1618,62 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, invert = fals
   const tieneTratamiento = itemsDiente.some((i:any) => !i.cara && !i.zona); 
   const hallazgos = estadoDiente?.hallazgos || (estadoDiente?.estado_general ? [estadoDiente.estado_general] : (estadoDiente?.center ? [estadoDiente.center] : []));
   
+  const isRealizado = itemsDiente.some((i:any) => i.estado === 'realizado');
+  const isPendiente = itemsDiente.some((i:any) => i.estado !== 'realizado');
+  
+  let gradientStart = "#ffffff", gradientEnd = "#f1f5f9", strokeColor = "#cbd5e1";
+  
+  if (hallazgos.length > 0) {
+      gradientStart = "#f8fafc"; gradientEnd = "#e2e8f0"; strokeColor = "#94a3b8"; 
+  } else if (isPendiente) {
+      gradientStart = "#eff6ff"; gradientEnd = "#dbeafe"; strokeColor = "#3b82f6"; 
+  } else if (isRealizado) {
+      gradientStart = "#ecfdf5"; gradientEnd = "#d1fae5"; strokeColor = "#10b981"; 
+  }
+
   const getToothPath = (num: number) => {
     const n = num % 10;
-    if (n === 1 || n === 2) return "M 35 15 Q 50 5 65 15 L 75 55 Q 80 80 75 95 L 25 95 Q 20 80 25 55 Z";
+    if (n === 1 || n === 2) return "M 35 15 Q 50 5 65 15 L 75 60 Q 80 90 75 105 L 25 105 Q 20 90 25 60 Z";
     else if (n === 3) return "M 35 15 Q 50 5 65 15 L 75 50 Q 80 75 50 95 Q 20 75 25 50 Z";
-    else if (n >= 4 && n <= 5) return "M 30 15 Q 50 0 70 15 L 75 50 Q 85 75 70 95 Q 50 100 30 95 Q 15 75 25 50 Z";
-    else return "M 20 15 Q 30 0 45 15 L 50 40 L 55 15 Q 70 0 80 15 L 85 50 Q 95 75 80 95 Q 50 100 20 95 Q 5 75 15 50 Z";
+    else if (n >= 4 && n <= 5) return "M 30 15 Q 50 0 70 15 L 75 60 Q 85 90 70 110 Q 50 115 30 110 Q 15 90 25 60 Z";
+    else return "M 20 15 Q 30 0 45 15 L 50 45 L 55 15 Q 70 0 80 15 L 85 60 Q 95 90 80 110 Q 50 115 20 110 Q 5 90 15 60 Z";
+  }
+
+  // 🚨 LOG DETECTIVE: Revisamos qué va a dibujar en este diente específico
+  if (itemsDiente.length > 0) {
+      console.log(`🦷 [DIENTE ${id}] Tengo ${itemsDiente.length} tratamientos en total.`);
+      const itemsConLogo = itemsDiente.filter((i:any) => !i.cara && !i.zona);
+      console.log(`🦷 [DIENTE ${id}] Enviando a LogoRender: ${itemsConLogo.length} (Los demás son Caras o Zonas y se pintarán en los bordes)`);
   }
 
   return (
-    <div className={`flex flex-col items-center group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''}`}>
-      <span className="text-[9px] font-black text-slate-300 mb-1.5 italic group-hover:text-blue-500 transition-all cursor-pointer" onClick={(e) => onSelect(id, e)}>{id}</span>
-      <div className={`${invert ? 'mt-1.5' : 'mb-1.5'}`}><CarasDentales id={id} items={itemsDiente} estado={estadoDiente} abrirPanelAgregar={abrirPanelAgregar} invert={invert} /></div>
-      <div onClick={(e) => onSelect(id, e)} onContextMenu={onContextMenu} className={`relative w-11 h-11 cursor-pointer transition-all duration-300 drop-shadow-sm hover:drop-shadow-md`}>
-        <svg viewBox="0 0 100 100" className={`w-full h-full ${invert ? 'rotate-180' : ''}`}>
+    <div className={`flex flex-col items-center gap-1.5 group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''}`}>
+      
+      <div onClick={(e) => onSelect(id, e)} onContextMenu={onContextMenu} className={`relative w-12 h-14 cursor-pointer transition-all duration-300 drop-shadow-sm hover:drop-shadow-md`}>
+        <svg viewBox="-10 -10 120 140" className={`w-full h-full overflow-visible ${invert ? 'rotate-180' : ''}`}>
           <defs>
             <linearGradient id={`gradDiente-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={tieneTratamiento || hallazgos.length > 0 ? "#eff6ff" : "#ffffff"} />
-              <stop offset="100%" stopColor={tieneTratamiento || hallazgos.length > 0 ? "#dbeafe" : "#f1f5f9"} />
+              <stop offset="0%" stopColor={gradientStart} />
+              <stop offset="100%" stopColor={gradientEnd} />
             </linearGradient>
           </defs>
-          <path d={getToothPath(id)} fill={`url(#gradDiente-${id})`} stroke={tieneTratamiento || hallazgos.length > 0 ? "#3b82f6" : "#cbd5e1"} strokeWidth="4" strokeLinejoin="round" />
-          {hallazgos.map((h: string, i: number) => <LogoRender key={`h-${i}`} hallazgo={h} />)}
-          {itemsDiente.filter((i:any) => !i.cara && !i.zona).map((item: any, i: number) => <LogoRender key={`t-${i}`} hallazgo={item.display_nombre} iconoKey={item.icono_tipo} colorOverride={item.estado === 'realizado' ? "#2563eb" : "#ef4444"} />)}
+          <path d={getToothPath(id)} fill={`url(#gradDiente-${id})`} stroke={strokeColor} strokeWidth="4" strokeLinejoin="round" />
+          
+          {hallazgos.map((h: string, i: number) => <LogoRender key={`h-${i}`} hallazgo={h} logContext={`Hallazgo Diente ${id}`} />)}
+          {itemsDiente.filter((i:any) => !i.cara && !i.zona).map((item: any, i: number) => 
+              <LogoRender key={`t-${i}`} hallazgo={item.display_nombre} iconoKey={item.icono_tipo} colorOverride={item.estado === 'realizado' ? "#10b981" : "#ef4444"} logContext={`Tto Diente ${id}`} />
+          )}
         </svg>
       </div>
+
+      <span className="text-[10px] font-black text-slate-400 italic group-hover:text-blue-500 transition-all cursor-pointer" onClick={(e) => onSelect(id, e)}>
+        {id}
+      </span>
+
+      <div>
+        <CarasDentales id={id} items={itemsDiente} estado={estadoDiente} abrirPanelAgregar={abrirPanelAgregar} invert={invert} />
+      </div>
+
     </div>
   )
 }
