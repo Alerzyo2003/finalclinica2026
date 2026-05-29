@@ -10,12 +10,10 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
-
 const DIAS = [
   { id: 1, label: 'Lunes' }, { id: 2, label: 'Martes' }, { id: 3, label: 'Miércoles' },
   { id: 4, label: 'Jueves' }, { id: 5, label: 'Viernes' }, { id: 6, label: 'Sábado' }, { id: 0, label: 'Domingo' }
 ];
-
 
 // Utilidades para calcular tiempos
 const tToMins = (t: string) => {
@@ -32,7 +30,6 @@ const getMinsFromDateStr = (dtString: string) => {
   return tToMins(timePart.substring(0,5));
 }
 
-
 // Obtener el Lunes de una fecha dada
 const getLunes = (d: Date) => {
   const date = new Date(d);
@@ -42,42 +39,37 @@ const getLunes = (d: Date) => {
   return date;
 }
 
-
 export default function BoxConfigPage() {
   const [profesionales, setProfesionales] = useState<any[]>([])
   const [profesionalId, setProfesionalId] = useState('')
   const [disponibilidad, setDisponibilidad] = useState<any[]>([])
-  const [bloqueosActivos, setBloqueosActivos] = useState<any[]>([])
+  const [todosLosBloqueos, setTodosLosBloqueos] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [modo, setModo] = useState<'semanal' | 'extraordinario'>('semanal')
 
-
   const [fechaInasistencia, setFechaInasistencia] = useState('')
   const [motivoInasistencia, setMotivoInasistencia] = useState('')
-
 
   // ESTADOS DEL MODAL Y GESTIÓN EN LÍNEA
   const [citasConflictivas, setCitasConflictivas] = useState<any[]>([])
   const [mostrarModalConflictos, setMostrarModalConflictos] = useState(false)
   const [modoModal, setModoModal] = useState<'bloquear' | 'revisar'>('bloquear')
   const [citaEnEdicion, setCitaEnEdicion] = useState<string | null>(null)
- 
+  
   // Datos para reagendar
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaHora, setNuevaHora] = useState('')
   const [nuevoBox, setNuevoBox] = useState(1)
   const [nuevoEspecialista, setNuevoEspecialista] = useState('')
- 
+  
   // Estado para guardar cuánto duraba la cita original en minutos
   const [duracionCitaEdicion, setDuracionCitaEdicion] = useState(45)
-
 
   // MOTOR DE DISPONIBILIDAD SEMANAL
   const [semanaInicio, setSemanaInicio] = useState<Date>(getLunes(new Date()))
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
-
 
   const [nuevoBloque, setNuevoBloque] = useState({
     dia_semana: 1,
@@ -87,9 +79,8 @@ export default function BoxConfigPage() {
     fecha_especifica: ''
   })
 
-
   useEffect(() => { fetchInicial() }, [])
- 
+  
   useEffect(() => {
     if (profesionalId) {
         fetchDisponibilidad();
@@ -97,14 +88,12 @@ export default function BoxConfigPage() {
     }
   }, [profesionalId])
 
-
   // CALCULAR SEMANA CUANDO CAMBIA DOCTOR, SEMANA O LA DURACIÓN DE LA CITA
   useEffect(() => {
     if (nuevoEspecialista && citaEnEdicion) {
       calcularDisponibilidadSemanal()
     }
   }, [semanaInicio, nuevoEspecialista, citaEnEdicion, duracionCitaEdicion])
-
 
   async function calcularDisponibilidadSemanal() {
     setCargandoSlots(true);
@@ -115,19 +104,15 @@ export default function BoxConfigPage() {
         return d;
       });
 
-
       const inicioSemanaStr = dias[0].toISOString().split('T')[0];
       const finSemanaStr = dias[6].toISOString().split('T')[0];
-
 
       const { data: bloqueos } = await supabase.from('bloqueos_agenda')
         .select('fecha').eq('profesional_id', nuevoEspecialista)
         .gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr);
 
-
       const { data: dispo } = await supabase.from('disponibilidad_profesional')
         .select('*').eq('profesional_id', nuevoEspecialista);
-
 
       const { data: citas } = await supabase.from('citas')
         .select('inicio, fin').eq('profesional_id', nuevoEspecialista)
@@ -135,34 +120,28 @@ export default function BoxConfigPage() {
         .lte('inicio', `${finSemanaStr}T23:59:59`)
         .neq('estado', 'cancelada');
 
-
       const semanaProcesada = dias.map(dateObj => {
         const dateStr = dateObj.toISOString().split('T')[0];
         const diaSemanaNum = dateObj.getDay();
 
-
         if (bloqueos?.some(b => b.fecha === dateStr)) {
           return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
         }
-
 
         const dispoDia = dispo?.filter(d => (d.dia_semana === diaSemanaNum && !d.fecha_especifica) || d.fecha_especifica === dateStr) || [];
         if (dispoDia.length === 0) {
           return { date: dateStr, dateObj, status: 'sin_horario', slots: [] };
         }
 
-
         const citasDia = citas?.filter(c => c.inicio.startsWith(dateStr)).map(c => ({
           inicio: getMinsFromDateStr(c.inicio),
           fin: getMinsFromDateStr(c.fin)
         })) || [];
 
-
         let slotsLibres: string[] = [];
         dispoDia.forEach(bloque => {
           let currTime = tToMins(bloque.hora_inicio);
           const endTime = tToMins(bloque.hora_fin);
-
 
           while (currTime + duracionCitaEdicion <= endTime) {
             const slotEnd = currTime + duracionCitaEdicion;
@@ -172,9 +151,7 @@ export default function BoxConfigPage() {
           }
         });
 
-
         slotsLibres = [...new Set(slotsLibres)].sort();
-
 
         return {
           date: dateStr,
@@ -184,7 +161,6 @@ export default function BoxConfigPage() {
         };
       });
 
-
       setDispoSemana(semanaProcesada);
     } catch (error) {
       toast.error("Error al calcular la agenda semanal");
@@ -193,20 +169,17 @@ export default function BoxConfigPage() {
     }
   }
 
-
   const prevWeek = () => {
     const newDate = new Date(semanaInicio);
     newDate.setDate(newDate.getDate() - 7);
     setSemanaInicio(newDate);
   }
 
-
   const nextWeek = () => {
     const newDate = new Date(semanaInicio);
     newDate.setDate(newDate.getDate() + 7);
     setSemanaInicio(newDate);
   }
-
 
   async function fetchInicial() {
     const { data } = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
@@ -217,7 +190,6 @@ export default function BoxConfigPage() {
     setCargando(false)
   }
 
-
   async function fetchDisponibilidad() {
     const { data } = await supabase
       .from('disponibilidad_profesional')
@@ -227,17 +199,13 @@ export default function BoxConfigPage() {
     setDisponibilidad(data || [])
   }
 
-
   async function fetchBloqueos() {
     const { data } = await supabase
       .from('bloqueos_agenda')
       .select('*')
       .eq('profesional_id', profesionalId)
-      .gte('fecha', new Date().toISOString().split('T')[0])
-      .order('fecha', { ascending: true })
-    setBloqueosActivos(data || [])
+    setTodosLosBloqueos(data || [])
   }
-
 
   const agregarBloque = async () => {
     if (nuevoBloque.hora_inicio >= nuevoBloque.hora_fin) return toast.error("Horario inválido");
@@ -245,7 +213,6 @@ export default function BoxConfigPage() {
     try {
       const [year, month, day] = (modo === 'extraordinario' ? nuevoBloque.fecha_especifica : "2024-01-01").split('-').map(Number);
       const diaCalculado = modo === 'extraordinario' ? new Date(year, month - 1, day).getDay() : nuevoBloque.dia_semana;
-
 
       const { error } = await supabase.from('disponibilidad_profesional').insert([{
         profesional_id: profesionalId,
@@ -262,16 +229,13 @@ export default function BoxConfigPage() {
     finally { setGuardando(false) }
   }
 
-
   const validarInasistencia = async () => {
     if (!fechaInasistencia) return toast.error("Seleccione una fecha");
-
 
     setGuardando(true);
     try {
       const inicioDia = `${fechaInasistencia}T00:00:00`;
       const finDia = `${fechaInasistencia}T23:59:59`;
-
 
       const { data: citas, error: errCitas } = await supabase
         .from('citas')
@@ -282,9 +246,7 @@ export default function BoxConfigPage() {
         .neq('estado', 'cancelada')
         .order('inicio', { ascending: true });
 
-
       if (errCitas) throw errCitas;
-
 
       if (citas && citas.length > 0) {
         setCitasConflictivas(citas);
@@ -295,16 +257,13 @@ export default function BoxConfigPage() {
         return;
       }
 
-
       await ejecutarBloqueoFinal();
-
 
     } catch (error: any) {
       toast.error("Error al validar la fecha");
       setGuardando(false);
     }
   };
-
 
   const ejecutarBloqueoFinal = async () => {
     setGuardando(true);
@@ -317,9 +276,7 @@ export default function BoxConfigPage() {
           motivo: motivoInasistencia || "Inasistencia programada"
         }]);
 
-
       if (errBloqueo) throw errBloqueo;
-
 
       toast.success("Jornada bloqueada con éxito");
       setFechaInasistencia('');
@@ -333,28 +290,21 @@ export default function BoxConfigPage() {
     }
   }
 
-
-  // --- NUEVA ELIMINACIÓN INTELIGENTE DE HORARIOS ---
   const eliminarBloque = async (bloque: any) => {
     if(!confirm("¿Estás seguro de eliminar este horario base?")) return;
 
-
     setGuardando(true);
     try {
-      // 1. Borramos la disponibilidad. Las citas en base de datos NO se borran solas.
       await supabase.from('disponibilidad_profesional').delete().eq('id', bloque.id);
       fetchDisponibilidad();
 
-
-      // 2. Buscamos si quedaron citas a futuro en ese día específico para advertirle a la recepcionista
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoyStr = new Date().toISOString().split('T')[0];
       const { data: citasFuturas } = await supabase
         .from('citas')
         .select('inicio')
         .eq('profesional_id', profesionalId)
-        .gte('inicio', `${hoy}T00:00:00`)
+        .gte('inicio', `${hoyStr}T00:00:00`)
         .neq('estado', 'cancelada');
-
 
       let cantidadAfectadas = 0;
       if (citasFuturas && !bloque.fecha_especifica) {
@@ -363,7 +313,6 @@ export default function BoxConfigPage() {
           return diaSemanaCita === (bloque.dia_semana === 7 ? 0 : bloque.dia_semana);
         }).length;
       }
-
 
       if (cantidadAfectadas > 0) {
         toast.warning(
@@ -380,13 +329,11 @@ export default function BoxConfigPage() {
     }
   }
 
-
   const revisarPacientesPendientes = async (fechaBloqueada: string) => {
     const loadingToast = toast.loading("Buscando pacientes...");
     try {
       const inicioDia = `${fechaBloqueada}T00:00:00`;
       const finDia = `${fechaBloqueada}T23:59:59`;
-
 
       const { data: citas, error: errCitas } = await supabase
         .from('citas')
@@ -397,9 +344,7 @@ export default function BoxConfigPage() {
         .neq('estado', 'cancelada')
         .order('inicio', { ascending: true });
 
-
       if (errCitas) throw errCitas;
-
 
       setFechaInasistencia(fechaBloqueada);
       setCitasConflictivas(citas || []);
@@ -413,7 +358,6 @@ export default function BoxConfigPage() {
     }
   }
 
-
   const anularCitaDirecta = async (citaId: string) => {
     if(!confirm("¿Estás seguro de anular la cita de este paciente?")) return;
     try {
@@ -425,24 +369,22 @@ export default function BoxConfigPage() {
     }
   }
 
-
   const reagendarCitaDirecta = async (citaId: string) => {
     if(!nuevaFecha || !nuevaHora || !nuevoEspecialista) return toast.error("Selecciona un día y hora del calendario");
-   
+    
     setGuardando(true);
     try {
       const inicioDate = new Date(`${nuevaFecha}T${nuevaHora}:00`);
       const finDate = new Date(inicioDate.getTime() + duracionCitaEdicion * 60000);
       const finHoraStr = `${finDate.getHours().toString().padStart(2, '0')}:${finDate.getMinutes().toString().padStart(2, '0')}:00`;
 
-
       await supabase.from('citas').update({
         inicio: `${nuevaFecha}T${nuevaHora}:00`,
         fin: `${nuevaFecha}T${finHoraStr}`,
         box_id: nuevoBox,
-        profesional_id: nuevoEspecialista
+        profesional_id: nuevoEspecialista,
+        estado: 'reprogramada'
       }).eq('id', citaId);
-
 
       toast.success("Cita reagendada con éxito");
       setCitaEnEdicion(null);
@@ -454,21 +396,29 @@ export default function BoxConfigPage() {
     }
   }
 
-
   if (cargando) return (
     <div className="h-screen flex flex-col items-center justify-center bg-white">
       <Loader2 className="animate-spin text-[#D4AF37]" size={40} />
     </div>
   )
 
-
   const profesionalSeleccionado = profesionales.find(p => p.user_id === profesionalId);
 
+  // Lógica Segura para calcular la Fecha Local de Hoy y Filtrar Bloqueos Activos
+  const hoy = new Date();
+  const year = hoy.getFullYear();
+  const month = String(hoy.getMonth() + 1).padStart(2, '0');
+  const day = String(hoy.getDate()).padStart(2, '0');
+  const hoyStr = `${year}-${month}-${day}`;
+
+  const bloqueosFuturos = todosLosBloqueos
+    .filter(b => b.fecha >= hoyStr)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha)); // Los más próximos primero
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] p-6 md:p-12 font-sans text-slate-900 text-left relative">
       <div className="max-w-7xl mx-auto space-y-12">
-       
+        
         {/* HEADER */}
         <header className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-8">
@@ -484,7 +434,6 @@ export default function BoxConfigPage() {
             </div>
           </div>
 
-
           <div className="bg-slate-50 p-3 rounded-[2.5rem] border border-slate-100 flex items-center pr-8 gap-5 min-w-[320px]">
             <div className="w-14 h-14 rounded-full bg-slate-900 border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37] font-black text-xl">
               {profesionalSeleccionado?.nombre?.[0]}
@@ -498,11 +447,10 @@ export default function BoxConfigPage() {
           </div>
         </header>
 
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* FORMULARIOS */}
           <div className="lg:col-span-4 space-y-8">
-           
+            
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-10 rounded-[3.5rem] shadow-xl border border-slate-50 space-y-8">
               <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1">
                 <button onClick={() => setModo('semanal')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${modo === 'semanal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
@@ -512,7 +460,6 @@ export default function BoxConfigPage() {
                   Especial
                 </button>
               </div>
-
 
               <div className="space-y-6">
                 {modo === 'semanal' ? (
@@ -529,12 +476,10 @@ export default function BoxConfigPage() {
                   </div>
                 )}
 
-
                 <div className="grid grid-cols-2 gap-4">
                   <input type="time" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs" value={nuevoBloque.hora_inicio} onChange={(e) => setNuevoBloque({...nuevoBloque, hora_inicio: e.target.value})} />
                   <input type="time" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs" value={nuevoBloque.hora_fin} onChange={(e) => setNuevoBloque({...nuevoBloque, hora_fin: e.target.value})} />
                 </div>
-
 
                 <div className="grid grid-cols-3 gap-2">
                   {[1, 2, 3].map(n => (
@@ -542,13 +487,11 @@ export default function BoxConfigPage() {
                   ))}
                 </div>
 
-
                 <button onClick={agregarBloque} disabled={guardando} className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3">
                   {guardando ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
                 </button>
               </div>
             </motion.div>
-
 
             {/* SEGURIDAD INASISTENCIA */}
             <div className="bg-red-50 p-10 rounded-[3.5rem] border border-red-100 space-y-8">
@@ -559,7 +502,6 @@ export default function BoxConfigPage() {
                   <p className="text-red-400 text-[8px] font-black uppercase tracking-widest mt-2">Cierre de Jornada</p>
                 </div>
               </div>
-
 
               <div className="space-y-5">
                 <div className="space-y-2">
@@ -577,22 +519,22 @@ export default function BoxConfigPage() {
             </div>
           </div>
 
-
           {/* COLUMNA DERECHA */}
           <div className="lg:col-span-8 bg-white p-12 rounded-[4rem] shadow-xl border border-slate-50 space-y-12">
-           
-            {bloqueosActivos.length > 0 && (
+            
+            {/* 🔥 JORNADAS BLOQUEADAS (ACTIVAS Y FUTURAS) 🔥 */}
+            {bloqueosFuturos.length > 0 && (
               <div className="space-y-6">
-                <h3 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-3"><AlertCircle size={16} /> Jornadas Bloqueadas</h3>
+                <h3 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-3"><AlertCircle size={16} /> Jornadas Bloqueadas (Activas)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {bloqueosActivos.map(b => (
+                  {bloqueosFuturos.map(b => (
                     <div key={b.id} className="bg-red-50/40 border border-red-100 p-6 rounded-[2rem] flex justify-between items-center group">
                       <div className="text-left">
                         <p className="text-[9px] font-black text-red-600 uppercase mb-1">{new Date(b.fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                         <p className="text-xs font-bold text-slate-600 italic uppercase tracking-tighter">Sin atención disponible</p>
+                        {b.motivo && <p className="text-[9px] font-bold text-slate-400 mt-1">Motivo: {b.motivo}</p>}
                       </div>
                       <div className="flex gap-2">
-                        {/* NUEVO BOTÓN PARA VER PACIENTES PENDIENTES */}
                         <button onClick={() => revisarPacientesPendientes(b.fecha)} className="p-3 text-blue-400 hover:text-blue-600 hover:bg-blue-50 bg-white rounded-xl shadow-sm transition-all" title="Ver pacientes pendientes por reagendar">
                           <Users size={16}/>
                         </button>
@@ -606,8 +548,7 @@ export default function BoxConfigPage() {
               </div>
             )}
 
-
-            <div className="space-y-2">
+            <div className="space-y-2 pt-6 border-t border-slate-100">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3 mb-8"><CalendarDays size={16} /> Horarios Semanales Maestro</h3>
               {DIAS.map((dia) => {
                 const bloques = disponibilidad.filter(b => b.dia_semana === dia.id && !b.fecha_especifica);
@@ -622,7 +563,6 @@ export default function BoxConfigPage() {
                               <span className="text-xs font-black text-slate-700">{b.hora_inicio.substring(0,5)} - {b.hora_fin.substring(0,5)}</span>
                             </div>
                             <div className="w-10 h-10 rounded-xl bg-slate-900 text-[#D4AF37] flex items-center justify-center text-[10px] font-black border border-slate-800">S{b.box_id}</div>
-                            {/* AQUÍ ESTÁ EL BOTÓN DE ELIMINAR ACTUALIZADO */}
                             <button onClick={() => eliminarBloque(b)} className="p-2 text-slate-100 hover:text-red-500 transition-all opacity-0 group-hover/item:opacity-100"><Trash2 size={16}/></button>
                           </div>
                         ))}
@@ -634,7 +574,6 @@ export default function BoxConfigPage() {
           </div>
         </div>
       </div>
-
 
       {/* MODAL DE CONFLICTOS DE AGENDA Y REAGENDAMIENTO SEMANAL */}
       <AnimatePresence>
@@ -662,10 +601,9 @@ export default function BoxConfigPage() {
                 </button>
               </div>
 
-
               {/* CONTENIDO SCROLLABLE */}
               <div className="p-8 overflow-y-auto bg-slate-50 flex-1 space-y-4">
-               
+                
                 {citasConflictivas.length === 0 ? (
                   <div className="py-12 flex flex-col items-center justify-center text-center opacity-70">
                     <CheckCircle2 size={48} className="text-emerald-500 mb-4" />
@@ -679,14 +617,12 @@ export default function BoxConfigPage() {
                       {modoModal === 'bloquear' && 'Si decides no hacerlo ahora, presiona "Forzar Bloqueo" al final y las citas quedarán pendientes.'}
                     </p>
 
-
                     {citasConflictivas.map((cita) => {
                       let horaFomateada = "Sin hora";
                       try { horaFomateada = new Date(cita.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); } catch (e) {}
-                     
+                      
                       const telefonoLimpio = cita.pacientes?.telefono ? cita.pacientes.telefono.replace(/\D/g, '') : '';
                       const isEditing = citaEnEdicion === cita.id;
-
 
                       // Calcular duración visual de la cita original
                       let durationStr = "45 min";
@@ -694,7 +630,6 @@ export default function BoxConfigPage() {
                         const dMins = Math.round((new Date(cita.fin).getTime() - new Date(cita.inicio).getTime()) / 60000);
                         if (dMins > 0) durationStr = `${dMins} min`;
                       } catch (e) {}
-
 
                       return (
                         <div key={cita.id} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col group transition-all">
@@ -720,7 +655,6 @@ export default function BoxConfigPage() {
                               </div>
                             </div>
 
-
                             {/* ACCIONES DEL PACIENTE */}
                             {!isEditing && (
                               <div className="flex gap-2 self-start md:self-auto">
@@ -741,7 +675,6 @@ export default function BoxConfigPage() {
                                   const calcMins = Math.round((dFin.getTime() - dInicio.getTime()) / 60000);
                                   setDuracionCitaEdicion(calcMins > 0 ? calcMins : 45);
 
-
                                   setCitaEnEdicion(cita.id);
                                   setNuevaFecha(''); setNuevaHora(''); setNuevoBox(1);
                                   setNuevoEspecialista(profesionalId);
@@ -755,13 +688,12 @@ export default function BoxConfigPage() {
                             )}
                           </div>
 
-
                           {/* PANEL DE EDICIÓN (AGENDA SEMANAL) */}
                           <AnimatePresence>
                             {isEditing && (
                               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                                 <div className="mt-5 pt-5 border-t border-slate-100 flex flex-col gap-6">
-                                 
+                                  
                                   <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
                                     <div className="flex gap-4 w-full md:w-auto flex-1">
                                       <div className="space-y-2 flex-1">
@@ -782,10 +714,9 @@ export default function BoxConfigPage() {
                                     </div>
                                   </div>
 
-
                                   {/* CALENDARIO SEMANAL */}
                                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col">
-                                   
+                                    
                                     <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-xl shadow-sm border border-slate-100">
                                       <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronLeft size={18}/></button>
                                       <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
@@ -793,7 +724,6 @@ export default function BoxConfigPage() {
                                       </span>
                                       <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronRight size={18}/></button>
                                     </div>
-
 
                                     <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar">
                                       {cargandoSlots ? (
@@ -807,7 +737,6 @@ export default function BoxConfigPage() {
                                           const numDia = dia.dateObj.getDate();
                                           const esHoy = dia.date === new Date().toISOString().split('T')[0];
 
-
                                           return (
                                             <div key={idx} className={`min-w-[110px] flex-1 bg-white border ${esHoy ? 'border-blue-300 shadow-md' : 'border-slate-200'} rounded-2xl p-3 flex flex-col items-center`}>
                                               <div className="text-center mb-3">
@@ -815,12 +744,11 @@ export default function BoxConfigPage() {
                                                 <span className={`block text-lg font-black ${esHoy ? 'text-blue-600' : 'text-slate-800'}`}>{numDia}</span>
                                               </div>
 
-
                                               <div className="w-full flex-1 flex flex-col gap-2 overflow-y-auto max-h-48 pr-1 custom-scrollbar">
                                                 {dia.status === 'bloqueado' && <span className="text-[9px] font-bold text-red-400 text-center py-4 italic">Bloqueado</span>}
                                                 {dia.status === 'sin_horario' && <span className="text-[9px] font-bold text-slate-300 text-center py-4 italic">Sin Horario</span>}
                                                 {dia.status === 'lleno' && <span className="text-[9px] font-bold text-amber-400 text-center py-4 italic">Agenda Llena</span>}
-                                               
+                                                
                                                 {dia.status === 'limpio' && dia.slots.map((slot: string, sIdx: number) => {
                                                   const isSelected = nuevaFecha === dia.date && nuevaHora === slot;
                                                   return (
@@ -839,7 +767,7 @@ export default function BoxConfigPage() {
                                         })
                                       )}
                                     </div>
-                                   
+                                    
                                     <div className="mt-2 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-4">
                                       <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                         Seleccionado: <span className={nuevaHora ? "text-emerald-600" : "text-red-400"}>
@@ -854,7 +782,6 @@ export default function BoxConfigPage() {
                                       </div>
                                     </div>
 
-
                                   </div>
                                 </div>
                               </motion.div>
@@ -866,7 +793,6 @@ export default function BoxConfigPage() {
                   </>
                 )}
               </div>
-
 
               {/* FOOTER MODAL - CAMBIA SEGÚN EL MODO */}
               <div className="p-6 bg-white border-t border-slate-100 shrink-0 flex flex-col md:flex-row gap-4">
@@ -890,7 +816,7 @@ export default function BoxConfigPage() {
           </div>
         )}
       </AnimatePresence>
-     
+      
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -900,4 +826,3 @@ export default function BoxConfigPage() {
     </div>
   )
 }
-

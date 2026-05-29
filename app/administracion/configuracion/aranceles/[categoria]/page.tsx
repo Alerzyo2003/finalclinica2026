@@ -4,9 +4,26 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   ArrowLeft, Loader2, CheckCircle2, 
-  XCircle, RefreshCw, AlertCircle, Plus, X, Save 
+  XCircle, RefreshCw, Plus, X, Save 
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+// 🔥 AÑADIMOS LA LISTA OFICIAL DE ICONOS DEL ODONTOGRAMA 🔥
+const ICONOS_DISPONIBLES = [
+  { id: "default", label: "Círculo (Genérico)" },
+  { id: "extraccion", label: "Extracción (X Roja/Verde)" },
+  { id: "endodoncia", label: "Endodoncia (Línea en raíz)" },
+  { id: "restauracion", label: "Restauración / Tapadura" },
+  { id: "corona", label: "Corona" },
+  { id: "implante", label: "Implante" },
+  { id: "perno", label: "Perno Muñón" },
+  { id: "rayos", label: "Rayos-X" },
+  { id: "removible", label: "Prótesis Removible" },
+  { id: "limpieza", label: "Limpieza/Pulido" },
+  { id: "caries", label: "Caries" },
+  { id: "sano", label: "Diente Sano" },
+  { id: "otro", label: "Otro (Estrella)" }
+];
 
 export default function DetalleArancelPage() {
   const { categoria } = useParams()
@@ -21,15 +38,15 @@ export default function DetalleArancelPage() {
   
   const decodedCat = decodeURIComponent(categoria as string)
 
-  // Formulario inicial
+  // Formulario inicial con el icono 'default' para que coincida con el odontograma
   const formInicial = {
     nombre_accion: '',
     codigo_accion: '',
     uco: '',
     precio: '',
     nombre_arancel: 'Arancel Base',
-    id_accion_ext: '', // Para "ID Acción"
-    icono_tipo: 'otro'
+    id_accion_ext: '', 
+    icono_tipo: 'default'
   }
   const [form, setForm] = useState(formInicial)
 
@@ -58,7 +75,7 @@ export default function DetalleArancelPage() {
       const { error } = await supabase
         .from('prestaciones')
         .insert([{
-          "Nombre": form.nombre_accion, // Usamos el nombre como base
+          "Nombre": form.nombre_accion, 
           "Nombre Categoria": decodedCat,
           "Nombre Accion": form.nombre_accion,
           "Codigo Accion": form.codigo_accion,
@@ -165,7 +182,7 @@ export default function DetalleArancelPage() {
                             {item["Nombre Accion"]}
                           </span>
                           <span className="text-[9px] text-slate-400 font-bold uppercase mt-2">
-                            Cod: {item["Codigo Accion"] || '---'}
+                            Cod: {item["Codigo Accion"] || '---'} | Icono: {item.icono_tipo || 'default'}
                           </span>
                         </div>
                       </td>
@@ -266,6 +283,7 @@ export default function DetalleArancelPage() {
                   />
                 </div>
 
+                {/* 🔥 SELECT DE ICONOS ACTUALIZADO 🔥 */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block">Icono en Odontograma</label>
                   <select 
@@ -273,12 +291,9 @@ export default function DetalleArancelPage() {
                     value={form.icono_tipo}
                     onChange={(e) => setForm({...form, icono_tipo: e.target.value})}
                   >
-                    <option value="otro">Punto General</option>
-                    <option value="extraccion">Extracción (X)</option>
-                    <option value="restauracion">Obturación (Círculo)</option>
-                    <option value="endodoncia">Endodoncia (Línea)</option>
-                    <option value="implante">Implante</option>
-                    <option value="corona">Corona</option>
+                    {ICONOS_DISPONIBLES.map(ico => (
+                      <option key={ico.id} value={ico.id}>{ico.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

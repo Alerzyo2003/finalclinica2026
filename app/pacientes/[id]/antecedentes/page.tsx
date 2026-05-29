@@ -38,12 +38,16 @@ export default function AntecedentesPage() {
       await supabase.from('antecedentes').insert([{ paciente_id: id, categoria, contenido }])
     }
     fetchAntecedentes()
+    // Dispara el evento para que el Layout se entere y actualice el Navbar al instante
+    window.dispatchEvent(new Event('pacienteActualizado'))
   }
 
   const agregarPersonalizado = async (categoria: string, contenido: string) => {
     if (!contenido) return
     await supabase.from('antecedentes').insert([{ paciente_id: id, categoria, contenido }])
     fetchAntecedentes()
+    // Dispara el evento para que el Layout se entere y actualice el Navbar al instante
+    window.dispatchEvent(new Event('pacienteActualizado'))
   }
 
   if (cargando) return (

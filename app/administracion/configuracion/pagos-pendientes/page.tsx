@@ -29,16 +29,111 @@ export default function PagosPendientesPage() {
 
   async function fetchDeudores() {
     try {
-      // Traemos directamente a los pacientes que tengan saldo pendiente > 0
-      // Esta es la misma columna que usas en la página principal
-      const { data, error } = await supabase
-        .from('pacientes')
-        .select('id, nombre, apellido, rut, saldo_pendiente')
-        .gt('saldo_pendiente', 0) // Solo los que deben dinero
-        .order('saldo_pendiente', { ascending: false })
+      // Helper para obtener todos los registros, superando el límite de 1000 filas de Supabase
+      const fetchAll = async (queryBuilder: any) => {
+        const BATCH_SIZE = 1000;
+        let allRecords: any[] = [];
+        let from = 0;
+        while (true) {
+          const { data, error } = await queryBuilder.range(from, from + BATCH_SIZE - 1);
+          if (error) throw error;
+          if (data) allRecords = allRecords.concat(data);
+          if (!data || data.length < BATCH_SIZE) break;
+          from += BATCH_SIZE;
+        }
+        return allRecords;
+      };
 
-      if (error) throw error
-      setPacientesDeudores(data || [])
+      // 1. Obtener todos los datos necesarios de forma paginada
+      const [
+        todosLosPacientes,
+        todosLosPresupuestos,
+        todosTempPresupuestos,
+        todosPresupuestoItems,
+        todosTempItems
+      ] = await Promise.all([
+        fetchAll(supabase.from('pacientes').select('id, rut')),
+        fetchAll(supabase.from('presupuestos').select('id, paciente_id, aprobado, id_dentalink')),
+        fetchAll(supabase.from('temp_presupuestos').select('rut, id_dentalink')),
+        fetchAll(supabase.from('presupuesto_items').select('presupuesto_id, precio_pactado, abonado, estado').neq('estado', 'cancelada')),
+        fetchAll(supabase.from('temp_items').select('rut, id_dentalink, precio_pactado, abonado, estado').not('estado', 'is', null))
+      ]);
+
+      // 2. Crear mapas para búsquedas eficientes
+      const rutToPacienteIdMap = new Map(todosLosPacientes.map((p: any) => [p.rut.trim().toUpperCase(), p.id]));
+      const presupuestoToPacienteIdMap = new Map(todosLosPresupuestos.map((p: any) => [p.id, p.paciente_id]));
+
+      // 3. Inicializar el objeto de deudas
+      const deudasPorPaciente: Record<string, { totalPactado: number, totalRealizado: number, totalAbonado: number }> = {};
+      todosLosPacientes.forEach((p: any) => {
+        deudasPorPaciente[p.id] = { totalPactado: 0, totalRealizado: 0, totalAbonado: 0 };
+      });
+
+      // 4. Procesar ítems OFICIALES de planes APROBADOS
+      const idsPresupuestosAprobados = new Set(todosLosPresupuestos.filter((p: any) => p.aprobado).map((p: any) => p.id));
+      
+      todosPresupuestoItems
+        .filter((item: any) => idsPresupuestosAprobados.has(item.presupuesto_id))
+        .forEach((item: any) => {
+          const pacId = presupuestoToPacienteIdMap.get(item.presupuesto_id);
+          if (!pacId || !deudasPorPaciente[pacId]) return;
+
+          deudasPorPaciente[pacId].totalPactado += Number(item.precio_pactado || 0);
+          const estado = String(item.estado || 'pendiente').toLowerCase().trim();
+          if (['realizado', 'atendido', 'finalizado', 'terminado'].includes(estado)) {
+            deudasPorPaciente[pacId].totalRealizado += Number(item.precio_pactado || 0);
+          }
+          deudasPorPaciente[pacId].totalAbonado += Number(item.abonado || 0);
+        });
+
+      // 5. Procesar ítems TEMPORALES (Dentalink) de planes aprobados o temporales
+      const dentalinkIdsFromApproved = new Set(todosLosPresupuestos.filter((p: any) => p.aprobado && p.id_dentalink).map((p: any) => String(p.id_dentalink)));
+      const dentalinkIdsFromTemp = new Set(todosTempPresupuestos.map((p: any) => String(p.id_dentalink)));
+      const todosIdsDentalinkValidos = new Set([...dentalinkIdsFromApproved, ...dentalinkIdsFromTemp]);
+
+      todosTempItems
+        .filter((item: any) => todosIdsDentalinkValidos.has(String(item.id_dentalink)))
+        .forEach((item: any) => {
+          if (!item.rut) return;
+          const pacId = rutToPacienteIdMap.get(item.rut.trim().toUpperCase());
+          if (!pacId || !deudasPorPaciente[pacId]) return;
+
+          deudasPorPaciente[pacId].totalPactado += Number(item.precio_pactado || 0);
+          const estado = String(item.estado || 'pendiente').toLowerCase().trim();
+          if (['realizado', 'atendido', 'finalizado', 'terminado'].includes(estado)) {
+            deudasPorPaciente[pacId].totalRealizado += Number(item.precio_pactado || 0);
+          }
+          deudasPorPaciente[pacId].totalAbonado += Number(item.abonado || 0);
+        });
+
+      // 6. Calcular deuda exigible y filtrar pacientes
+      const pacientesConDeudaExigible = Object.entries(deudasPorPaciente)
+        .map(([paciente_id, { totalPactado, totalRealizado, totalAbonado }]) => {
+          const deuda_exigible = Math.max(0, totalRealizado - totalAbonado);
+          const deuda_total = Math.max(0, totalPactado - totalAbonado);
+          return { paciente_id, deuda_exigible, deuda_total };
+        })
+        .filter(p => p.deuda_exigible > 0); // Se mantiene el filtro: solo aparecen si deben algo ya realizado.
+
+      if (pacientesConDeudaExigible.length === 0) {
+        setPacientesDeudores([]);
+        setCargando(false);
+        return;
+      }
+
+      // 7. Traer los datos de los pacientes deudores
+      const { data: pacientesData, error: errPac } = await supabase
+        .from('pacientes')
+        .select('id, nombre, apellido, rut')
+        .in('id', pacientesConDeudaExigible.map(p => p.paciente_id));
+      if (errPac) throw new Error(`Error al obtener datos de pacientes: ${errPac.message}`);
+
+      const resultadoFinal = (pacientesData || []).map(paciente => {
+        const deudas = pacientesConDeudaExigible.find(p => p.paciente_id === paciente.id);
+        return { ...paciente, saldo_pendiente: deudas?.deuda_total || 0 }; // 🔥 Se muestra la deuda TOTAL, no solo la exigible.
+      }).sort((a, b) => b.saldo_pendiente - a.saldo_pendiente);
+
+      setPacientesDeudores(resultadoFinal);
     } catch (err) {
       console.error("Error:", err)
     } finally {
@@ -131,7 +226,7 @@ export default function PagosPendientesPage() {
                 </div>
 
                 <Link 
-                  href={`/pacientes/${p.id}`}
+                  href={`/pacientes/${p.id}/pagos`}
                   className="flex items-center justify-center gap-2 w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase hover:bg-blue-600 transition-all active:scale-95 shadow-lg"
                 >
                   Gestionar Cobro <ArrowRight size={14}/>

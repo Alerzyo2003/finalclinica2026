@@ -5,9 +5,9 @@ import { supabase } from '@/lib/supabase'
 import { 
   User, ClipboardList, Activity, Camera, Wallet, 
   ArrowLeft, UserCircle, History, Pill, FileCheck, 
-  ClipboardCheck, Tag, Calendar, Loader2, DollarSign,
-  AlertCircle, ImageIcon, ChevronRight, Zap, Fingerprint, 
-  VenusAndMars, Cake, Coins, AlertTriangle, Heart, Lock, ShieldAlert
+  ClipboardCheck, Tag, Loader2,
+  AlertCircle, ImageIcon, Fingerprint, 
+  VenusAndMars, Cake, Coins, AlertTriangle, Lock, ShieldAlert
 } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -20,8 +20,10 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   
   const [paciente, setPaciente] = useState<any>(null)
   const [datosPresupuesto, setDatosPresupuesto] = useState<any>(null)
-  const [citas, setCitas] = useState<any[]>([])
   const [antecedentes, setAntecedentes] = useState<any[]>([])
+
+  // 🔥 NUEVO: CONTROL DE ROLES 🔥
+  const [perfil, setPerfil] = useState<any>(null)
 
   const presupuestoId = pathname.match(/\/tratamientos\/([a-f0-9-]{36})/)?.[1] || null;
 
@@ -36,6 +38,17 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   }
 
   useEffect(() => {
+    const getUserProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const { data: pData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
+        setPerfil(pData)
+      }
+    }
+    getUserProfile()
+  }, [])
+
+  useEffect(() => {
     if (!id) return;
     fetchDatosMaestros();
 
@@ -43,6 +56,9 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
       .channel('cambios-paciente')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pacientes', filter: `id=eq.${id}` }, (payload) => { 
         setPaciente(payload.new); 
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'antecedentes', filter: `paciente_id=eq.${id}` }, () => {
+        fetchDatosMaestros();
       })
       .subscribe();
 
@@ -62,17 +78,12 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
 
   async function fetchDatosMaestros() {
     try {
-      const ahora = new Date();
-      const isoLocal = ahora.toLocaleDateString('sv-SE') + 'T' + ahora.toLocaleTimeString('es-CL', { hour12: false });
-
-      const [resPac, resCitas, resAnt] = await Promise.all([
+      const [resPac, resAnt] = await Promise.all([
         supabase.from('pacientes').select('*').eq('id', id).maybeSingle(),
-        supabase.from('citas').select('id, inicio, motivo, estado').eq('paciente_id', id).gte('inicio', isoLocal).order('inicio', { ascending: true }).limit(3),
         supabase.from('antecedentes').select('*').eq('paciente_id', id)
       ]);
 
       if (resPac.data) setPaciente(resPac.data);
-      if (resCitas.data) setCitas(resCitas.data);
       if (resAnt.data) setAntecedentes(resAnt.data);
     } catch (err) {
       console.error(err)
@@ -87,6 +98,9 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
       console.error(err)
     }
   }
+
+  // REGLAS VISUALES
+  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
 
   // 1. PANTALLA DE CARGA
   if (!paciente) return (
@@ -145,39 +159,48 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
     <div className="min-h-screen bg-[#FDFDFD] flex flex-col font-sans selection:bg-blue-100 text-left">
       
       {/* ========================================================================= */}
-      {/* HEADER TIPO DENTALINK (DIVIDIDO EN 2: INFO ARRIBA, MENÚ ABAJO)           */}
+      {/* HEADER TIPO DENTALINK (MODIFICADO SIN ASIDE IZQUIERDO)                    */}
       {/* ========================================================================= */}
       <header className="bg-white sticky top-0 z-[100] border-b border-slate-200 shadow-sm print:hidden flex flex-col">
         
-        {/* PARTE 1: INFORMACIÓN DEL PACIENTE Y ANTECEDENTES COMPACTOS */}
+        {/* PARTE 1: INFORMACIÓN DEL PACIENTE, AGREGADOS Y ANTECEDENTES */}
         <div className="px-6 py-4 max-w-[95%] mx-auto w-full flex flex-col xl:flex-row gap-6 justify-between items-start xl:items-center">
           
-          {/* Avatar y Datos Personales */}
-          <div className="flex items-center gap-5 shrink-0">
-            <div className="relative group">
+          {/* Avatar, Datos Personales y Previsión */}
+          <div className="flex flex-col md:flex-row md:items-center gap-5 shrink-0">
+            <div className="relative group shrink-0">
               <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-blue-200/50">
                 <User size={24} strokeWidth={2.5} />
               </div>
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-[3px] border-white rounded-full"></div>
             </div>
             
-            <div>
-              <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-1.5">{paciente.nombre} {paciente.apellido}</h1>
+            <div className="flex flex-col">
+              <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-2">{paciente.nombre} {paciente.apellido}</h1>
               
               <div className="flex flex-wrap items-center gap-3 text-left">
-                <div className="flex items-center gap-1.5">
-                  <Fingerprint size={12} className="text-slate-300" />
-                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest">RUT: <span className="text-slate-800">{paciente.rut || 'S/R'}</span></p>
+                {/* RUT */}
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                  <Fingerprint size={12} className="text-slate-400" />
+                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest"><span className="text-slate-800">{paciente.rut || 'S/R'}</span></p>
                 </div>
-                <div className="w-1 h-1 bg-slate-200 rounded-full hidden sm:block"></div>
-                <div className="flex items-center gap-1.5">
-                  <VenusAndMars size={12} className="text-slate-300" />
-                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest">Sexo: <span className="text-slate-800 uppercase">{paciente.sexo || 'N/A'}</span></p>
+                
+                {/* SEXO */}
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                  <VenusAndMars size={12} className="text-slate-400" />
+                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest"><span className="text-slate-800">{paciente.sexo || 'N/A'}</span></p>
                 </div>
-                <div className="w-1 h-1 bg-slate-200 rounded-full hidden sm:block"></div>
-                <div className="flex items-center gap-1.5">
-                  <Cake size={12} className="text-slate-300" />
-                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest">Edad: <span className="text-slate-800">{calcularEdad(paciente.fecha_nacimiento)}</span></p>
+                
+                {/* EDAD */}
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                  <Cake size={12} className="text-slate-400" />
+                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest"><span className="text-slate-800">{calcularEdad(paciente.fecha_nacimiento)}</span></p>
+                </div>
+
+                {/* PREVISIÓN */}
+                <div className="flex items-center gap-1.5 bg-purple-50 px-2 py-1 rounded-md border border-purple-100">
+                  <Tag size={12} className="text-purple-500" />
+                  <p className="text-purple-600 text-[9px] font-bold uppercase tracking-widest"><span className="font-black">{paciente.prevision && paciente.prevision !== 'Sin convenio' ? paciente.prevision : 'Particular'}</span></p>
                 </div>
               </div>
             </div>
@@ -239,68 +262,42 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
               <TabLink href={`/pacientes/${id}`} active={esFicha} icon={<ClipboardList size={14}/>} label="Ficha" />
               <TabLink href={`/pacientes/${id}/datos`} active={pathname.includes('/datos')} icon={<UserCircle size={14}/>} label="Perfil" />
               <TabLink href={`/pacientes/${id}/tratamientos`} active={pathname.includes('/tratamientos')} icon={<Wallet size={14}/>} label="Tratamientos" />
-              <TabLink href={`/pacientes/${id}/pagos`} active={pathname.includes('/pagos')} icon={<Coins size={14}/>} label="Pagos" />
+              
+              {/* 🔥 OCULTAMOS LA PESTAÑA DE PAGOS AL ASISTENTE 🔥 */}
+              {puedeVerFinanzas && (
+                <TabLink href={`/pacientes/${id}/pagos`} active={pathname.includes('/pagos')} icon={<Coins size={14}/>} label="Pagos" />
+              )}
+
               <TabLink href={`/pacientes/${id}/odontograma`} active={pathname.includes('/odontograma')} icon={<Activity size={14}/>} label="Odonto" />
               <TabLink href={`/pacientes/${id}/archivos`} active={pathname.includes('/archivos')} icon={<Camera size={14}/>} label="Galería" />
             </nav>
-            <Link href="/agenda" className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 transition-all shrink-0 ml-4 shadow-sm" title="Volver a la Agenda">
+            
+            {/* 🔥 AQUÍ ESTÁ EL CAMBIO A <a> PARA RECARGAR LA AGENDA AL DÍA DE HOY 🔥 */}
+            <a href="/agenda" className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 transition-all shrink-0 ml-4 shadow-sm" title="Volver a la Agenda">
               <ArrowLeft size={16} strokeWidth={2.5}/>
-            </Link>
+            </a>
           </div>
         </div>
 
       </header>
 
-      {/* CUERPO PRINCIPAL */}
-      <div className="px-6 py-8 max-w-[95%] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 print:p-0 print:block text-left">
+      {/* CUERPO PRINCIPAL (FULL WIDTH AHORA) */}
+      <div className="px-6 py-8 max-w-[95%] mx-auto w-full flex-1 print:p-0 text-left">
         
-        {/* ASIDE IZQUIERDO */}
-        <aside className="lg:col-span-3 space-y-6 print:hidden text-left">
-          <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 relative overflow-hidden group text-left">
-             <div className="absolute top-0 right-0 p-4 opacity-5 text-slate-900 pointer-events-none"><Tag size={60} /></div>
-             <div className="flex items-center gap-4 relative z-10 text-left">
-                <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl border border-purple-100 shrink-0"><Tag size={20}/></div>
-                <div className="text-left">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-left">Previsión / Convenio</p>
-                    <p className="text-xs font-black text-slate-800 uppercase mt-1 text-left">
-                     {paciente.prevision && paciente.prevision !== 'Sin convenio' ? paciente.prevision : 'Particular'}
-                    </p>
-                </div>
-             </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 text-left">
-            <h4 className="font-black text-[10px] uppercase text-slate-400 mb-6 flex items-center justify-between text-left">
-              <span>Agenda Próxima</span>
-              <Calendar size={14} className="text-blue-500"/>
-            </h4>
-            <div className="space-y-4 text-left">
-              {citas.length > 0 ? citas.map(c => (
-                <div key={c.id} className="group relative pl-4 border-l-2 border-slate-100 hover:border-blue-500 transition-colors text-left">
-                  <p className="text-[11px] font-black text-slate-800 leading-none text-left">
-                    {c.inicio ? new Date(c.inicio.replace('T', ' ')).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }) : 'S/F'} 
-                    • {c.inicio ? new Date(c.inicio.replace('T', ' ')).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : 'S/H'}
-                  </p>
-                  <p className="text-[10px] text-blue-600 font-bold uppercase mt-2 tracking-tight truncate text-left">{c.motivo || 'Consulta'}</p>
-                </div>
-              )) : (
-                <div className="text-center py-6 text-left">
-                  <p className="text-[10px] text-slate-300 font-black uppercase italic text-center">Sin citas pendientes</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </aside>
-
         {/* ÁREA DE CONTENIDO DINÁMICO */}
-        <div className="lg:col-span-9 flex flex-col gap-6 print:block print:w-full text-left">
+        <div className="flex flex-col gap-6 print:block print:w-full text-left">
           {esFicha && (
             <nav className="bg-white/70 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 flex items-center gap-1 overflow-x-auto no-scrollbar shadow-sm sticky top-[130px] z-50 print:hidden text-left">
               <SubTabLink href={`/pacientes/${id}`} active={pathname === `/pacientes/${id}`} label="Resumen" icon={<History size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/evoluciones`} active={pathname.includes('/evoluciones')} label="Evoluciones" icon={<Activity size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/antecedentes`} active={pathname.includes('/antecedentes')} label="Ant. Médicos" icon={<AlertCircle size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/rx-documentos`} active={pathname.includes('/rx-documentos')} label="RX y Multimedia" icon={<ImageIcon size={14}/>} />
-              <SubTabLink href={`/pacientes/${id}/recetas`} active={pathname.includes('/recetas')} label="Recetario" icon={<Pill size={14}/>} />
+              
+              {/* 🔥 OCULTAMOS LA PESTAÑA DE RECETAS AL ASISTENTE Y AL RECEPCIONISTA (SOLO DENTISTA) 🔥 */}
+              {perfil?.rol === 'DENTISTA' || perfil?.rol === 'ADMIN' ? (
+                <SubTabLink href={`/pacientes/${id}/recetas`} active={pathname.includes('/recetas')} label="Recetario" icon={<Pill size={14}/>} />
+              ) : null}
+              
               <SubTabLink href={`/pacientes/${id}/documentos`} active={pathname.includes('/documentos')} label="Documentos" icon={<FileCheck size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/consentimientos`} active={pathname.includes('/consentimientos')} label="Consentimientos" icon={<ClipboardCheck size={14}/>} />
             </nav>

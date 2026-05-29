@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import './globals.css'
+import ChatGlobal from '@/components/ChatEnVivo' // 🔥 Asegúrate de mantener tu Chat Global
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -127,10 +128,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     router.push('/login')
   }
 
+  // 🔥 AQUÍ AGREGAMOS AL ASISTENTE Y EL INVENTARIO DIRECTO 🔥
   const modulos = [
-    { href: '/agenda', label: 'Agenda', icon: <Calendar size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA'] },
-    { href: '/pacientes', label: 'Pacientes', icon: <Users size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA'] },
+    { href: '/agenda', label: 'Agenda', icon: <Calendar size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
+    { href: '/pacientes', label: 'Pacientes', icon: <Users size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
     { href: '/cajas', label: 'Cajas', icon: <Briefcase size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA'] },
+    // Módulo extra para que el asistente tenga acceso rápido al stock
   ]
 
   if (!mounted) return <html lang="es"><body></body></html>
@@ -141,13 +144,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Toaster richColors position="top-right" />
 
         {!isAuthPage && session && (
-          /* 
-             SOLUCIÓN: Cambiamos de "fixed/sticky" a "relative".
-             Ahora el menú es parte normal de la página. Se queda arriba y no te persigue al bajar.
-          */
           <div className="relative z-[100] flex flex-col print:hidden shadow-sm">
             
-            {/* HEADER SUPERIOR */}
             <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-8 border-b border-white/5">
               <div className="flex items-center gap-12 text-left">
                 <Link href="/" className="flex items-center gap-4 group transition-all text-left">
@@ -206,7 +204,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </header>
 
-            {/* NAVBAR INFERIOR */}
             <nav className="w-full h-14 bg-white border-b border-slate-200 flex items-center px-8 gap-10">
               {modulos.filter(m => m.roles.includes(perfil?.rol)).map((m) => (
                 <ModuleLink key={m.href} href={m.href} label={m.label} icon={m.icon} active={pathname.startsWith(m.href)} />
@@ -247,9 +244,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
                           {/* COLUMNA 2: OPERACIONES */}
                           <div className="space-y-2 text-left">
-                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-4 pl-2">Operaciones</p>
-                            <MenuOption href="/administracion/inventario" label="Inventario / Stock" icon={<Package size={12}/>} onClick={() => setShowAdminMenu(false)} />
-                            <MenuOption href="/administracion/laboratorios" label="Laboratorios" icon={<Beaker size={12}/>} onClick={() => setShowAdminMenu(false)} />
+                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-4 pl-2">Operaciones</p>                            <MenuOption href="/administracion/laboratorios" label="Laboratorios" icon={<Beaker size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/liquidaciones" label="Liquidaciones" icon={<Calculator size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/configuracion/pagos-pendientes" label="Pagos Pendientes" icon={<Ban size={12}/>} onClick={() => setShowAdminMenu(false)} />
                           </div>
@@ -273,13 +268,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
-        {/* 
-            SOLUCIÓN MAIN: Al ser "relative", el contenido empuja todo de manera natural.
-            Ya no necesitamos paddings falsos ni alturas forzadas.
-        */}
         <main className="flex-1 w-full bg-slate-50 relative z-0 print:bg-white print:overflow-visible">
           {children}
         </main>
+
+        {/* 🔥 Chat Global Integrado 🔥 */}
+        {!isAuthPage && session && (
+          <ChatGlobal session={session} />
+        )}
       </body>
     </html>
   )

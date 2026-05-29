@@ -2,13 +2,16 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { 
-  History, Calendar, Clock, Stethoscope, 
-  Loader2, Image as ImageIcon, 
+import {
+  History, Calendar, Clock, Stethoscope,
+  Loader2, Image as ImageIcon,
   DollarSign, User, CheckCircle2,
   CalendarDays, Wallet, FileSignature
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+
+
 
 export default function HistorialPage() {
   const { id: paciente_id } = useParams()
@@ -18,6 +21,9 @@ export default function HistorialPage() {
   const [filtro, setFiltro] = useState<'todas' | 'mias'>('todas')
   const [mounted, setMounted] = useState(false)
 
+
+
+
   useEffect(() => {
     setMounted(true)
     if (paciente_id) {
@@ -25,11 +31,17 @@ export default function HistorialPage() {
     }
   }, [paciente_id])
 
+
+
+
   async function obtenerTodoElHistorial() {
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) setCurrentUserId(user.id)
+
+
+
 
       // CONSULTAS EN PARALELO
       const [
@@ -50,6 +62,9 @@ export default function HistorialPage() {
         supabase.from('profesionales').select('user_id, nombre, apellido')
       ])
 
+
+
+
       // 1. NORMALIZAR EVOLUCIONES
       const evs = (evoluciones || []).map(e => ({
         ...e,
@@ -61,6 +76,9 @@ export default function HistorialPage() {
         color: 'blue'
       }))
 
+
+
+
       // 2. NORMALIZAR PRESUPUESTOS
       const pres = (presupuestos || []).map(p => ({
         ...p,
@@ -71,6 +89,9 @@ export default function HistorialPage() {
         icon: <DollarSign size={16} />,
         color: 'emerald'
       }))
+
+
+
 
       // 3. NORMALIZAR ARCHIVOS (RX)
       const arcs = (archivos || []).map(a => ({
@@ -84,6 +105,9 @@ export default function HistorialPage() {
         color: 'purple'
       }))
 
+
+
+
       // 4. NORMALIZAR DOCUMENTOS CLÍNICOS
       const docs = (documentos || []).map(d => ({
         ...d,
@@ -95,6 +119,9 @@ export default function HistorialPage() {
         color: 'orange'
       }))
 
+
+
+
       // 5. NORMALIZAR PAGOS
       const pgs = (pagos || []).map(pg => ({
         ...pg,
@@ -105,6 +132,9 @@ export default function HistorialPage() {
         icon: <Wallet size={16} />,
         color: 'cyan'
       }))
+
+
+
 
       // 6. NORMALIZAR CITAS (CORREGIDO PARA ORDENAR POR CREACIÓN)
       const cts = (citas || []).map(c => ({
@@ -118,16 +148,25 @@ export default function HistorialPage() {
         color: 'slate'
       }))
 
+
+
+
       // UNIR TODO Y ORDENAR (Manda el más reciente en base a la creación)
-      const total = [...evs, ...pres, ...arcs, ...docs, ...pgs, ...cts].sort((a, b) => 
+      const total = [...evs, ...pres, ...arcs, ...docs, ...pgs, ...cts].sort((a, b) =>
         new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime()
       )
+
+
+
 
       // MAPEAR AUTORES CON CASTING
       const final = total.map(item => ({
         ...item,
         autor: profesionales?.find((p: any) => p.user_id === (item.profesional_id || item.especialista_id || item.creado_por || item.usuario_id))
       }))
+
+
+
 
       setBitacora(final)
     } catch (err) {
@@ -137,10 +176,16 @@ export default function HistorialPage() {
     }
   }
 
+
+
+
   const bitacoraFiltrada = bitacora.filter(item => {
     if (filtro === 'mias') return (item.profesional_id || item.especialista_id || item.creado_por) === currentUserId
     return true
   })
+
+
+
 
   if (!mounted || loading) return (
     <div className="flex flex-col items-center justify-center p-20 gap-4">
@@ -148,6 +193,9 @@ export default function HistorialPage() {
       <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest animate-pulse text-center">Sincronizando Historial Maestro...</p>
     </div>
   )
+
+
+
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 p-4 text-left">
@@ -163,11 +211,17 @@ export default function HistorialPage() {
           </div>
         </div>
 
+
+
+
         <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1 border border-slate-200 relative z-10">
           <button onClick={() => setFiltro('todas')} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${filtro === 'todas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Toda la Clínica</button>
           <button onClick={() => setFiltro('mias')} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${filtro === 'mias' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><User size={10} /> Mis Acciones</button>
         </div>
       </div>
+
+
+
 
       {/* TIMELINE */}
       <div className="relative ml-6 border-l-2 border-slate-100 pl-10 space-y-10 text-left">
@@ -175,25 +229,25 @@ export default function HistorialPage() {
           {bitacoraFiltrada.map((item) => {
             const autor = item.autor as any;
             return (
-              <motion.div 
-                layout key={`${item.tipo}-${item.id}`} 
+              <motion.div
+                layout key={`${item.tipo}-${item.id}`}
                 initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                 className="relative text-left"
               >
                 {/* PUNTO */}
                 <div className={`absolute -left-[51px] top-2 w-5 h-5 bg-white border-4 rounded-full shadow-sm z-10 ${
-                  item.color === 'blue' ? 'border-blue-500' : 
+                  item.color === 'blue' ? 'border-blue-500' :
                   item.color === 'emerald' ? 'border-emerald-500' :
                   item.color === 'purple' ? 'border-purple-500' :
                   item.color === 'orange' ? 'border-orange-500' :
                   item.color === 'cyan' ? 'border-cyan-500' : 'border-slate-400'
                 }`}></div>
-                
+               
                 <div className="bg-white p-7 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-md transition-all group relative overflow-hidden text-left">
                   <div className="flex justify-between items-start mb-5 relative z-10 text-left">
                     <div className="flex items-center gap-4 text-left">
                       <div className={`p-3 rounded-2xl shadow-sm ${
-                        item.color === 'blue' ? 'bg-blue-50 text-blue-600' : 
+                        item.color === 'blue' ? 'bg-blue-50 text-blue-600' :
                         item.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
                         item.color === 'purple' ? 'bg-purple-50 text-purple-600' :
                         item.color === 'orange' ? 'bg-orange-50 text-orange-600' :
@@ -215,7 +269,7 @@ export default function HistorialPage() {
                         </div>
                       </div>
                     </div>
-                    
+                   
                     <div className="text-right flex flex-col items-end shrink-0">
                       <span className="text-[7px] font-black text-slate-300 uppercase tracking-[0.2em] block mb-1">Responsable</span>
                       <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
@@ -229,11 +283,14 @@ export default function HistorialPage() {
                     </div>
                   </div>
 
+
+
+
                   <div className="bg-slate-50/50 p-5 rounded-3xl border border-slate-50 relative z-10 text-left">
                     <p className="text-xs text-slate-600 font-medium leading-relaxed italic text-left">
                       {item.descripcion}
                     </p>
-                    
+                   
                     {item.tipo === 'archivo' && item.url_archivo && (
                       <div className="mt-4 flex gap-3 text-left">
                           <div className="relative overflow-hidden rounded-2xl border-2 border-white shadow-lg w-40 h-28 group/img shrink-0 text-left">
@@ -250,6 +307,9 @@ export default function HistorialPage() {
                     )}
                   </div>
 
+
+
+
                   <div className="absolute -bottom-6 -right-6 opacity-[0.03] rotate-12 group-hover:rotate-0 transition-transform duration-700 pointer-events-none text-slate-900">
                       {item.icon}
                   </div>
@@ -257,7 +317,7 @@ export default function HistorialPage() {
               </motion.div>
             );
           })}
-          
+         
           {bitacoraFiltrada.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-4 bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
                 <History className="text-slate-200" size={48} />
@@ -267,6 +327,9 @@ export default function HistorialPage() {
         </AnimatePresence>
       </div>
 
+
+
+
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -274,3 +337,10 @@ export default function HistorialPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
