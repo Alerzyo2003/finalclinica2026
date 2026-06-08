@@ -93,15 +93,15 @@ export default function LiquidacionesPage() {
         const honorarioAtenciones = sumaAtenciones * porcentajeDr;
         const utilidadAtenciones = sumaAtenciones * porcentajeClinica;
 
-        const pagosDelDoctor = (pagos || []).filter((pago: any) => {
-         const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id || null;
-            return docId === p.user_id;
-        });
-        
         let sumaAbonos = 0;
         let honorariosAbonos = 0;
         let reembolsosDoctor = 0;
         let utilidadAbonos = 0;
+        
+        const abonosDelDoc = abonosItems.filter(pago => {
+            const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id;
+            return docId === p.user_id;
+        });
 
         abonosDelDoc.forEach(pago => {
             const montoPago = Number(pago.monto || 0);
