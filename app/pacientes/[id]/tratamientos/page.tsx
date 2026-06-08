@@ -352,7 +352,7 @@ export default function ListaTratamientosPage() {
       {/* MODAL NUEVO PLAN */}
       <AnimatePresence>
         {modalNuevoPlan && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left">
               <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
                 <h2 className="text-xl font-black uppercase italic tracking-tighter">Nuevo Tratamiento</h2>

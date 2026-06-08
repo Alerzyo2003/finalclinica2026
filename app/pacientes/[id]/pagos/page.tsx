@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
-  Loader2, Coins, ReceiptText, CheckCircle2, 
+  Loader2, Coins, ReceiptText, CheckCircle2, AlertCircle,
   CreditCard, Banknote, Landmark, History, Ban, EyeOff, ChevronUp,
   ChevronDown, Printer, Trash2, FileText, Wallet, Plus, User, X, ClipboardList
 } from 'lucide-react'
@@ -29,6 +29,7 @@ export default function PagosPacientePage() {
   // 🔥 ESTADOS NUEVOS 🔥
   const [usuarioLogueado, setUsuarioLogueado] = useState<any>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [cajaActivaId, setCajaActivaId] = useState<string | null>(null);
 
   // Estados para el pago (Recaudación de deuda)
   const [montoIngresado, setMontoIngresado] = useState<number | ''>('')
@@ -60,6 +61,11 @@ export default function PagosPacientePage() {
           const { data: perfilData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single();
           setPerfil(perfilData);
       }
+
+      // 🔥 OBTENER CAJA ACTIVA 🔥
+      const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
+      setCajaActivaId(cajaActiva?.id || null);
+
       // 0. OBTENER INFO DEL PACIENTE
       const { data: pacData } = await supabase.from('pacientes').select('*').eq('id', paciente_id).single()
       setPacienteInfo(pacData)
@@ -146,6 +152,10 @@ export default function PagosPacientePage() {
   // 🔥 INGRESAR SALDO A FAVOR DE FORMA MANUAL 🔥
   // ===============================================
   const procesarAbonoLibre = async () => {
+    if (!cajaActivaId) {
+      return toast.error("No se puede procesar el abono: No hay caja abierta.");
+    }
+
     if (!montoAbonoLibre || Number(montoAbonoLibre) <= 0) return toast.error("Ingrese un monto válido");
     if ((metodoAbonoLibre === 'Transferencia' || metodoAbonoLibre === 'Tarjeta') && !codigoAbonoLibre.trim()) {
         return toast.error("Debe ingresar el código de la transacción obligatoriamente.");
@@ -166,7 +176,8 @@ export default function PagosPacientePage() {
             numero_boleta: codigoAbonoLibre.trim() || 'S/N',
             profesional_id: usuarioLogueado?.id,
             fecha_pago: new Date().toISOString(),
-            comentario: JSON.stringify(detalleAbono)
+            comentario: JSON.stringify(detalleAbono),
+            caja_id: cajaActivaId
         }]).select().single();
 
         if (errPago) throw errPago;
@@ -204,6 +215,10 @@ export default function PagosPacientePage() {
   // PROCESAR PAGO DE DEUDA CON DISTRIBUCIÓN
   // ===============================================
   const procesarPagoCaja = async () => {
+    if (!cajaActivaId) {
+      return toast.error("No se puede procesar el pago: No hay caja abierta.");
+    }
+
     if (!montoIngresado || Number(montoIngresado) <= 0) {
         return toast.error("Ingrese un monto válido a recaudar");
     }
@@ -249,7 +264,8 @@ export default function PagosPacientePage() {
                 profesional_id: item.profesional_id, // El doctor del tratamiento
                 item_id: item.id, // El tratamiento pagado
                 fecha_pago: new Date().toISOString(),
-                comentario: JSON.stringify([detalleItem]) 
+                comentario: JSON.stringify([detalleItem]),
+                caja_id: cajaActivaId
             }]);
 
             await supabase.from('presupuesto_items').update({ abonado: Number(item.abonado) + aAbonar }).eq('id', item.id);
@@ -280,7 +296,8 @@ export default function PagosPacientePage() {
                     metodo_pago: metodoPago,
                     numero_boleta: numeroOperacion.trim() || 'S/N', 
                     fecha_pago: new Date().toISOString(),
-                    comentario: JSON.stringify([detalleSobrante]) 
+                    comentario: JSON.stringify([detalleSobrante]),
+                    caja_id: cajaActivaId
                 }]);
 
                 nuevoSaldoAFavor = saldoActual + montoRestante;
@@ -332,6 +349,10 @@ export default function PagosPacientePage() {
   // REVERSAR PAGO Y RESTAURAR DEUDA (CORREGIDO)
   // ===============================================
   const reversarPago = async (pago: any) => {
+    if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'RECEPCIONISTA') {
+      return toast.error('No tienes permisos para anular pagos.')
+    }
+
     // 🔥 Lógica de confirmación dinámica según el tipo de pago 🔥
     const esAbonoLibre = !pago.item_id;
     const mensajeConfirmacion = esAbonoLibre
@@ -581,8 +602,9 @@ export default function PagosPacientePage() {
 
             <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
                 <button 
+                  disabled={!cajaActivaId}
                   onClick={() => setModalAbonoLibreAbierto(true)}
-                  className="bg-emerald-50 border border-emerald-200 text-emerald-600 px-5 py-3 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2 whitespace-nowrap shrink-0"
+                  className="bg-emerald-50 border border-emerald-200 text-emerald-600 px-5 py-3 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-50 disabled:hover:text-emerald-600"
                 >
                   <Plus size={16} /> Ingresar Saldo a Favor
                 </button>
@@ -666,16 +688,26 @@ export default function PagosPacientePage() {
             )}
 
             {deudaTotal > 0 ? (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100">
-                <h3 className="text-sm font-black text-emerald-700 uppercase mb-6 flex items-center gap-2">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 space-y-6">
+                <h3 className="text-sm font-black text-emerald-700 uppercase flex items-center gap-2">
                   <Coins size={16} /> Pagar Tratamientos
                 </h3>
-                
+                {!cajaActivaId && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-xs font-bold flex items-center gap-3">
+                        <AlertCircle size={20} />
+                        <div>
+                            <p className="font-black">PAGOS BLOQUEADOS: NO HAY CAJA ABIERTA</p>
+                            <p className="font-medium">Para poder registrar pagos, un recepcionista debe iniciar un turno desde el módulo de Cajas.</p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest pl-2">Método de Pago</label>
                     <div className="relative">
                       <select 
+                        disabled={!cajaActivaId}
                         className="w-full p-4 pl-12 bg-white border border-emerald-200 rounded-2xl font-bold text-xs uppercase text-emerald-700 outline-none focus:border-emerald-500 appearance-none cursor-pointer" 
                         value={metodoPago} 
                         onChange={(e) => setMetodoPago(e.target.value)}
@@ -699,6 +731,7 @@ export default function PagosPacientePage() {
                       <span className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-600 font-black text-lg">$</span>
                       <input 
                         type="number" 
+                        disabled={!cajaActivaId}
                         placeholder="0" 
                         className="w-full py-4 pl-10 pr-5 bg-white border border-emerald-200 rounded-2xl font-black text-lg text-emerald-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-emerald-200" 
                         value={montoIngresado} 
@@ -717,7 +750,7 @@ export default function PagosPacientePage() {
                   <div className="relative">
                     <input 
                       type="text" 
-                      disabled={metodoPago === 'Saldo a Favor'}
+                      disabled={metodoPago === 'Saldo a Favor' || !cajaActivaId}
                       placeholder={metodoPago === 'Saldo a Favor' ? "Pago interno automático" : metodoPago === 'Transferencia' ? "Ej: TR-109244" : metodoPago === 'Tarjeta' ? "Ej: V973W6" : "Ej: Boleta 102"}
                       className={`w-full p-4 pl-12 bg-white border rounded-2xl font-bold text-xs uppercase text-emerald-700 outline-none focus:ring-4 transition-all placeholder:text-emerald-200/70 disabled:opacity-50 disabled:bg-slate-50 disabled:border-emerald-100 ${
                         (metodoPago !== 'Saldo a Favor') && !numeroOperacion.trim() 
@@ -736,8 +769,8 @@ export default function PagosPacientePage() {
 
                 <button 
                   onClick={procesarPagoCaja}
-                  disabled={cargandoAccion || !montoIngresado || Number(montoIngresado) <= 0}
-                  className="w-full py-5 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 hover:-translate-y-1 transition-all disabled:opacity-50 disabled:hover:translate-y-0 flex items-center justify-center gap-3"
+                  disabled={cargandoAccion || !montoIngresado || Number(montoIngresado) <= 0 || !cajaActivaId}
+                  className="w-full py-5 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 hover:-translate-y-1 transition-all disabled:opacity-50 disabled:bg-emerald-300 disabled:shadow-none disabled:hover:translate-y-0 flex items-center justify-center gap-3"
                 >
                   {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18}/>}
                   Procesar Pago
@@ -861,7 +894,7 @@ export default function PagosPacientePage() {
       {/* ========================================================================= */}
       <AnimatePresence>
         {modalAbonoLibreAbierto && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
                 <div className="p-8 border-b border-emerald-100 bg-emerald-50 flex justify-between items-center shrink-0">
                    <div className="flex items-center gap-4">
@@ -913,90 +946,96 @@ export default function PagosPacientePage() {
       {/* ========================================================================= */}
       {/* VISTA DE IMPRESIÓN (DISEÑO EXACTO DENTALINK) - INVISIBLE EN PANTALLA */}
       {/* ========================================================================= */}
-      <div id="comprobante-impresion" className="hidden text-left text-slate-900 font-sans">
-        
-        {/* HEADER */}
-        <div className="flex justify-between items-start mb-8 border-b border-slate-900 pb-4">
-          <div>
-            <h1 className="text-xl font-bold uppercase">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
-            <p className="text-[10px] text-slate-600 mt-1">Fecha Impresión: {new Date().toLocaleDateString('es-CL')}</p>
-            <p className="text-[10px] text-slate-600 mt-0.5">IDN {pagoAImprimir?.id?.substring(0, 8).toUpperCase()}</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-2xl font-bold uppercase leading-none">Comprobante<br/>de pago</h2>
-          </div>
-        </div>
+      <div id="comprobante-impresion" className="hidden print:block bg-white text-slate-900 font-sans">
+        <div className="p-10">
+          
+          {/* ENCABEZADO */}
+          <header className="flex justify-between items-start pb-8 mb-8 border-b-2 border-slate-900">
+            <div className="w-2/3">
+              <img 
+                src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" 
+                alt="Logo Clínica Dignidad" 
+                className="w-auto mb-4 mix-blend-multiply"
+                style={{ height: '3rem' }} // 48px. Se usa estilo en línea para asegurar la compatibilidad en impresión.
+                referrerPolicy="no-referrer"
+              />
+              <h1 className="text-lg font-black text-slate-800">CENTRO MÉDICO Y DENTAL DIGNIDAD SPA</h1>
+              <p className="text-xs text-slate-500 font-medium">Venancia Leiva 1871, La Pintana, Región Metropolitana</p>
+              <p className="text-xs text-slate-500 font-medium">Teléfono: +56 9 6646 7641</p>
+            </div>
+            <div className="w-1/3 text-right">
+              <h2 className="text-4xl font-black uppercase text-slate-800 tracking-tighter">Recibo</h2>
+              <p className="text-sm font-semibold text-slate-500 mt-2">
+                Nº: <span className="text-slate-800 font-bold">#{pagoAImprimir?.id?.substring(0, 8).toUpperCase()}</span>
+              </p>
+              <p className="text-sm font-semibold text-slate-500">
+                Fecha: <span className="text-slate-800 font-bold">{pagoAImprimir?.fecha_pago ? new Date(pagoAImprimir.fecha_pago).toLocaleDateString('es-CL') : ''}</span>
+              </p>
+            </div>
+          </header>
 
-        {/* DATOS PACIENTE (FORMATO DENTALINK) */}
-        <div className="mb-8 text-[11px] grid grid-cols-2 gap-y-2">
-          <div className="flex"><span className="font-bold w-32 shrink-0">Paciente:</span> <span className="uppercase">{pacienteInfo?.nombre} {pacienteInfo?.apellido}</span></div>
-          <div className="flex"><span className="font-bold w-32 shrink-0">RUT:</span> <span className="uppercase">{pacienteInfo?.rut || 'S/N'}</span></div>
-          <div className="flex"><span className="font-bold w-32 shrink-0">Fecha de nacimiento:</span> <span>{formatearFechaLarga(pacienteInfo?.fecha_nacimiento)}</span></div>
-          <div className="flex"><span className="font-bold w-32 shrink-0">Convenio:</span> <span className="uppercase">{pacienteInfo?.prevision || 'Sin convenio'}</span></div>
-        </div>
+          {/* INFO PACIENTE */}
+          <section className="mb-10">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Recibo para</h3>
+            <p className="text-xl font-bold text-slate-800 uppercase">{pacienteInfo?.nombre} {pacienteInfo?.apellido}</p>
+            <p className="text-sm text-slate-600 font-medium">RUT: {pacienteInfo?.rut || 'S/N'}</p>
+          </section>
 
-        {/* TRATAMIENTOS PAGADOS (TABLA DETALLADA) */}
-        <div className="mb-8">
-          <h3 className="font-bold text-[11px] mb-2">Tratamientos pagados:</h3>
-          <table className="w-full text-[10px] border-collapse">
-            <thead>
-              <tr className="border-b border-slate-300">
-                <th className="text-left py-2 font-bold uppercase w-3/5">Prestación</th>
-                <th className="text-center py-2 font-bold uppercase">Precio</th>
-                <th className="text-right py-2 font-bold uppercase">Pagado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detallesImpresion.length > 0 ? (
-                 detallesImpresion.map((d:any, i:number) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="py-3 pr-2">
-                        <p className="font-bold uppercase text-[10px]">{d.prestacion} {d.diente ? `(Pieza ${d.diente})` : ''}</p>
-                        <p className="text-[9px] text-slate-500 uppercase mt-0.5">Doctor/a: {d.doctor}</p>
-                      </td>
-                      <td className="py-3 text-center text-slate-600">${Number(d.precio).toLocaleString('es-CL')}</td>
-                      <td className="py-3 text-right font-bold">${Number(d.abonado_ahora).toLocaleString('es-CL')}</td>
-                    </tr>
-                 ))
-              ) : (
-                <tr className="border-b border-slate-100">
-                  <td className="py-3 font-bold uppercase">Abono a cuenta clínica</td>
-                  <td className="py-3 text-center">-</td>
-                  <td className="text-right py-3 font-bold">${Number(pagoAImprimir?.monto || 0).toLocaleString('es-CL')}</td>
+          {/* TABLA DE DETALLES */}
+          <section className="mb-10">
+            <table className="w-full text-sm">
+              <thead className="border-b-2 border-slate-300">
+                <tr>
+                  <th className="text-left py-3 px-2 font-bold uppercase text-slate-500 text-xs tracking-wider">Descripción</th>
+                  <th className="text-right py-3 px-2 font-bold uppercase text-slate-500 text-xs tracking-wider">Monto Pagado</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-          <div className="flex justify-end mt-4">
-             <p className="font-bold text-sm">Total: ${Number(pagoAImprimir?.monto || 0).toLocaleString('es-CL')}</p>
-          </div>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {detallesImpresion.length > 0 ? (
+                  detallesImpresion.map((d: any, i: number) => (
+                    <tr key={i}>
+                      <td className="py-4 px-2">
+                        <p className="font-bold text-slate-800 uppercase">{d.prestacion} {d.diente ? `(Pza ${d.diente})` : ''}</p>
+                        <p className="text-xs text-slate-500 uppercase mt-1">Atendido por: {d.doctor}</p>
+                      </td>
+                      <td className="py-4 px-2 text-right font-bold text-slate-700">${Number(d.abonado_ahora).toLocaleString('es-CL')}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="py-4 px-2 font-bold uppercase">Abono a cuenta clínica</td>
+                    <td className="py-4 px-2 text-right font-bold">${Number(pagoAImprimir?.monto || 0).toLocaleString('es-CL')}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </section>
 
-        {/* TRANSACCIÓN */}
-        <div className="mb-12">
-          <h3 className="font-bold text-[11px] mb-2">Transacción:</h3>
-          <div className="text-[11px] space-y-1">
-            <div className="flex"><span className="font-bold w-32 shrink-0">Forma de pago:</span> <span className="uppercase">{pagoAImprimir?.metodo_pago} {pagoAImprimir?.numero_boleta && pagoAImprimir?.numero_boleta !== 'S/N' ? `(${pagoAImprimir.numero_boleta})` : ''}</span></div>
-            <div className="flex"><span className="font-bold w-32 shrink-0">Fecha transacción:</span> <span>{pagoAImprimir?.fecha_pago ? new Date(pagoAImprimir.fecha_pago).toLocaleDateString('es-CL') : ''}</span></div>
-            <div className="flex"><span className="font-bold w-32 shrink-0">Total:</span> <span className="font-bold">${Number(pagoAImprimir?.monto || 0).toLocaleString('es-CL')}</span></div>
-          </div>
-        </div>
+          {/* TOTALES Y MÉTODO DE PAGO */}
+          <section className="flex justify-end">
+            <div className="w-full max-w-xs">
+              <div className="flex justify-between items-center py-4 border-t-2 border-slate-900">
+                <span className="text-base font-bold uppercase text-slate-900">Total Pagado</span>
+                <span className="text-2xl font-black text-slate-900">${Number(pagoAImprimir?.monto || 0).toLocaleString('es-CL')}</span>
+              </div>
+              <div className="mt-4 text-right border-t border-slate-200 pt-4">
+                <p className="text-xs font-semibold text-slate-500">Método de Pago:</p>
+                <p className="text-sm font-bold text-slate-700 uppercase">{pagoAImprimir?.metodo_pago}</p>
+                {pagoAImprimir?.numero_boleta && pagoAImprimir?.numero_boleta !== 'S/N' && (
+                  <p className="text-xs text-slate-500">Referencia: {pagoAImprimir.numero_boleta}</p>
+                )}
+              </div>
+            </div>
+          </section>
 
-        {/* FOOTER / LEGAL */}
-        <div className="mt-16 pt-6 border-t border-slate-300 text-center">
-          <p className="font-bold text-[10px] uppercase">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</p>
-          <p className="text-[9px] text-slate-600">Venancia Leiva 1871, La Pintana, Región Metropolitana</p>
-          
-          <div className="mt-6 text-[8px] text-slate-500 text-justify leading-relaxed max-w-2xl mx-auto">
-            <p>Al iniciar este tratamiento declaro que acepto la política de Privacidad de la clínica y la Plataforma. Este documento certifica la recepción de dinero en la clínica para el abono a la cuenta del paciente, pero no constituye ni reemplaza a la Boleta Electrónica de Servicios regulada por el SII.</p>
-          </div>
-          
-          <div className="mt-4 flex justify-between items-center text-[8px] text-slate-400">
-            <p>Documento generado por Software Clínico</p>
-            <p>Página 1 / 1</p>
-          </div>
+          {/* FOOTER */}
+          <footer className="mt-24 pt-8 border-t-2 border-slate-200 text-center text-xs text-slate-500">
+            <p className="font-bold text-slate-700">¡Gracias por su pago!</p>
+            <p className="mt-4 text-[10px] max-w-xl mx-auto">
+              Este documento certifica la recepción de dinero en la clínica para el abono a la cuenta del paciente, pero no constituye ni reemplaza a la Boleta Electrónica de Servicios regulada por el SII.
+            </p>
+          </footer>
         </div>
-
       </div>
 
     </>

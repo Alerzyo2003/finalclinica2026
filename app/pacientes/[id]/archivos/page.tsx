@@ -44,6 +44,18 @@ export default function PacienteArchivosPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    // Validar tipo real, no solo el atributo accept
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Tipo de archivo no permitido');
+      return;
+    }
+    // Validar tamaño máximo (ej: 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('El archivo no puede superar 10MB');
+      return;
+    }
+
     setSubiendo(true)
     try {
       // 1. Subir a Storage

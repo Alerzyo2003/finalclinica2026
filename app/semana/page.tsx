@@ -129,7 +129,7 @@ export default function DiarioGlobalPage() {
 
   useEffect(() => { fetchDatos(); }, [selectedDate]);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => { if (data.session) setUsuarioLogueado(data.session.user.id); }); }, []);
-  useEffect(() => { if (modalAbierto && filtro.profesional_id) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [semanaInicio, modalAbierto, filtro.profesional_id, realtimeTrigger]);
+  useEffect(() => { if (modalAbierto && filtro.profesional_id) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [semanaInicio, modalAbierto, filtro.profesional_id]);
 
   // Efecto para el modal de conflictos
   useEffect(() => {
@@ -450,9 +450,10 @@ export default function DiarioGlobalPage() {
         if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; }
       }
       const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
-        const [h, m] = horaStr.split(':').map(Number);
-        const finH = h + Math.floor((m + duracionMin) / 60), finM = (m + duracionMin) % 60;
-        return { inicio: `${fechaStr}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`, fin: `${fechaStr}T${finH.toString().padStart(2, '0')}:${finM.toString().padStart(2, '0')}:00` };
+        const finDate = new Date(new Date(`${fechaStr}T${horaStr}:00`).getTime() + duracionMin * 60000);
+        const finH = finDate.getHours().toString().padStart(2, '0');
+        const finM = finDate.getMinutes().toString().padStart(2, '0');
+        return { inicio: `${fechaStr}T${horaStr}:00`, fin: `${fechaStr}T${finH}:${finM}:00` };
       };
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0]; const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
@@ -492,13 +493,21 @@ export default function DiarioGlobalPage() {
           <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
             {/* Control de Fechas */}
             <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-2 flex items-center gap-4 shadow-inner">
-              <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
+              <button onClick={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() - 1);
+                setSelectedDate(newDate);
+              }} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronLeft size={20} />
               </button>
               <h2 className="text-sm font-black uppercase text-slate-800 tracking-widest min-w-[200px] text-center">
                 {selectedDate.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' })}
               </h2>
-              <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
+              <button onClick={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() + 1);
+                setSelectedDate(newDate);
+              }} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronRight size={20} />
               </button>
             </div>

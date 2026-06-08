@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import DOMPurify from 'isomorphic-dompurify'
 import { 
   ArrowLeft, Type, AlignLeft, Image as ImageIcon, 
   Minus, Columns, Eye, Save, Trash2, ChevronUp, 
@@ -26,18 +27,40 @@ export default function ConstructorDocumentosPage() {
   const [nombrePlantilla, setNombrePlantilla] = useState('Nuevo Documento Clínico')
   const [plantillaId, setPlantillaId] = useState<string | null>(null)
 
-  useEffect(() => { fetchPlantilla() }, [id])
+  useEffect(() => {
+    const processBlocksForSignedUrls = async (blocks: any[]): Promise<any[]> => {
+      if (!blocks) return [];
+      const processedBlocks = await Promise.all(
+          blocks.map(async (bloque) => {
+              if (!bloque) return null;
+              if (bloque.tipo === 'imagen' && bloque.contenido && !bloque.contenido.startsWith('http')) {
+                  const { data } = await supabase.storage.from('documentos_imagenes').createSignedUrl(bloque.contenido, 3600);
+                  return { ...bloque, signedUrl: data?.signedUrl };
+              }
+              if (bloque.tipo === 'fila' && bloque.slots) {
+                  const newSlots = await processBlocksForSignedUrls(bloque.slots);
+                  return { ...bloque, slots: newSlots };
+              }
+              return bloque;
+          })
+      );
+      return processedBlocks.filter(Boolean);
+    };
 
-  async function fetchPlantilla() {
-    setCargando(true)
-    const { data } = await supabase.from('documentos_plantillas').select('*').eq('categoria_id', id).maybeSingle()
-    if (data) {
-      setPlantillaId(data.id)
-      setNombrePlantilla(data.nombre)
-      setBloques(data.contenido || [])
+    async function fetchPlantilla() {
+      setCargando(true)
+      const { data } = await supabase.from('documentos_plantillas').select('*').eq('categoria_id', id).maybeSingle()
+      if (data) {
+        setPlantillaId(data.id)
+        setNombrePlantilla(data.nombre)
+        const processedContenido = await processBlocksForSignedUrls(data.contenido || []);
+        setBloques(processedContenido)
+      }
+      setCargando(false)
     }
-    setCargando(false)
-  }
+
+    fetchPlantilla()
+  }, [id])
 
   const handleGuardar = async () => {
     setGuardando(true)
@@ -53,8 +76,16 @@ export default function ConstructorDocumentosPage() {
         error = err
       }
       if (error) throw error
+
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user?.id,
+          accion: 'UPDATE / PLANTILLA DOCUMENTO',
+          tabla: 'documentos_plantillas',
+          detalles: `Modificó la plantilla de documento "${nombrePlantilla}".`
+      }])
       toast.success("Plantilla guardada correctamente")
-    } catch (err: any) { toast.error("Error: " + err.message) } 
+    } catch (err: any) { toast.error("Error al guardar la plantilla") } 
     finally { setGuardando(false) }
   }
 
@@ -125,14 +156,22 @@ export default function ConstructorDocumentosPage() {
         const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('documentos_imagenes').upload(fileName, file);
         if (uploadError) throw uploadError;
-        const { data: { publicUrl } } = supabase.storage.from('documentos_imagenes').getPublicUrl(fileName);
+        
+        const { data: signedUrlData } = await supabase.storage.from('documentos_imagenes').createSignedUrl(fileName, 3600);
         
         if (filaId !== undefined && slotIndex !== undefined) {
-          actualizarBloqueInterno(filaId, slotIndex, 'contenido', publicUrl);
+          setBloques(prev => prev.map(b => {
+            if (b.id === filaId) {
+              const nuevosSlots = [...(b.slots || [])];
+              nuevosSlots[slotIndex] = { ...nuevosSlots[slotIndex], contenido: fileName, signedUrl: signedUrlData?.signedUrl };
+              return { ...b, slots: nuevosSlots };
+            }
+            return b;
+          }));
         } else {
-          actualizarBloque(bloqueId, 'contenido', publicUrl);
+          setBloques(prev => prev.map(b => b.id === bloqueId ? { ...b, contenido: fileName, signedUrl: signedUrlData?.signedUrl } : b));
         }
-    } catch (error: any) { toast.error('Error al subir: ' + error.message); } 
+    } catch (error: any) { toast.error('Error al subir la imagen'); } 
     finally { setSubiendoImagen(null); }
   };
 
@@ -279,7 +318,7 @@ function RenderBloque({ bloque, modoVistaPrevia, onUpdate, onUpload, subiendoIma
       {/* MODIFICADO: TEXTO PARRAFO CON WHITESPACE-PRE-LINE */}
       {bloque.tipo === 'texto' && (
         modoVistaPrevia ? (
-          <p className="text-slate-600 text-sm leading-relaxed text-justify whitespace-pre-line">{bloque.contenido}</p>
+          <div className="text-slate-600 text-sm leading-relaxed text-justify whitespace-pre-line" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bloque.contenido) }} />
         ) : (
           <textarea 
             className="w-full min-h-[120px] text-sm text-slate-500 bg-slate-50/50 p-4 rounded-2xl outline-none resize-y" 
@@ -338,7 +377,7 @@ function RenderBloque({ bloque, modoVistaPrevia, onUpdate, onUpload, subiendoIma
                   <div className="flex flex-col items-center gap-2 py-4"><Loader2 className="animate-spin text-blue-500" size={24} /><p className="text-[8px] font-black uppercase text-slate-400">Subiendo...</p></div>
               ) : bloque.contenido ? (
                   <div className="relative">
-                      <img src={bloque.contenido} className="max-h-[200px] rounded-xl shadow-md" alt="Preview" />
+                      <img src={bloque.signedUrl || bloque.contenido} className="max-h-[200px] rounded-xl shadow-md" alt="Preview" />
                       {!modoVistaPrevia && <button onClick={() => onUpdate('contenido', '')} className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg"><X size={12}/></button>}
                   </div>
               ) : (

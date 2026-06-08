@@ -161,7 +161,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
       {/* ========================================================================= */}
       {/* HEADER TIPO DENTALINK (MODIFICADO SIN ASIDE IZQUIERDO)                    */}
       {/* ========================================================================= */}
-      <header className="bg-white sticky top-0 z-[100] border-b border-slate-200 shadow-sm print:hidden flex flex-col">
+      <header className="bg-white sticky top-0 z-40 border-b border-slate-200 shadow-sm print:hidden flex flex-col">
         
         {/* PARTE 1: INFORMACIÓN DEL PACIENTE, AGREGADOS Y ANTECEDENTES */}
         <div className="px-6 py-4 max-w-[95%] mx-auto w-full flex flex-col xl:flex-row gap-6 justify-between items-start xl:items-center">
@@ -287,7 +287,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
         {/* ÁREA DE CONTENIDO DINÁMICO */}
         <div className="flex flex-col gap-6 print:block print:w-full text-left">
           {esFicha && (
-            <nav className="bg-white/70 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 flex items-center gap-1 overflow-x-auto no-scrollbar shadow-sm sticky top-[130px] z-50 print:hidden text-left">
+            <nav className="bg-white/70 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 flex items-center gap-1 overflow-x-auto no-scrollbar shadow-sm sticky top-[130px] z-30 print:hidden text-left">
               <SubTabLink href={`/pacientes/${id}`} active={pathname === `/pacientes/${id}`} label="Resumen" icon={<History size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/evoluciones`} active={pathname.includes('/evoluciones')} label="Evoluciones" icon={<Activity size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/antecedentes`} active={pathname.includes('/antecedentes')} label="Ant. Médicos" icon={<AlertCircle size={14}/>} />

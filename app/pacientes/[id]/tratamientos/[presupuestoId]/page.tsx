@@ -148,6 +148,7 @@ export default function DetalleTratamientoPage() {
   const [avanceEvolucion, setAvanceEvolucion] = useState(0);
   const [notaClinica, setNotaClinica] = useState('');
   const [guardandoEvolucion, setGuardandoEvolucion] = useState(false)
+  const [modalConfirmarPrestacion, setModalConfirmarPrestacion] = useState<{abierto: boolean, prestacion: any}>({abierto: false, prestacion: null});
 
   const [modalIcono, setModalIcono] = useState<{abierto: boolean, prestacion: any, autoAdd?: boolean}>({
     abierto: false, prestacion: null, autoAdd: false
@@ -255,16 +256,39 @@ export default function DetalleTratamientoPage() {
     try {
       const { data: pres } = await supabase.from('presupuestos').select('*, profesionales:especialista_id (nombre, apellido)').eq('id', idURL).maybeSingle();
       if (pres) {
-        if (pres.odontograma_estado) setOdontogramaEstado(typeof pres.odontograma_estado === 'string' ? JSON.parse(pres.odontograma_estado) : pres.odontograma_estado);
         if (pres.paciente_id) {
             setPacienteId(pres.paciente_id);
             const { data: pac } = await supabase.from('pacientes').select('rut, nombre, apellido, prevision, saldo_a_favor').eq('id', pres.paciente_id).single();
             setPacienteInfo(pac);
 
+            const { data: odontoMaster } = await supabase.from('odontogramas').select('dentadura').eq('paciente_id', pres.paciente_id).maybeSingle();
+            if (odontoMaster?.dentadura) {
+                setOdontogramaEstado(typeof odontoMaster.dentadura === 'string' ? JSON.parse(odontoMaster.dentadura) : odontoMaster.dentadura);
+            } else if (pres.odontograma_estado) { 
+                setOdontogramaEstado(typeof pres.odontograma_estado === 'string' ? JSON.parse(pres.odontograma_estado) : pres.odontograma_estado);
+            }
+
             const hoyIso = new Date().toISOString();
             const { data: cits } = await supabase.from('citas').select('id, inicio, motivo').eq('paciente_id', pres.paciente_id).gte('inicio', hoyIso).order('inicio', { ascending: true }).limit(3);
             setCitasRelacionadas(cits || []);
         }
+
+        // 🔥 CARGA LAS FASES/SECCIONES GUARDADAS EN EL PRESUPUESTO 🔥
+        if (pres.secciones) {
+            let seccionesGuardadas: string[] = [];
+            if (Array.isArray(pres.secciones)) { // Soporte para formato de array nativo (text[] o jsonb)
+                seccionesGuardadas = pres.secciones;
+            } else if (typeof pres.secciones === 'string') { // Soporte para formato de texto (JSON string)
+                try {
+                    const parsed = JSON.parse(pres.secciones);
+                    if (Array.isArray(parsed)) seccionesGuardadas = parsed;
+                } catch (e) { /* Ignorar si no es un JSON válido */ }
+            }
+            if (seccionesGuardadas.length > 0) {
+                setListaSecciones(prev => Array.from(new Set([...prev, ...seccionesGuardadas])).sort());
+            }
+        }
+
         setPresupuestoData({ ...pres, isAprobado: pres.aprobado || Number(pres.total_abonado || 0) > 0 });
       }
 
@@ -507,11 +531,29 @@ export default function DetalleTratamientoPage() {
     if (!error) { setPresupuestoData({ ...presupuestoData, isAprobado: true }); toast.success("Plan de tratamiento aprobado"); }
   }
 
-  const handleCrearSeccion = () => {
+  const handleCrearSeccion = async () => {
     if(!nuevaSeccionNombre.trim()) return toast.error("El nombre de la sección no puede estar vacío");
     const nombre = nuevaSeccionNombre.trim();
-    if(!listaSecciones.includes(nombre)) setListaSecciones(prev => [...prev, nombre].sort((a, b) => a.localeCompare(b)));
-    setSeccionInput(nombre); setModalNuevaSeccion(false); setNuevaSeccionNombre(''); toast.success("Nueva sección agregada a la lista");
+    
+    const nuevaLista = Array.from(new Set([...listaSecciones, nombre])).sort();
+
+    // Actualización optimista de la UI
+    if(!listaSecciones.includes(nombre)) {
+      setListaSecciones(nuevaLista);
+    }
+    setSeccionInput(nombre); 
+    setModalNuevaSeccion(false); 
+    setNuevaSeccionNombre('');
+
+    // Guardado en la base de datos (como string JSON para máxima compatibilidad con columnas de tipo 'text')
+    const { error } = await supabase.from('presupuestos').update({ secciones: JSON.stringify(nuevaLista) }).eq('id', idURL);
+
+    if (error) {
+      toast.error("Error al guardar la nueva fase. Intenta de nuevo.");
+      setListaSecciones(listaSecciones); // Revertir si falla
+    } else {
+      toast.success("Nueva fase clínica creada y guardada.");
+    }
   }
 
   const abrirPanelAgregar = (dientePreseleccionado: number | null = null, cara: string = '', zona: string = '') => {
@@ -583,7 +625,7 @@ export default function DetalleTratamientoPage() {
     setOdontogramaEstado(nuevoEstado);
     setMenuContextual(null);
 
-    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
+    const { error } = await supabase.from('odontogramas').upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' });
     if (!error) { 
         toast.success(esMulti ? "Hallazgo aplicado a la selección" : "Hallazgo registrado"); 
         if(esMulti) setDientesSeleccionados([]); 
@@ -628,7 +670,7 @@ export default function DetalleTratamientoPage() {
     setMenuContextual(null);
     
     // Guardado en Base de Datos
-    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
+    const { error } = await supabase.from('odontogramas').upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' });
     if (!error) { 
         toast.success(`Cara ${menuContextual.cara} actualizada a ${tipo}`); 
     } else {
@@ -643,7 +685,7 @@ export default function DetalleTratamientoPage() {
     const nuevosHallazgos = odontogramaEstado[dId].hallazgos.filter((h: string) => h !== hallazgoNombre);
     const nuevoEstado = { ...odontogramaEstado };
     if (nuevosHallazgos.length === 0) delete nuevoEstado[dId]; else nuevoEstado[dId] = { hallazgos: nuevosHallazgos };
-    const { error } = await supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
+    const { error } = await supabase.from('odontogramas').upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' });
     if (!error) { setOdontogramaEstado(nuevoEstado); toast.info("Eliminado"); }
   };
 
@@ -746,6 +788,17 @@ export default function DetalleTratamientoPage() {
         if (item.presupuesto_id) supabase.from('presupuesto_items').update(updatePayload).eq('id', id).then();
         else supabase.from('temp_items').update(updatePayload).eq('id', id).then();
     }
+
+    if (dcto > 0) {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioLogueado?.id,
+        accion: 'UPDATE / DESCUENTO',
+        tabla: 'presupuesto_items',
+        detalles: `Aplicó ${dcto}% de descuento a "${item.display_nombre}" (ID: ${item.id}). Precio original: $${precioBase.toLocaleString('es-CL')}, precio final: $${nuevoPactado.toLocaleString('es-CL')}.`
+      }]);
+    }
+
+
 
     setAcciones(prev => prev.map(a => a.tempId === tempId ? {
         ...a, 
@@ -999,6 +1052,18 @@ export default function DetalleTratamientoPage() {
       }]);
       if (evoError) throw evoError;
 
+      const nombresPrestaciones = acciones
+        .filter(a => itemIds.includes(a.id))
+        .map(a => a.display_nombre)
+        .join(', ');
+
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioLogueado?.id,
+        accion: 'UPDATE / EVOLUCIÓN',
+        tabla: 'presupuesto_items, evoluciones',
+        detalles: `Evolucionó ${itemIds.length} prestación(es) (${nombresPrestaciones}) al ${avance}% para el paciente ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}. Nota: "${notaClinica.trim()}"`
+      }]);
+
       for (const itemId of itemIds) {
         const item = acciones.find(a => a.id === itemId);
         if (!item) continue;
@@ -1147,7 +1212,9 @@ export default function DetalleTratamientoPage() {
 
   const totalPorSeccion = (seccion: string) => { return acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto).reduce((acc, curr) => acc + curr.display_pactado, 0); }
 
-  const seccionesVisibles = listaSecciones.filter(sec => acciones.some(a => a.seccion_nombre === sec && !a.es_oculto));
+  // Se corrige la lógica para que muestre todas las secciones, incluidas las vacías recién creadas.
+  // Antes, solo se mostraban secciones que ya contenían al menos un tratamiento.
+  const seccionesVisibles = listaSecciones;
 
   if (cargando) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
@@ -1259,7 +1326,7 @@ export default function DetalleTratamientoPage() {
       {/* ======================================================= */}
       {/* CONTENIDO PRINCIPAL (ODONTOGRAMA Y TABLAS) */}
       {/* ======================================================= */}
-      <div className="flex-1 flex flex-col gap-6 max-w-full overflow-hidden">
+      <div className="flex-1 flex flex-col gap-6 max-w-full">
         
         <div className="flex justify-between items-center print:hidden px-2">
           <div className="flex items-center gap-2">
@@ -1297,39 +1364,40 @@ export default function DetalleTratamientoPage() {
                   <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Leyenda</span>
               </button>
           </div>
+          <div className="w-full overflow-x-auto pb-4">
+            <div className="flex justify-center gap-5 mb-8 bg-slate-50 py-2 px-6 rounded-full border border-slate-200 shadow-sm min-w-max mx-auto">
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Realizado / Preexistencia</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pendiente</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-900 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Lesión</span></div>
+            </div>
 
-          <div className="flex justify-center gap-5 mb-8 bg-slate-50 py-2 px-6 rounded-full border border-slate-200 shadow-sm">
-             <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Realizado / Preexistencia</span></div>
-             <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pendiente</span></div>
-             <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-900 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Lesión</span></div>
-          </div>
+            <div className="flex flex-col items-center gap-6 min-w-max">
+                {/* ARCADA SUPERIOR */}
+                <div className="flex gap-4">
+                  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
+                    {(!vistaTemporal ? c1 : t1).map(id => (
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                    ))}
+                  </div>
+                  <div className="flex gap-0.5">
+                    {(!vistaTemporal ? c2 : t2).map(id => (
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                    ))}
+                  </div>
+                </div>
 
-          <div className="flex flex-col items-center gap-6 min-w-max">
-              {/* ARCADA SUPERIOR */}
-              <div className="flex gap-4">
-                <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
-                  {(!vistaTemporal ? c1 : t1).map(id => (
-                    <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
-                  ))}
-                </div>
-                <div className="flex gap-0.5">
-                  {(!vistaTemporal ? c2 : t2).map(id => (
-                    <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
-                  ))}
-                </div>
-              </div>
-
-              {/* ARCADA INFERIOR (invertida) */}
-              <div className="flex gap-4 mt-8">
-                <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
-                  {(!vistaTemporal ? c3 : t3).map(id => (
-                    <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
-                  ))}
-                </div>
-                <div className="flex gap-0.5">
-                  {(!vistaTemporal ? c4 : t4).map(id => (
-                    <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
-                  ))}
+                {/* ARCADA INFERIOR (invertida) */}
+                <div className="flex gap-4 mt-8">
+                  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
+                    {(!vistaTemporal ? c3 : t3).map(id => (
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                    ))}
+                  </div>
+                  <div className="flex gap-0.5">
+                    {(!vistaTemporal ? c4 : t4).map(id => (
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                    ))}
+                  </div>
                 </div>
               </div>
           </div>
@@ -1372,7 +1440,7 @@ export default function DetalleTratamientoPage() {
           
           <AnimatePresence>
               {(dientesSeleccionados.length > 1 || (dientesSeleccionados.length === 1 && !panelAgregarAbierto)) && (
-                  <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-3xl shadow-2xl z-[99999] flex items-center gap-4" data-html2canvas-ignore="true">
+                  <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-3xl shadow-2xl z-40 flex items-center gap-4" data-html2canvas-ignore="true">
                       <div className="px-4 text-white">
                           <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Seleccionados</p>
                           <p className="font-bold">{dientesSeleccionados.length} piezas</p>
@@ -1411,32 +1479,27 @@ export default function DetalleTratamientoPage() {
           {/* MENÚ CONTEXTUAL ABSOLUTO */}
           <AnimatePresence>
             {menuContextual && (
-              <div style={{ position: 'absolute', top: menuContextual.y + 10, left: menuContextual.lado === 'derecha' ? menuContextual.x + 20 : menuContextual.x - (vistaMenu === 'principal' ? 220 : 490), zIndex: 999 }}>
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className={`bg-white border shadow-2xl rounded-[2rem] p-2 flex overflow-hidden ${menuContextual.lado === 'derecha' ? 'flex-row' : 'flex-row-reverse'}`} onClick={(e) => e.stopPropagation()}>
+              <div style={{ position: 'absolute', top: menuContextual.y + 10, left: menuContextual.lado === 'derecha' ? menuContextual.x + 20 : menuContextual.x - 220, zIndex: 100 }}>
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="bg-white border shadow-2xl rounded-[2rem] p-2 w-[220px]" onClick={(e) => e.stopPropagation()}>
                   
                   {vistaMenu === 'principal' ? (
                       <div className="w-[220px] shrink-0 p-3 space-y-1 text-left">
                         <p className="px-3 py-2 text-[10px] font-black uppercase text-blue-600 border-b border-slate-100 mb-2 italic text-center">
                           {menuContextual.zona || (menuContextual.cara ? `Pieza ${menuContextual.diente} (${menuContextual.cara})` : `Pieza ${menuContextual.diente}`)}
                         </p>
-                        
                         <button onClick={() => setVistaMenu('preexistencias')} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all group hover:bg-blue-50 text-left font-black uppercase text-[9px] text-slate-700">
                           <span>Agregar Preexistencia</span><ChevronRight size={14}/>
                         </button>
                         <button onClick={() => setVistaMenu('lesiones')} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all group hover:bg-red-50 text-left font-black uppercase text-[9px] text-slate-700">
                           <span>Definir Lesión</span><ChevronRight size={14}/>
                         </button>
-                        
                         <div className="h-px bg-slate-100 my-2 mx-2"></div>
-                        
                         <button onClick={() => { abrirPanelAgregar(menuContextual.diente, menuContextual.cara, menuContextual.zona); setMenuContextual(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 rounded-xl transition-all text-left text-slate-600 font-black uppercase text-[9px]">
                           <Settings size={14}/> Agregar Prestación
                         </button>
-                        
                         <button onClick={() => { setVerInfoElemento(menuContextual.diente || menuContextual.zona!); setMenuContextual(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 rounded-xl transition-all text-left text-slate-600 font-black uppercase text-[9px]">
                           <Info size={14} className="text-blue-500"/> Ver Información
                         </button>
-
                         {!menuContextual.cara && (
                             <button onClick={() => aplicarHallazgo('Ausente')} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 rounded-xl transition-all text-left text-slate-600 font-black uppercase text-[9px]">
                               <EyeOff size={14} className="text-slate-400"/> Marcar Ausente
@@ -1447,24 +1510,23 @@ export default function DetalleTratamientoPage() {
                         </button>
                       </div>
                   ) : (
-                      <div className="w-[490px] p-2 flex flex-col">
+                      <div className="p-2 flex flex-col">
                         <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2 px-2 pt-2">
                           <p className="text-[9px] font-black uppercase text-slate-400 italic">{vistaMenu}</p>
                           <button onClick={() => setVistaMenu('principal')} className="bg-slate-100 text-slate-600 text-[8px] px-3 py-1 rounded-full font-black uppercase hover:bg-slate-200">Volver</button>
                         </div>
-                        <div className="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+                        <div className="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                           {(vistaMenu === 'preexistencias' ? PREEXISTENCIAS_LISTA : LESIONES_LISTA).map((op) => (
-                            <button key={op} onClick={() => aplicarHallazgo(op)} className="flex flex-col items-center justify-center p-3 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 rounded-xl border border-transparent transition-all group">
-                              <div className="w-8 h-10 mb-1 group-hover:scale-110 transition-transform">
-                                 <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={op} colorOverride="#2563eb" /></svg>
+                            <button key={op} onClick={() => aplicarHallazgo(op)} className="flex items-center gap-3 w-full p-2 hover:bg-blue-50 rounded-lg text-left transition-colors">
+                              <div className="w-6 h-6 shrink-0">
+                                 <svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={op} /></svg>
                               </div>
-                              <span className="text-[7px] font-black uppercase text-slate-500 group-hover:text-blue-600 text-center leading-tight">{op}</span>
+                              <span className="text-[9px] font-black uppercase text-slate-600">{op}</span>
                             </button>
                           ))}
                         </div>
                       </div>
                   )}
-
                 </motion.div>
               </div>
             )}
@@ -1643,7 +1705,7 @@ export default function DetalleTratamientoPage() {
       {/* 🔥 MODAL DE AJUSTES CLÍNICOS (Descuento y Laboratorio) 🔥 */}
       <AnimatePresence>
         {modalEditarItem.abierto && (
-          <div className="fixed inset-0 z-[999999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                 <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Ajustes Clínicos</h3>
@@ -1721,7 +1783,7 @@ export default function DetalleTratamientoPage() {
       {/* PANEL UNIVERSAL AGREGAR PRESTACIÓN Y PACKS */}
       <AnimatePresence>
         {panelAgregarAbierto && (
-          <motion.aside initial={{ x: -450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -450, opacity: 0 }} className="fixed top-[130px] left-0 h-[calc(100vh-130px)] w-[400px] bg-white shadow-[20px_0_50px_rgba(0,0,0,0.1)] z-[9999] flex flex-col border-r border-slate-100 overflow-hidden text-left">
+          <motion.aside initial={{ x: -550, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -550, opacity: 0 }} className="fixed top-0 left-0 h-screen w-[500px] bg-white shadow-[20px_0_50px_rgba(0,0,0,0.1)] z-50 flex flex-col border-r border-slate-100 overflow-hidden text-left">
             
             <div className="flex justify-between items-center p-4 bg-slate-50 border-b border-slate-200 shrink-0">
                {zonaInput ? (
@@ -1730,7 +1792,7 @@ export default function DetalleTratamientoPage() {
                <button onClick={() => { setPanelAgregarAbierto(false); setDientesSeleccionados([]); }} className="w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all text-slate-500 shadow-sm"><X size={16}/></button>
             </div>
 
-            <div className="p-5 space-y-4 border-b border-slate-100 bg-white shrink-0 shadow-sm z-10">
+            <div className="p-6 space-y-4 border-b border-slate-100 bg-white shrink-0 shadow-sm z-10">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-800 ml-1">Fase / Sección</label>
@@ -1808,7 +1870,7 @@ export default function DetalleTratamientoPage() {
                 </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto px-4 py-4 bg-slate-50 space-y-3 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-6 py-4 bg-slate-50 space-y-3 custom-scrollbar">
                 {/* VISTA PRESTACIONES */}
                 {tabPanel === 'prestaciones' && Object.keys(seccionesPrests).sort((a,b)=>a.localeCompare(b)).map(cat => {
                     const filtradas = seccionesPrests[cat].filter((p:any) => 
@@ -1840,10 +1902,13 @@ export default function DetalleTratamientoPage() {
                                                   <RefreshCcw size={16} />
                                                   <span className="text-[6px] font-black uppercase mt-0.5 tracking-widest">Editar</span>
                                                </div>
-                                            </button>
-                                            <button onClick={() => handleSeleccionarTratamiento(p)} className="flex-1 text-left py-3 px-3 flex justify-between items-center h-full">
-                                                <span className="text-xs font-black uppercase text-slate-800 group-hover:text-blue-700 leading-snug">{p.display_nombre}</span>
-                                                <Plus size={18} className="shrink-0 text-slate-300 group-hover:text-blue-600"/>
+                                             </button>
+                                             <button onClick={() => {
+                                                 if (!profesionalSeleccionado) return toast.error("Seleccione un dentista responsable primero.");
+                                                 setModalConfirmarPrestacion({abierto: true, prestacion: p});
+                                             }} className="flex-1 text-left py-3 px-3 flex justify-between items-center h-full">
+                                                <span className="text-sm font-bold text-slate-800 group-hover:text-blue-700 leading-snug capitalize">{p.display_nombre.toLowerCase()}</span>
+                                                <Plus size={20} className="shrink-0 text-slate-300 group-hover:text-blue-600"/>
                                             </button>
                                         </div>
                                     ))}
@@ -1896,10 +1961,53 @@ export default function DetalleTratamientoPage() {
         )}
       </AnimatePresence>
 
+      {/* MODAL PARA CONFIRMAR SECCIÓN DE PRESTACIÓN */}
+      <AnimatePresence>
+        {modalConfirmarPrestacion.abierto && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                  <div className="flex items-center gap-3">
+                    <Plus size={20} />
+                    <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar Prestación</h3>
+                  </div>
+                  <button onClick={() => setModalConfirmarPrestacion({abierto: false, prestacion: null})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                </div>
+                
+                <div className="p-8 space-y-6">
+                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prestación</p>
+                      <p className="text-sm font-bold text-slate-800">{modalConfirmarPrestacion.prestacion?.display_nombre}</p>
+                   </div>
+                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aplicar en</p>
+                      <p className="text-sm font-bold text-slate-800">
+                        {zonaInput ? `Zona: ${zonaInput}` : `Pieza(s): ${dienteInput}`}
+                        {caraInput && `, Cara(s): ${caraInput}`}
+                      </p>
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block mb-2">Guardar en Fase Clínica</label>
+                      <select className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none focus:ring-2 ring-blue-500/20 shadow-inner uppercase" value={seccionInput} onChange={(e) => setSeccionInput(e.target.value)}>
+                        {listaSecciones.map(sec => <option key={sec} value={sec}>{sec}</option>)}
+                      </select>
+                   </div>
+                   <button onClick={() => {
+                       handleSeleccionarTratamiento(modalConfirmarPrestacion.prestacion);
+                       setModalConfirmarPrestacion({abierto: false, prestacion: null});
+                     }} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3">
+                     <Plus size={18} /> Agregar al Plan
+                   </button>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* 🔥 MODAL PARA APLICAR EL PACK (CON DESCUENTOS Y LAB INDIVIDUAL) 🔥 */}
       <AnimatePresence>
          {modalPack.abierto && modalPack.pack && (
-            <div className="fixed inset-0 z-[999999] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
                <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                   <div className="p-8 bg-emerald-600 text-white flex justify-between items-center shrink-0">
                      <div className="flex items-center gap-4">
@@ -2007,7 +2115,7 @@ export default function DetalleTratamientoPage() {
       {/* MODAL DE EVOLUCIÓN */}
       <AnimatePresence>
         {modalEvolucionAbierto && (
-          <div className="fixed inset-0 z-[99999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                <div className="bg-slate-900 p-8 text-white flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-4">
@@ -2095,10 +2203,44 @@ export default function DetalleTratamientoPage() {
         )}
       </AnimatePresence>
 
+      {/* MODAL PARA CREAR NUEVA SECCIÓN/FASE */}
+      <AnimatePresence>
+        {modalNuevaSeccion && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                  <div className="flex items-center gap-3">
+                    <Layers size={20} />
+                    <h3 className="text-xl font-black uppercase italic tracking-tighter">Nueva Fase Clínica</h3>
+                  </div>
+                  <button onClick={() => setModalNuevaSeccion(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                </div>
+                
+                <div className="p-8 space-y-6">
+                   <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block mb-2">Nombre de la Fase</label>
+                      <input 
+                        autoFocus
+                        placeholder="Ej: Fase de Rehabilitación"
+                        className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none focus:ring-2 ring-blue-500/20 shadow-inner uppercase"
+                        value={nuevaSeccionNombre}
+                        onChange={(e) => setNuevaSeccionNombre(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleCrearSeccion()}
+                      />
+                   </div>
+                   <button onClick={handleCrearSeccion} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3">
+                     <Plus size={18} /> Crear Fase
+                   </button>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* PANEL DE INFORMACIÓN DEL DIENTE/ZONA (MODAL LATERAL DERECHO) */}
       <AnimatePresence>
         {verInfoElemento && (
-          <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[380px] bg-white shadow-2xl z-[1000] border-l border-slate-100 flex flex-col overflow-hidden">
+          <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[380px] bg-white shadow-2xl z-50 border-l border-slate-100 flex flex-col overflow-hidden">
             <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
               <h3 className="font-black text-lg uppercase italic tracking-tighter">Detalles Pieza {verInfoElemento}</h3>
               <button onClick={() => setVerInfoElemento(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
@@ -2132,12 +2274,19 @@ export default function DetalleTratamientoPage() {
                             <div className="w-8 h-8"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={val as string} /></svg></div>
                             <span className="text-xs font-black uppercase text-slate-700">{val} (Cara {cara})</span>
                           </div>
-                          <button onClick={() => {
-                                let nuevoEstado = { ...odontogramaEstado };
-                                delete nuevoEstado[verInfoElemento.toString()].caras[cara];
-                                supabase.from('presupuestos').update({ odontograma_estado: nuevoEstado }).eq('id', idURL);
-                                setOdontogramaEstado(nuevoEstado);
-                            }} className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-all p-2 hover:bg-slate-50 rounded-lg">
+                          <button onClick={async () => {
+                                guardarHistorial();
+                                const dId = verInfoElemento.toString();
+                                let nuevoEstado = JSON.parse(JSON.stringify(odontogramaEstado));
+                                if (nuevoEstado[dId] && nuevoEstado[dId].caras) {
+                                  delete nuevoEstado[dId].caras[cara];
+                                }
+                                const { error } = await supabase.from('odontogramas').upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' });
+                                if (!error) {
+                                    setOdontogramaEstado(nuevoEstado);
+                                    toast.success("Hallazgo de cara eliminado.");
+                                } else { toast.error("Error al eliminar el hallazgo."); }
+                            }} className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-all p-2 hover:bg-slate-50 rounded-lg" title="Eliminar hallazgo de esta cara">
                             <Trash2 size={14}/>
                           </button>
                         </div>
@@ -2219,7 +2368,7 @@ export default function DetalleTratamientoPage() {
       {/* MODAL PARA CAMBIAR ICONO DE PRESTACIÓN */}
       <AnimatePresence>
         {modalIcono.abierto && (
-          <div className="fixed inset-0 z-[9999999] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 pt-32">
+          <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 pt-32">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col max-h-[70vh]">
                 <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <h3 className="text-lg font-black uppercase italic tracking-tighter">Asignar Logo a Prestación</h3>
@@ -2263,7 +2412,7 @@ export default function DetalleTratamientoPage() {
       {/* 🔥 BARRA FLOTANTE PARA EVOLUCIÓN MÚLTIPLE 🔥 */}
       <AnimatePresence>
         {modoSeleccionMultiple && itemsAEvolucionar.length > 0 && (
-          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-[2rem] shadow-2xl z-[99999] flex items-center gap-4">
+          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-[2rem] shadow-2xl z-40 flex items-center gap-4">
               <div className="px-5 text-white border-r border-white/10 pr-6 text-left">
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Seleccionados</p>
                   <p className="font-bold">{itemsAEvolucionar.length} tratamientos</p>
@@ -2427,7 +2576,7 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
   }
 
   return (
-    <div className={`flex flex-col items-center gap-1.5 group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''}`}>
+    <div className={`flex flex-col items-center gap-1.5 group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''} ${isAusenteManual ? 'opacity-40' : ''}`}>
       <div onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu} className="relative w-12 h-14 cursor-pointer transition-all duration-300 drop-shadow-sm hover:scale-105">
         <svg viewBox="-10 -10 120 140" className={`w-full h-full overflow-visible ${invert ? 'rotate-180' : ''}`}>
           <defs>
@@ -2455,7 +2604,7 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
       </div>
       <span className="text-[10px] font-black text-slate-400 italic group-hover:text-blue-500 cursor-pointer" onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu}>{id}</span>
       
-      <div>
+      <div className={isAusente ? 'pointer-events-none' : ''}>
          <CarasDentales id={id} estado={estadoDiente} itemsDiente={itemsDiente} onFaceClick={onFaceClick} abrirPanelAgregar={abrirPanelAgregar} invert={invert} />
       </div>
     </div>

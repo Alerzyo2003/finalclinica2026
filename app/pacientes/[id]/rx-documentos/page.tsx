@@ -46,7 +46,18 @@ export default function DocumentosPage() {
         .order('fecha_subida', { ascending: false })
       
       if (error) throw error
-      if (data) setDocumentos(data)
+      if (data) {
+        const docsConUrls = await Promise.all(data.map(async (doc) => {
+            if (doc.url_archivo && !doc.url_archivo.startsWith('http')) {
+                const { data: signedUrlData } = await supabase.storage
+                    .from('pacientes_docs')
+                    .createSignedUrl(doc.url_archivo, 3600); // 1 hora
+                return { ...doc, signedUrl: signedUrlData?.signedUrl };
+            }
+            return { ...doc, signedUrl: doc.url_archivo }; // Para URLs públicas antiguas
+        }));
+        setDocumentos(docsConUrls);
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -65,20 +76,35 @@ export default function DocumentosPage() {
       if (authError || !user) throw new Error("No hay sesión activa")
 
       let nuevosDocs = [];
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      const maxSize = 10 * 1024 * 1024; // 10MB
 
       for (const file of files) {
+        // Validar tipo real
+        if (!allowedTypes.includes(file.type)) {
+          toast.error(`El archivo "${file.name}" tiene un tipo no permitido.`);
+          continue; // Saltar este archivo
+        }
+
+        // Validar tamaño
+        if (file.size > maxSize) {
+          toast.error(`El archivo "${file.name}" supera el límite de 10MB.`);
+          continue; // Saltar este archivo
+        }
+
         const fileExt = file.name.split('.').pop()
         const fileName = `${paciente_id}/${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${fileExt}`
         
         const { error: storageError } = await supabase.storage.from('pacientes_docs').upload(fileName, file)
-        if (storageError) continue;
-
-        const { data: { publicUrl } } = supabase.storage.from('pacientes_docs').getPublicUrl(fileName)
+        if (storageError) {
+          toast.error(`Error al subir "${file.name}".`);
+          continue;
+        }
 
         const { data, error: dbError } = await supabase.from('documentos_pacientes').insert([{
           paciente_id,
           nombre_archivo: file.name,
-          url_archivo: publicUrl,
+          url_archivo: fileName,
           tipo_archivo: file.type,
           titulo: file.name,
           profesional_id: user.id
@@ -88,11 +114,17 @@ export default function DocumentosPage() {
       }
 
       if (nuevosDocs.length > 0) {
-        setDocumentos(prev => [...nuevosDocs, ...prev])
-        toast.success(`Se subieron ${nuevosDocs.length} archivo(s) correctamente`)
+        const nuevosDocsConUrl = await Promise.all(nuevosDocs.map(async (doc) => {
+            const { data: signedUrlData } = await supabase.storage
+                .from('pacientes_docs')
+                .createSignedUrl(doc.url_archivo, 3600);
+            return { ...doc, signedUrl: signedUrlData?.signedUrl };
+        }));
+        setDocumentos(prev => [...nuevosDocsConUrl, ...prev])
+        toast.success(`Se subieron ${nuevosDocs.length} de ${files.length} archivo(s) correctamente`)
       }
     } catch (error: any) {
-      toast.error(error.message)
+      toast.error('Ocurrió un error durante la subida.');
     } finally {
       setSubiendo(false)
       e.target.value = ''
@@ -154,7 +186,7 @@ export default function DocumentosPage() {
       if (!doc) continue;
       try {
         // Usamos fetch para obtener el archivo como un 'blob'
-        const response = await fetch(doc.url_archivo);
+        const response = await fetch(doc.signedUrl);
         if (!response.ok) throw new Error('La respuesta de la red no fue correcta.');
         const blob = await response.blob();
 
@@ -209,7 +241,7 @@ export default function DocumentosPage() {
 
   const guardarNombresMultiples = async () => {
     try {
-       const toastId = toast.loading("Guardando nombres...");
+       const toastId = toast.loading("Guardando nombres...", {id: 'renombrar-toast'});
        const promises = datosRenombrar.map(d => supabase.from('documentos_pacientes').update({titulo: d.titulo}).eq('id', d.id));
        await Promise.all(promises);
        
@@ -217,9 +249,9 @@ export default function DocumentosPage() {
        setModalRenombrarAbierto(false);
        setSeleccionMultiples([]);
        setModoSeleccion(false);
-       toast.success("Títulos actualizados con éxito", { id: toastId });
+       toast.success("Títulos actualizados con éxito", { id: 'renombrar-toast' });
     } catch (err) {
-       toast.error("Error al renombrar los archivos");
+       toast.error("Error al renombrar los archivos", { id: 'renombrar-toast' });
     }
   }
 
@@ -291,7 +323,7 @@ export default function DocumentosPage() {
 
               <div className={`aspect-square bg-slate-50 rounded-[2rem] mb-4 overflow-hidden flex items-center justify-center relative transition-opacity ${modoSeleccion && seleccionMultiples.includes(doc.id) ? 'opacity-70' : ''}`}>
                 {(doc.tipo_archivo || '').includes('image') ? (
-                  <img src={doc.url_archivo} referrerPolicy="no-referrer" className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                  <img src={doc.signedUrl} referrerPolicy="no-referrer" className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                 ) : (
                   <FileText className="text-slate-200" size={40} />
                 )}
@@ -326,7 +358,7 @@ export default function DocumentosPage() {
                         <Download size={16}/> Descargar
                     </button>
                     <button onClick={() => {
-                        setDatosRenombrar(documentos.filter(d => seleccionMultiples.includes(d.id)).map(d => ({id: d.id, titulo: d.titulo || d.nombre_archivo, url: d.url_archivo, tipo: d.tipo_archivo})))
+                        setDatosRenombrar(documentos.filter(d => seleccionMultiples.includes(d.id)).map(d => ({id: d.id, titulo: d.titulo || d.nombre_archivo, url: d.signedUrl, tipo: d.tipo_archivo})))
                         setModalRenombrarAbierto(true)
                     }} className="px-6 py-3.5 bg-blue-600 text-white hover:bg-blue-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
                         <Edit3 size={16}/> Renombrar
@@ -417,14 +449,11 @@ export default function DocumentosPage() {
                   <div className="absolute top-8 right-8 flex gap-3 z-30">
                     <button 
                       onClick={() => {
-                        const link = document.createElement('a');
-                        link.href = seleccionado.url_archivo;
-                        link.download = seleccionado.nombre_archivo || 'documento_clinico'; 
-                        link.target = "_blank";
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        toast.success("Descarga iniciada");
+                        const link = document.createElement('a'); link.href = seleccionado.signedUrl;
+                        link.download = seleccionado.titulo || seleccionado.nombre_archivo || 'documento_clinico';
+                        link.target = '_blank'; link.rel = 'noopener noreferrer';
+                        document.body.appendChild(link); link.click();
+                        document.body.removeChild(link); toast.success("Descarga iniciada");
                       }}
                       className="bg-slate-900 text-white p-3 rounded-2xl hover:bg-blue-600 transition-all shadow-lg"
                       title="Descargar archivo original"
@@ -441,12 +470,12 @@ export default function DocumentosPage() {
                         animate={{ scale: zoom, x: zoom === 1 ? 0 : undefined, y: zoom === 1 ? 0 : undefined }}
                         className={zoom > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}
                       >
-                        <img src={seleccionado.url_archivo} referrerPolicy="no-referrer" className="max-w-full max-h-[85vh] object-contain rounded-sm select-none pointer-events-none shadow-2xl" draggable={false} />
+                        <img src={seleccionado.signedUrl} referrerPolicy="no-referrer" className="max-w-full max-h-[85vh] object-contain rounded-sm select-none pointer-events-none shadow-2xl" draggable={false} />
                       </motion.div>
                     ) : (
                       <div className="flex flex-col items-center gap-6">
                          <FileText size={120} className="text-white/10" />
-                         <a href={seleccionado.url_archivo} target="_blank" rel="noopener noreferrer" className="bg-white text-slate-900 px-10 py-5 rounded-3xl font-black text-xs uppercase shadow-2xl hover:scale-105 transition-transform text-center">Abrir PDF en Nueva Pestaña</a>
+                         <a href={seleccionado.signedUrl} target="_blank" rel="noopener noreferrer" className="bg-white text-slate-900 px-10 py-5 rounded-3xl font-black text-xs uppercase shadow-2xl hover:scale-105 transition-transform text-center">Abrir PDF en Nueva Pestaña</a>
                       </div>
                     )}
                   </div>

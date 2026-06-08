@@ -20,6 +20,7 @@ const nextConfig = {
                    "connect-src 'self' *.supabase.co wss://*.supabase.co; " +
                    // Permite imágenes locales, base64 y de Supabase (fotos de pacientes)
                    "img-src 'self' data: blob: *.supabase.co; " +
+                   "media-src 'self' https://assets.mixkit.co; " +
                    "font-src 'self' data:; " +
                    "object-src 'none'; " +
                    "base-uri 'self'; " +
@@ -46,4 +47,3 @@ const nextConfig = {
 
 
 export default nextConfig;
-

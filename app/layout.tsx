@@ -107,11 +107,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // --- SESIÓN ---
   useEffect(() => {
     const getUserData = async () => {
-      const { data: { session: currentSession } } = await supabase.auth.getSession()
-      setSession(currentSession)
-      if (currentSession) {
-        const { data } = await supabase.from('perfiles').select('*').eq('id', currentSession.user.id).maybeSingle()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        setSession(currentSession)
+        const { data } = await supabase.from('perfiles').select('*').eq('id', user.id).maybeSingle()
         setPerfil(data)
+      } else {
+        setSession(null)
+        setPerfil(null)
       }
     }
     getUserData()
@@ -239,7 +243,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                             <MenuOption href="/administracion/profesionales" label="Personal" icon={<Users size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/especialidades" label="Especialidades" icon={<Stethoscope size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/convenios" label="Convenios" icon={<Building2 size={12}/>} onClick={() => setShowAdminMenu(false)} />
-                            <MenuOption href="/administracion/box" label="Gestión de Boxes" icon={<DoorOpen size={12}/>} onClick={() => setShowAdminMenu(false)} />
+                            <MenuOption href="/administracion/box" label="Gestión de Box" icon={<DoorOpen size={12}/>} onClick={() => setShowAdminMenu(false)} />
                           </div>
 
                           {/* COLUMNA 2: OPERACIONES */}

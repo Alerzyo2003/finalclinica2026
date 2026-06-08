@@ -307,8 +307,19 @@ if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra sel
 
   const anularCitaConflicto = async (citaId: string) => {
     if(!confirm("¿Estás seguro de anular la cita de este paciente?")) return;
-    try {
-      await supabase.from('citas').update({ estado: 'cancelada' }).eq('id', citaId);
+    try {      
+      await supabase.from('citas').update({ estado: 'cancelada', modificado_por: usuarioLogueado }).eq('id', citaId);
+      
+      const citaAnulada = citasConflictivas.find(c => c.id === citaId);
+      if (citaAnulada) {
+          const nombrePaciente = `${citaAnulada.pacientes?.nombre || ''} ${citaAnulada.pacientes?.apellido || ''}`.trim();
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'UPDATE / ANULACIÓN CITA',
+              tabla: 'citas',
+              detalles: `Anuló la cita de ${nombrePaciente} del día ${citaAnulada.inicio.split('T')[0]} (desde Agenda Doctor).`
+          }]);
+      }
       toast.success("Cita anulada correctamente");
       setCitasConflictivas(prev => prev.filter(c => c.id !== citaId));
     } catch(e) { toast.error("No se pudo anular la cita"); }
@@ -329,6 +340,17 @@ if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra sel
         profesional_id: reagendaProps.especialistaId,
         estado: 'reprogramada'
       }).eq('id', citaId);
+
+      const citaConflicto = citasConflictivas.find(c => c.id === citaId);
+      if (citaConflicto) {
+          const nombrePaciente = `${citaConflicto.pacientes?.nombre || ''} ${citaConflicto.pacientes?.apellido || ''}`.trim();
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'UPDATE / REPROGRAMACIÓN CONFLICTO',
+              tabla: 'citas',
+              detalles: `Reprogramó cita en conflicto de ${nombrePaciente} para el ${reagendaProps.fecha} a las ${reagendaProps.hora} (desde Agenda Doctor).`
+          }]);
+      }
 
       toast.success("Cita reagendada con éxito");
       setCitaEnEdicionConflicto(null);
@@ -388,19 +410,42 @@ if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra sel
         if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; }
       }
       const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
-        const [h, m] = horaStr.split(':').map(Number);
-        const finH = h + Math.floor((m + duracionMin) / 60), finM = (m + duracionMin) % 60;
-        return { inicio: `${fechaStr}T${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:00`, fin: `${fechaStr}T${finH.toString().padStart(2,'0')}:${finM.toString().padStart(2,'0')}:00` };
+        const finDate = new Date(new Date(`${fechaStr}T${horaStr}:00`).getTime() + duracionMin * 60000);
+        const finH = finDate.getHours().toString().padStart(2, '0');
+        const finM = finDate.getMinutes().toString().padStart(2, '0');
+        return { inicio: `${fechaStr}T${horaStr}:00`, fin: `${fechaStr}T${finH}:${finM}:00` };
       };
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0]; const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
-        await supabase.from('citas').update({ inicio, fin, profesional_id: filtro.profesional_id, estado: 'reprogramada', motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo, modificado_por: usuarioLogueado }).eq('id', citaEnReprogramacion.id);
+        await supabase.from('citas').update({ 
+          inicio, fin, 
+          profesional_id: filtro.profesional_id, 
+          estado: 'reprogramada', 
+          motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo, 
+          modificado_por: usuarioLogueado 
+        }).eq('id', citaEnReprogramacion.id);
+
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado,
+            accion: 'UPDATE / REPROGRAMACIÓN',
+            tabla: 'citas',
+            detalles: `Reprogramó la cita de ${pNombreFull} para el ${s.fecha} a las ${s.hora} (desde Agenda Doctor).`
+        }]);
+
       } else {
         const nuevasCitas = horasSeleccionadas.map(s => {
           const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
           return { paciente_id: pId, profesional_id: filtro.profesional_id, presupuesto_id: (tratamientoSeleccionadoId && tratamientoSeleccionadoId !== 'MANUAL') ? tratamientoSeleccionadoId : null, inicio, fin, estado: 'programada', motivo: nuevoTratamientoNombre.toUpperCase() || 'CONSULTA', creado_por: usuarioLogueado };
         });
         await supabase.from('citas').insert(nuevasCitas);
+        
+        const detallesCitas = nuevasCitas.map(c => `Cita para ${pNombreFull} el ${c.inicio.split('T')[0]} a las ${c.inicio.split('T')[1].substring(0,5)}`).join('; ');
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado,
+            accion: 'INSERT / CITA',
+            tabla: 'citas',
+            detalles: `Agendó: ${detallesCitas} (desde Agenda Doctor).`
+        }]);
       }
       setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas });
       setMostrarTicket(true); await fetchDatos();

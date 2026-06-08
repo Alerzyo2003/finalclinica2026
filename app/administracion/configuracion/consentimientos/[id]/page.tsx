@@ -7,6 +7,7 @@ import {
   Printer, Loader2, CheckSquare, Square, FileText, Clock
 } from 'lucide-react'
 
+import DOMPurify from 'dompurify'
 import dynamic from 'next/dynamic'
 const ReactQuill = dynamic(() => import('react-quill-new'), { 
   ssr: false,
@@ -148,7 +149,7 @@ export default function DetalleConsentimientoPage() {
           
           {modoVistaPrevia ? (
             <div className="space-y-6">
-              <div className="text-slate-800 text-[13px] leading-[1.8] text-justify quill-preview break-words" dangerouslySetInnerHTML={{ __html: texto }} />
+              <div className="text-slate-800 text-[13px] leading-[1.8] text-justify quill-preview break-words" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(texto) }}
               
               <div className="pt-4 border-t border-slate-100 flex items-center gap-2 text-slate-400 italic">
                 <Clock size={12} />

@@ -523,7 +523,7 @@ function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendient
   let color = "#2563eb"; // Azul base
   if (colorOverride) color = colorOverride;
   else if (isRealizado) color = "#059669"; // Verde
-  else if (isPendiente) color = "#ef4444"; // Rojo
+  else if (isPendiente) color = "#5e75f2"; // Rojo
   else if (isLesion || isMalEstado) color = "#0f172a"; // Negro / Gris muy oscuro
 
   const patternId = `hash-${Math.random().toString(36).substring(2, 9)}`;

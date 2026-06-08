@@ -49,14 +49,20 @@ export async function proxy(request: NextRequest) {
 
   // 3. Protección de administración (Solo ADMIN)
   if (user && pathname.startsWith('/administracion')) {
-    const { data: perfil } = await supabase
-      .from('perfiles')
-      .select('rol')
-      .eq('id', user.id)
-      .single()
+    // Es mejor y más rápido leer el rol desde el JWT (user_metadata) en el middleware
+    // para evitar consultas a la base de datos en el entorno Edge.
+    const userRol = user.user_metadata?.rol;
 
-    if (perfil?.rol !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/', request.url))
+    if (userRol !== 'ADMIN') {
+      const redirectUrl = new URL('/', request.url)
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+      
+      // Preservamos las cookies actualizadas de la sesión
+      response.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+      })
+      
+      return redirectResponse
     }
   }
 

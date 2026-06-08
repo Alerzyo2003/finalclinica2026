@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import DOMPurify from 'isomorphic-dompurify'
 
 export default function DocumentosClinicosPage() {
   const { id: paciente_id } = useParams()
@@ -397,7 +398,7 @@ function RenderDinamico({ bloque, isReadOnly, onUpdate }: any) {
   const inputStyle = "w-full p-4 bg-slate-50 rounded-xl text-[11px] font-black border-2 border-slate-100 outline-none focus:border-blue-500 focus:bg-white transition-all text-left text-slate-900";
   switch (bloque.tipo) {
     case 'titulo': return <input className="text-lg font-black uppercase italic w-full bg-transparent border-none focus:ring-0 text-left text-slate-900" placeholder="SUBTÍTULO..." value={bloque.contenido} onChange={(e) => onUpdate('contenido', e.target.value.toUpperCase())} readOnly={isReadOnly}/>
-    case 'texto': return <textarea className="text-[11px] text-slate-700 w-full border-none focus:ring-0 min-h-[100px] resize-none leading-relaxed text-left text-slate-900" placeholder="CONTENIDO..." value={bloque.contenido} onChange={(e) => onUpdate('contenido', e.target.value)} readOnly={isReadOnly} />
+    case 'texto': return isReadOnly ? <div className="text-[11px] text-slate-700 w-full min-h-[100px] leading-relaxed text-left text-slate-900" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bloque.contenido) }} /> : <textarea className="text-[11px] text-slate-700 w-full border-none focus:ring-0 min-h-[100px] resize-none leading-relaxed text-left text-slate-900" placeholder="CONTENIDO..." value={bloque.contenido} onChange={(e) => onUpdate('contenido', e.target.value)} readOnly={isReadOnly} />
     case 'separador': return <hr className="border-slate-900 border-t-2 my-3" />
     case 'input': return (<div className="space-y-1.5 text-left text-slate-900"><input className="text-[9px] font-black text-blue-600 uppercase bg-transparent border-none p-0 focus:ring-0 text-left" value={bloque.label} onChange={(e) => onUpdate('label', e.target.value.toUpperCase())} readOnly={isReadOnly} /><input className={inputStyle} value={bloque.valor_llenado} onChange={(e) => onUpdate('valor_llenado', e.target.value)} disabled={isReadOnly} /></div>)
     default: return null;

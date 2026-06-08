@@ -80,6 +80,7 @@ export default function AgendaPage() {
   
   // Condición maestra de seguridad visual
   const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA'
+  const puedeVerAgendaCompleta = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA' || userRol === 'DENTISTA';
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +149,7 @@ export default function AgendaPage() {
   const [pacientePago, setPacientePago] = useState<any>(null)
   const [deudasPaciente, setDeudasPaciente] = useState<any[]>([])
   const [cargandoDeudas, setCargandoDeudas] = useState(false)
+  const [cajaActivaId, setCajaActivaId] = useState<string | null>(null);
   const [montoIngresado, setMontoIngresado] = useState<number | ''>('')
   const [metodoPago, setMetodoPago] = useState('tarjeta')
   const [codigoTransaccion, setCodigoTransaccion] = useState('')
@@ -206,7 +208,8 @@ export default function AgendaPage() {
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
          if (perfil) {
             setUserRol(perfil.rol);
-            if (perfil.rol !== 'ADMIN' && perfil.rol !== 'RECEPCIONISTA') {
+            const veAgendaCompleta = perfil.rol === 'ADMIN' || perfil.rol === 'RECEPCIONISTA' || perfil.rol === 'DENTISTA';
+            if (!veAgendaCompleta) {
                setFiltroEspecialista(session.user.id);
             }
          }
@@ -215,6 +218,10 @@ export default function AgendaPage() {
       const { data: pro } = await supabase.from('profesionales').select('*, especialidades(nombre)').eq('activo', true)
       setProfesionales(pro || [])
       
+      // 🔥 OBTENER CAJA ACTIVA 🔥
+      const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
+      setCajaActivaId(cajaActiva?.id || null);
+
       if (pro?.length && filtroEspecialista === 'Todos') {
           setFiltro(prev => ({ ...prev, profesional_id: pro[0].user_id || '' }))
       }
@@ -459,12 +466,44 @@ export default function AgendaPage() {
         profesional_id: nuevoEspecialista, estado: 'reprogramada', modificado_por: usuarioLogueado
       }).eq('id', citaId);
 
+      const citaHuérfana = citasHuerfanas.find(c => c.id === citaId);
+      if (citaHuérfana) {
+          const nombrePaciente = `${citaHuérfana.pacientes?.nombre || ''} ${citaHuérfana.pacientes?.apellido || ''}`.trim();
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'UPDATE / REPROGRAMACIÓN HUÉRFANA',
+              tabla: 'citas',
+              detalles: `Reprogramó cita huérfana de ${nombrePaciente} para el ${nuevaFecha} a las ${nuevaHora}.`
+          }]);
+      }
+
       toast.success("Cita huérfana reagendada");
       setCitaEnEdicion(null);
       setCitasHuerfanas(prev => prev.filter(c => c.id !== citaId));
       if (citasHuerfanas.length === 1) setModalHuerfanasAbierto(false);
       await fetchCitasAgenda();
     } catch(e) { toast.error("Error al reagendar"); } finally { setCargandoAccion(false); }
+  }
+
+  const anularCitaDirecta = async (citaId: string) => {
+    if(!confirm("¿Estás seguro de anular la cita de este paciente?")) return;
+    try {
+      await supabase.from('citas').update({ estado: 'cancelada', modificado_por: usuarioLogueado }).eq('id', citaId);
+      const citaAnulada = citasHuerfanas.find(c => c.id === citaId);
+      if (citaAnulada) {
+          const nombrePaciente = `${citaAnulada.pacientes?.nombre || ''} ${citaAnulada.pacientes?.apellido || ''}`.trim();
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'UPDATE / ANULACIÓN CITA',
+              tabla: 'citas',
+              detalles: `Anuló la cita de ${nombrePaciente} del día ${citaAnulada.inicio.split('T')[0]}.`
+          }]);
+      }
+      toast.success("Cita anulada correctamente");
+      setCitasHuerfanas(prev => prev.filter(c => c.id !== citaId));
+    } catch(e) {
+      toast.error("No se pudo anular la cita");
+    }
   }
   
   async function actualizarEstadoCita(citaId: string, nuevoEstado: string) {
@@ -482,6 +521,15 @@ export default function AgendaPage() {
     const { data: citaActual, error } = await supabase.from('citas').update(updateData).eq('id', citaId).select('*, pacientes(nombre, apellido)').single();
     if (error) return toast.error("Error al actualizar");
     
+    if (citaActual) {
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: usuarioLogueado,
+          accion: `UPDATE / ESTADO CITA`,
+          tabla: 'citas',
+          detalles: `Cambió estado de la cita de ${citaActual.pacientes.nombre} ${citaActual.pacientes.apellido} a "${nuevoEstado.toUpperCase()}".`
+      }]);
+    }
+
     if (nuevoEstado === 'en_espera' && citaActual) {
       const canalNotif = supabase.channel(`notificaciones-${citaActual.profesional_id}`);
       canalNotif.subscribe(async (status) => {
@@ -602,6 +650,15 @@ export default function AgendaPage() {
           const { error } = await supabase.from('bloqueos_agenda').insert([payload]);
           if (error) throw error;
           
+          const profesionalBloqueadoData = profesionales.find(p => p.user_id === profesionalBloqueo);
+          const nombreProfesional = profesionalBloqueadoData ? `${profesionalBloqueadoData.nombre} ${profesionalBloqueadoData.apellido}` : `ID ${profesionalBloqueo}`;
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'INSERT / BLOQUEO AGENDA',
+              tabla: 'bloqueos_agenda',
+              detalles: `Bloqueó agenda para Dr/a. ${nombreProfesional} el día ${fechaBloqueo}. Motivo: ${motivoBloqueo}.`
+          }]);
+
           toast.success("Agenda bloqueada exitosamente");
           setModalBloqueo(false);
           await fetchCitasAgenda();
@@ -718,6 +775,13 @@ export default function AgendaPage() {
             motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo,
             modificado_por: usuarioLogueado
         }).eq('id', citaEnReprogramacion.id);
+
+        await supabase.from('auditoria_clinica').insert([{
+          usuario_id: usuarioLogueado,
+          accion: 'UPDATE / REPROGRAMACIÓN',
+          tabla: 'citas',
+          detalles: `Reprogramó la cita de ${pNombreFull} para el ${s.fecha} a las ${s.hora}.`
+        }]);
       } else {
         const nuevasCitas = horasSeleccionadas.map(s => {
           const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
@@ -732,6 +796,14 @@ export default function AgendaPage() {
           };
         });
         await supabase.from('citas').insert(nuevasCitas);
+
+        const detallesCitas = nuevasCitas.map(c => `Cita para ${pNombreFull} el ${c.inicio.split('T')[0]} a las ${c.inicio.split('T')[1].substring(0,5)}`).join('; ');
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado,
+            accion: 'INSERT / CITA',
+            tabla: 'citas',
+            detalles: `Agendó: ${detallesCitas}`
+        }]);
       }
       setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas });
       setMostrarTicket(true); await fetchCitasAgenda();
@@ -782,6 +854,12 @@ export default function AgendaPage() {
 
   const abrirCaja = async (cita: any) => {
     if (!cita.pacientes || !cita.pacientes.id) return toast.error("Cita no tiene paciente asignado");
+    
+    if (!cajaActivaId) {
+        return toast.error("No se puede cobrar: No hay ninguna caja abierta.", {
+            description: "Pídele a un recepcionista que abra un turno para continuar."
+        });
+    }
     
     setPacientePago(cita.pacientes); 
     setMontoIngresado(''); 
@@ -884,7 +962,8 @@ export default function AgendaPage() {
                 numero_boleta: codigoTransaccion.trim() || 'S/N', 
                 fecha_pago: new Date().toISOString(),
                 item_id: item.id,
-                comentario: JSON.stringify([detalleAbono])
+                comentario: JSON.stringify([detalleAbono]),
+                caja_id: cajaActivaId
             }]);
 
             await supabase.from('presupuesto_items').update({ abonado: Number(item.abonado) + aAbonar }).eq('id', item.id);
@@ -907,7 +986,8 @@ export default function AgendaPage() {
                     numero_referencia: codigoTransaccion.trim() || null, 
                     numero_boleta: codigoTransaccion.trim() || 'S/N',
                     fecha_pago: new Date().toISOString(),
-                    comentario: JSON.stringify(detalleSobrante)
+                    comentario: JSON.stringify(detalleSobrante),
+                    caja_id: cajaActivaId
                 }]);
 
                 nuevoSaldo = saldoAFavor + montoRestante;
@@ -948,14 +1028,14 @@ export default function AgendaPage() {
         )}
       </AnimatePresence>
 
-      <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-8 py-5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 shadow-[0_4px_30px_-10px_rgba(0,0,0,0.05)]">
+      <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-8 py-5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 shadow-[0_4px_30px_-10px_rgba(0,0,0,0.05)]">
         
         <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 w-full xl:w-auto">
           <div className="space-y-1.5 text-left">
             <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Agenda Clínica</h1>
             <div className="flex items-center gap-2 text-slate-500">
                <Stethoscope size={14}/>
-               {puedeVerFinanzas ? (
+               {puedeVerAgendaCompleta ? (
                    <select className="text-[11px] font-bold uppercase bg-transparent outline-none cursor-pointer hover:text-blue-600 transition-colors max-w-[220px]" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
                      <option value="Todos">Todos los especialistas</option>
                      {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
@@ -978,7 +1058,12 @@ export default function AgendaPage() {
               </div>
               
               <div className="flex items-center bg-white rounded-2xl p-1.5 border border-slate-200 shrink-0 shadow-sm">
-                <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate()-(vistaAgenda === 'semana'?7:1))))} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><ChevronLeft size={18}/></button>
+                <button onClick={() => {
+                  const newDate = new Date(selectedDate);
+                  const amount = vistaAgenda === 'semana' ? 7 : 1;
+                  newDate.setDate(newDate.getDate() - amount);
+                  setSelectedDate(newDate);
+                }} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><ChevronLeft size={18}/></button>
                 
                 <div className="relative flex items-center justify-center px-4 cursor-pointer group" onClick={() => { try { dateInputRef.current?.showPicker(); } catch (e) { dateInputRef.current?.focus(); } }}>
                    <CalendarIcon size={16} className="mr-2.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
@@ -986,7 +1071,12 @@ export default function AgendaPage() {
                    <input ref={dateInputRef} type="date" className="sr-only" value={getLocalDateISO(selectedDate)} onChange={(e) => { if(e.target.value) { const [y, m, d] = e.target.value.split('-'); setSelectedDate(new Date(Number(y), Number(m)-1, Number(d))); } }} />
                 </div>
 
-                <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate()+(vistaAgenda === 'semana'?7:1))))} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><ChevronRight size={18}/></button>
+                <button onClick={() => {
+                  const newDate = new Date(selectedDate);
+                  const amount = vistaAgenda === 'semana' ? 7 : 1;
+                  newDate.setDate(newDate.getDate() + amount);
+                  setSelectedDate(newDate);
+                }} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><ChevronRight size={18}/></button>
               </div>
           </div>
         </div>
@@ -1222,7 +1312,7 @@ export default function AgendaPage() {
       {/* MODAL ENVÍO DE PRESUPUESTO WHATSAPP */}
       <AnimatePresence>
         {modalEnvioPresupuesto.abierto && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
                 <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left bg-emerald-50">
                    <div className="flex items-center gap-4 text-left">
@@ -1264,7 +1354,7 @@ export default function AgendaPage() {
       {/* MODAL BLOQUEO RÁPIDO */}
       <AnimatePresence>
         {modalBloqueo && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
                 <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left bg-red-50">
                    <div className="flex items-center gap-4 text-left">
@@ -1325,7 +1415,7 @@ export default function AgendaPage() {
       {/* MODAL DE CAJA (RECAUDACIÓN DE PAGOS) */}
       <AnimatePresence>
         {modalPagoAbierto && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
                 <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left bg-white">
                    <div className="flex items-center gap-4 text-left">
@@ -1436,7 +1526,7 @@ export default function AgendaPage() {
       {/* MODAL CITAS HUÉRFANAS */}
       <AnimatePresence>
         {modalHuerfanasAbierto && (
-          <div className="fixed inset-0 z-[1000] flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
+          <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-4xl max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
               <div className="p-6 md:p-8 border-b border-amber-100 bg-amber-50 flex justify-between items-center shrink-0 text-left">
                 <div className="flex items-center gap-5 text-left">
@@ -1499,7 +1589,7 @@ export default function AgendaPage() {
             }} className="px-4 py-2 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white rounded-xl transition-all flex items-center gap-2 shadow-sm">
               <CalendarClock size={14} /> Reagendar
             </button>
-            <button onClick={async () => { if(confirm("¿Anular cita?")) { await actualizarEstadoCita(cita.id, 'cancelada'); setCitasHuerfanas(prev => prev.filter(c => c.id !== cita.id)); } }} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
+                                <button onClick={() => anularCitaDirecta(cita.id)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
               <Ban size={16} />
             </button>
           </div>
@@ -1608,7 +1698,7 @@ export default function AgendaPage() {
       {/* MODAL DE AGENDAMIENTO / REAGENDAMIENTO */}
       <AnimatePresence>
         {modalAbierto && (
-          <div className="fixed inset-0 z-[1000] flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
+          <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-7xl h-full max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
               <div className="p-6 md:p-8 border-b border-slate-100 bg-white flex justify-between items-center shrink-0 text-left">
                 <div className="flex items-center gap-5 text-left"><div className={`p-3 rounded-2xl ${citaEnReprogramacion ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}><CalendarDays size={24} /></div><h2 className="font-black uppercase text-xl tracking-tight text-slate-900 leading-none text-left">{citaEnReprogramacion ? 'Reagendar Cita' : 'Nueva Reserva'} • Paso {paso}</h2></div>
@@ -1785,7 +1875,7 @@ export default function AgendaPage() {
 
       <AnimatePresence>
         {mostrarTicket && (
-            <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 text-slate-900 text-left">
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 text-slate-900 text-left">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm text-left text-slate-900">
                 <div className="bg-white rounded-3xl shadow-2xl p-10 text-center space-y-6 text-slate-900">
                     <CheckCircle2 className="mx-auto text-emerald-500" size={56} />

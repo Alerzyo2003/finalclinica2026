@@ -1,24 +1,49 @@
 'use server'
-import { createClient } from '@supabase/supabase-js'
+import { type CookieOptions, createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { supabaseAdmin } from '@/lib/admin'
 
-// Cliente administrativo de Supabase
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+const VIRTUAL_DOMAIN = '@clinicadignidad.com' // Dominio virtual para correos de staff
 
-const VIRTUAL_DOMAIN = "@dentapro.com";
+async function verificarAdmin() {
+  // 1. Add "await" here
+  const cookieStore = await cookies() 
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          // 2. cookieStore is now properly resolved
+          return cookieStore.get(name)?.value 
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set(name, value, options)
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.set(name, '', options)
+        },
+      },
+    }
+  )
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autenticado')
+  const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
+  if (perfil?.rol !== 'ADMIN') throw new Error('Sin permisos')
+}
 
-// --- FUNCIÓN PARA CREAR ---
 export async function crearCuentaProfesional(formData: any) {
-  const { nombre, apellido, username, password, rol, especialidad_id, rut } = formData;
-  const nombreCompleto = `${nombre} ${apellido}`;
-  const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9.]/g, "");
-  const virtualEmail = `${cleanUsername}${VIRTUAL_DOMAIN}`;
   let authUserId: string | null = null;
 
   try {
+    await verificarAdmin()
+    const { nombre, apellido, username, password, especialidad_id, rol, rut } = formData;
+    const nombreCompleto = `${nombre} ${apellido}`;
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9.]/g, "");
+    const virtualEmail = `${cleanUsername}${VIRTUAL_DOMAIN}`;
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: virtualEmail,
       password: password,
@@ -29,15 +54,16 @@ export async function crearCuentaProfesional(formData: any) {
     authUserId = authData.user.id;
 
     await supabaseAdmin.from('perfiles').upsert([{ 
-      id: authUserId, nombre_completo: nombreCompleto, rol: rol, username: cleanUsername, rut: rut 
-    }])
+      id: authUserId, nombre_completo: nombreCompleto, rol: rol, username: cleanUsername, rut: rut
+    }]);
     
     if (rol === 'DENTISTA') {
       await supabaseAdmin.from('profesionales').upsert([{
         user_id: authUserId, nombre: nombre.toUpperCase(), apellido: apellido.toUpperCase(),
         especialidad_id: especialidad_id || null, activo: true
-      }])
+      }]);
     }
+    
     return { success: true }
   } catch (error: any) {
     if (authUserId) await supabaseAdmin.auth.admin.deleteUser(authUserId);
@@ -48,12 +74,13 @@ export async function crearCuentaProfesional(formData: any) {
 // --- FUNCIÓN PARA ACTUALIZAR ---
 export async function actualizarCuentaProfesional(id: string, userId: string, formData: any) {
   try {
+    await verificarAdmin()
     const { nombre, apellido, especialidad_id, rol, rut } = formData;
     const nombreCompleto = `${nombre} ${apellido}`
     
     // El 'userId' es el ID de la tabla Auth de Supabase
     await supabaseAdmin.from('perfiles').update({ 
-      nombre_completo: nombreCompleto, rol: rol, rut: rut 
+      nombre_completo: nombreCompleto, rol: rol, rut: rut
     }).eq('id', userId)
     
     await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -66,6 +93,7 @@ export async function actualizarCuentaProfesional(id: string, userId: string, fo
         especialidad_id: especialidad_id || null
       }).eq('user_id', userId)
     }
+    
     return { success: true }
   } catch (err: any) {
     return { error: err.message }
@@ -78,6 +106,7 @@ export async function actualizarCuentaProfesional(id: string, userId: string, fo
  */
 export async function eliminarCuentaProfesional(idOrUserId: string, secondaryId?: string) {
   try {
+    await verificarAdmin()
     // Si recibimos dos IDs, el importante para Auth suele ser el segundo (user_id)
     // Si solo recibimos uno, usamos ese.
     const targetId = secondaryId || idOrUserId;

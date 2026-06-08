@@ -199,7 +199,7 @@ export default function DetalleConsentimientoPage() {
 
             <div 
               style={{ fontSize: '14px', lineHeight: '1.6', color: '#000000', textAlign: 'justify', marginBottom: '60px', overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap' }} 
-              dangerouslySetInnerHTML={{ __html: documento?.contenido_legal }} 
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(documento?.contenido_legal ?? '') }}
             />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '40px', pageBreakInside: 'avoid' }}>

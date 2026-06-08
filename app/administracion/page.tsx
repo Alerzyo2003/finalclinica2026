@@ -64,8 +64,18 @@ export default function GestionProfesionalesPage() {
       fetchData(); 
       resetForm();
       mostrarAviso(editandoProf ? "Cambios guardados" : "Cuenta creada con éxito")
-    } catch (error: any) { 
-      alert("Error: " + error.message) 
+
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: user?.id,
+        accion: editandoProf ? 'UPDATE / PROFESIONAL' : 'CREATE / PROFESIONAL',
+        tabla: 'profesionales, perfiles, auth.users',
+        detalles: editandoProf 
+          ? `Editó el perfil de ${form.nombre} ${form.apellido}.`
+          : `Creó una nueva cuenta para ${form.nombre} ${form.apellido} con el correo ${form.correo}.`
+      }])
+    } catch (error: any) {
+      alert("Ocurrió un error al guardar el profesional.")
     } finally { 
       setGuardando(false) 
     }
@@ -81,8 +91,16 @@ export default function GestionProfesionalesPage() {
       fetchData(); 
       resetForm();
       mostrarAviso("Profesional eliminado")
-    } catch (error: any) { 
-        alert(error.message) 
+
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user?.id,
+          accion: 'DELETE / PROFESIONAL',
+          tabla: 'profesionales, perfiles, auth.users',
+          detalles: `Eliminó la cuenta del profesional ${editandoProf.nombre} ${editandoProf.apellido} (User ID: ${editandoProf.user_id}).`
+      }])
+    } catch (error: any) {
+        alert("Ocurrió un error al eliminar el profesional.")
     } finally { 
         setGuardando(false) 
     }

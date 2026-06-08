@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { 
+import {
   Building2, Plus, Search, FileText, Trash2, 
   ChevronRight, Save, X, Info, CheckCircle2, 
   Loader2, Settings2, Edit3, MapPin, Phone, Mail, User
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 export default function ConveniosPage() {
   const [convenios, setConvenios] = useState<any[]>([])
@@ -57,35 +58,58 @@ export default function ConveniosPage() {
 
   const handleGuardar = async () => {
     if (!form.nombre_empresa || !form.nombre_convenio) {
-      return alert("Nombre de empresa y convenio son obligatorios.")
+      return toast.error("Nombre de empresa y convenio son obligatorios.")
     }
     setGuardando(true)
     try {
       if (editandoId) {
         const { error } = await supabase.from('convenios').update(form).eq('id', editandoId)
         if (error) throw error
+        toast.success('Convenio actualizado correctamente')
       } else {
         const { error } = await supabase.from('convenios').insert([form])
         if (error) throw error
+        toast.success('Convenio creado con éxito')
       }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user?.id,
+          accion: editandoId ? 'UPDATE / CONVENIO' : 'CREATE / CONVENIO',
+          tabla: 'convenios',
+          detalles: editandoId
+              ? `Actualizó el convenio "${form.nombre_convenio}" para la empresa ${form.nombre_empresa}.`
+              : `Creó el convenio "${form.nombre_convenio}" para la empresa ${form.nombre_empresa}.`
+      }])
+
       setModalAbierto(false)
       fetchConvenios()
       resetForm()
     } catch (error: any) {
-      alert("Error: " + error.message)
+      toast.error('Ocurrió un error al guardar el convenio.')
     } finally {
       setGuardando(false)
     }
   }
 
   const eliminarConvenio = async () => {
-    if (!confirm("¿Eliminar este convenio permanentemente?")) return
+    if (!window.confirm("¿Eliminar este convenio permanentemente?")) return
+    if (!editandoId) return;
+
     const { error } = await supabase.from('convenios').delete().eq('id', editandoId)
     if (!error) {
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user?.id,
+          accion: 'DELETE / CONVENIO',
+          tabla: 'convenios',
+          detalles: `Eliminó el convenio "${form.nombre_convenio}" (ID: ${editandoId}).`
+      }])
+      toast.success('Convenio eliminado')
       setModalAbierto(false)
       fetchConvenios()
       resetForm()
-    }
+    } else { toast.error('Error al eliminar el convenio.') }
   }
 
   const resetForm = () => {

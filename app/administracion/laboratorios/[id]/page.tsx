@@ -8,6 +8,7 @@ import {
   BadgeDollarSign, FileText, Plus 
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import Link from 'next/link'
 
 export default function DetalleLaboratorio() {
@@ -45,7 +46,7 @@ export default function DetalleLaboratorio() {
   }
 
   const handleGuardarPrestacion = async () => {
-    if (!nuevaPres.nombre_prestacion) return alert("El nombre es obligatorio")
+    if (!nuevaPres.nombre_prestacion) return toast.error("El nombre es obligatorio")
     setGuardando(true)
     try {
       const { error } = await supabase.from('laboratorio_prestaciones').insert([{
@@ -53,12 +54,21 @@ export default function DetalleLaboratorio() {
         laboratorio_id: id
       }])
       if (error) throw error
+
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user?.id,
+          accion: 'CREATE / PRESTACION LABORATORIO',
+          tabla: 'laboratorio_prestaciones',
+          detalles: `Agregó la prestación de lab "${nuevaPres.nombre_prestacion}" para ${laboratorio?.nombre}. Costo: $${nuevaPres.costo_clinica}, Venta: $${nuevaPres.precio_paciente}.`
+      }])
       
+      toast.success('Prestación de laboratorio creada.')
       setModalAbierto(false)
       setNuevaPres({ nombre_prestacion: '', costo_clinica: 0, precio_paciente: 0, abastecida: true })
       fetchDetalle()
     } catch (error: any) {
-      alert("Error: " + error.message)
+      toast.error("Error al guardar la prestación: " + error.message)
     } finally {
       setGuardando(false)
     }

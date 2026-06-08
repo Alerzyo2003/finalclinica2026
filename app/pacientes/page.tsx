@@ -354,7 +354,7 @@ export default function ClientesPage() {
       {/* MODAL CAMBIO DE ESTADO (DESHABILITAR / REACTIVAR) */}
       <AnimatePresence>
         {modalEstadoAbierto && pacienteEstado && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
              <motion.div
                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
                className="bg-white max-w-md w-full rounded-[3rem] p-10 shadow-2xl text-center"
@@ -402,7 +402,7 @@ export default function ClientesPage() {
       {/* MODAL DE CAJA (RECAUDACIÓN DE PAGOS) */}
       <AnimatePresence>
         {modalPagoAbierto && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden text-left">
                 <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left bg-white">
                    <div className="flex items-center gap-4 text-left">

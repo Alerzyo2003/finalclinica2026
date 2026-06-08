@@ -70,7 +70,7 @@ export default function DetalleLiquidacionPage() {
           pacientes ( nombre, apellido ),
           presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado )
         `)
-        .gte('fecha_pago', inicioMes)
+        // .gte('fecha_pago', inicioMes) // Se quita para traer el histórico completo y pagar comisiones de tratamientos terminados este mes pero pagados en meses anteriores.
         .lte('fecha_pago', finMes);
 
       if (errPagos) throw errPagos;
