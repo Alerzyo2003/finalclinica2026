@@ -75,7 +75,7 @@ export default function DetalleLiquidacionPage() {
 
       if (errPagos) throw errPagos;
 
-      const pagosDelDoctor = (pagos || []).filter(pago => {
+      const pagosDelDoctor = (pagos || []).filter((pago: any) => {
          const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id || null;
          return docId === prof.user_id;
       });
