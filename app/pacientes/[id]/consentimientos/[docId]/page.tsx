@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ChevronLeft, Printer, Loader2, Download } from 'lucide-react'
 import { toast } from 'sonner'
+import DOMPurify from 'dompurify' // <-- Agregado para que no falle la línea 161
 
 export default function DetalleConsentimientoPage() {
   const params = useParams()
@@ -26,7 +27,6 @@ export default function DetalleConsentimientoPage() {
 
       if (doc?.especialista_id) {
         const [profRes, perfRes] = await Promise.all([
-          // CORRECCIÓN: Agregamos firma_base64 a la consulta del profesional
           supabase.from('profesionales').select('nombre, apellido, firma_base64, especialidades(nombre)').eq('user_id', doc.especialista_id).maybeSingle(),
           supabase.from('perfiles').select('rut').eq('id', doc.especialista_id).maybeSingle()
         ])
@@ -35,7 +35,7 @@ export default function DetalleConsentimientoPage() {
             nombre: `Dr/a. ${profRes.data.nombre} ${profRes.data.apellido}`,
             especialidad: (profRes.data as any).especialidades?.nombre || 'Especialista',
             rut: perfRes.data?.rut || '---',
-            firma_base64: profRes.data.firma_base64 // Guardamos la firma del especialista
+            firma_base64: profRes.data.firma_base64
           })
         }
       } else if (doc?.creado_por) {
@@ -53,9 +53,9 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf')!;
+      const element = document.getElementById('documento-pdf')!; // <-- ¡AQUÍ ESTÁ EL !
 
-      const opt: any = {
+      const opt: any = { // <-- ¡AQUÍ ESTÁ EL : any
         margin:       [15, 15, 20, 15],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
@@ -91,9 +91,9 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf');
+      const element = document.getElementById('documento-pdf')!; // <-- ¡CORREGIDO! Faltaba el !
 
-      const opt = {
+      const opt: any = { // <-- ¡CORREGIDO! Faltaba el : any
         margin:       [15, 15, 20, 15],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
@@ -144,7 +144,6 @@ export default function DetalleConsentimientoPage() {
             {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
             {generandoPdf ? 'Generando...' : 'Descargar PDF'}
           </button>
-          {/* BOTÓN DE FIRMAR ELIMINADO AQUÍ */}
         </div>
       </nav>
 
@@ -205,7 +204,6 @@ export default function DetalleConsentimientoPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '40px', pageBreakInside: 'avoid' }}>
               <div style={{ width: '45%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #000000', paddingBottom: '10px', marginBottom: '10px' }}>
-                  {/* CORRECCIÓN: Ahora carga la firma del especialista desde la tabla profesionales automáticamente */}
                   {(especialista?.firma_base64 || documento?.img_firma_especialista) && (
                     <img 
                       src={especialista?.firma_base64 || documento?.img_firma_especialista} 
@@ -229,9 +227,6 @@ export default function DetalleConsentimientoPage() {
 
           </div>
         </div>
-
-        {/* PAD DE FIRMAS ELIMINADO AQUÍ */}
-
       </main>
     </div>
   )
