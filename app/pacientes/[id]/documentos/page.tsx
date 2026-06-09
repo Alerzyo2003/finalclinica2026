@@ -124,7 +124,6 @@ export default function DocumentosClinicosPage() {
             return '';
         }).join('')}
         
-        <!-- BLOQUE DE FIRMAS CORREGIDO -->
         <div style="margin-top: 80px; display: flex; justify-content: space-between; text-align: center; page-break-inside: avoid;">
           <div style="width: 200px;">
             <div style="height: 60px;"></div>
@@ -147,7 +146,8 @@ export default function DocumentosClinicosPage() {
         </div>
       `;
 
-      const opt = { 
+      // ¡AQUÍ ESTÁ LA MAGIA! Le pusimos ": any" a opt
+      const opt: any = { 
         margin: 12, 
         filename: `${tituloEdicion}.pdf`, 
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, 
@@ -164,7 +164,7 @@ export default function DocumentosClinicosPage() {
         pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 25, pdf.internal.pageSize.getHeight() - 8);
       }
 
-      if (modo === 'imprimir') window.open(pdf.output('bloburl'), '_blank'); else pdf.save();
+      if (modo === 'imprimir') window.open(pdf.output('bloburl'), '_blank'); else pdf.save(opt.filename);
       toast.success("Documento generado", { id: 'pdf-toast' });
     } catch (error) { toast.error("Error al generar PDF", { id: 'pdf-toast' }); } finally { setGenerandoPdf(false); }
   };
@@ -381,8 +381,8 @@ export default function DocumentosClinicosPage() {
                         </div>
                     </div>
                   </div>
-
                 </div>
+
               </div>
             ) : (
               <motion.div initial={{opacity:0}} animate={{opacity:1}} className="h-[500px] flex flex-col items-center justify-center bg-slate-100 rounded-[2.5rem] border-4 border-dashed border-slate-200"><FileText size={40} className="text-slate-200 mb-4" /><p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.4em]">Seleccione un documento</p></motion.div>
