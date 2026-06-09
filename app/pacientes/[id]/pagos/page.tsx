@@ -22,11 +22,11 @@ export default function PagosPacientePage() {
   const [planesDetallados, setPlanesDetallados] = useState<any[]>([])
   const [historialPagos, setHistorialPagos] = useState<any[]>([])
   
-  // 🔥 ESTADOS DE ROL Y PERMISOS 🔥
+  // ESTADOS DE ROL Y PERMISOS
   const [perfil, setPerfil] = useState<any>(null);
   const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
 
-  // 🔥 ESTADOS NUEVOS 🔥
+  // ESTADOS SISIONES Y UI
   const [usuarioLogueado, setUsuarioLogueado] = useState<any>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [cajaActivaId, setCajaActivaId] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export default function PagosPacientePage() {
   const [metodoPago, setMetodoPago] = useState('Transferencia')
   const [numeroOperacion, setNumeroOperacion] = useState('')
 
-  // 🔥 ESTADOS PARA EL NUEVO MODAL DE ABONO LIBRE (SALDO A FAVOR) 🔥
+  // ESTADOS PARA EL NUEVO MODAL DE ABONO LIBRE (SALDO A FAVOR)
   const [modalAbonoLibreAbierto, setModalAbonoLibreAbierto] = useState(false)
   const [montoAbonoLibre, setMontoAbonoLibre] = useState<number | ''>('')
   const [metodoAbonoLibre, setMetodoAbonoLibre] = useState('Transferencia')
@@ -62,7 +62,7 @@ export default function PagosPacientePage() {
           setPerfil(perfilData);
       }
 
-      // 🔥 OBTENER CAJA ACTIVA 🔥
+      // OBTENER CAJA ACTIVA
       const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
       setCajaActivaId(cajaActiva?.id || null);
 
@@ -101,11 +101,17 @@ export default function PagosPacientePage() {
             const deuda = precio - abonado;
             
             let nombreDisplay = item.observacion || "Tratamiento";
+            
+            // CORRECCIÓN DE ERROR DE TIPADO: Cast a Record<string, any> resolviendo la relación Supabase
             if (item.prestaciones) {
-                nombreDisplay = item.prestaciones["Nombre Accion"] || item.prestaciones["Nombre"] || nombreDisplay;
+                const pres = Array.isArray(item.prestaciones)
+                    ? (item.prestaciones[0] as Record<string, any>)
+                    : (item.prestaciones as Record<string, any>);
+                nombreDisplay = pres?.["Nombre Accion"] || pres?.["Nombre"] || nombreDisplay;
             } else if (item.observacion && item.observacion.includes('|')) {
                 nombreDisplay = item.observacion.split('|')[0].trim();
             }
+
             const doctor = item.profesional ? `Dr/a. ${item.profesional.nombre} ${item.profesional.apellido}` : 'Sin asignar';
             return { ...item, deuda, nombreDisplay, doctor };
         }).filter(item => item.deuda > 0);
@@ -149,7 +155,7 @@ export default function PagosPacientePage() {
   }
 
   // ===============================================
-  // 🔥 INGRESAR SALDO A FAVOR DE FORMA MANUAL 🔥
+  // INGRESAR SALDO A FAVOR DE FORMA MANUAL
   // ===============================================
   const procesarAbonoLibre = async () => {
     if (!cajaActivaId) {
@@ -240,7 +246,7 @@ export default function PagosPacientePage() {
     let detallesDelPago = []; 
     
     try {
-        // 🔥 1. CREAMOS UN REGISTRO DE PAGO POR CADA TRATAMIENTO ABONADO 🔥
+        // 1. CREAMOS UN REGISTRO DE PAGO POR CADA TRATAMIENTO ABONADO
         for (const item of deudas) {
             if (montoRestante <= 0) break;
             const aAbonar = Math.min(item.deuda, montoRestante);
@@ -272,7 +278,7 @@ export default function PagosPacientePage() {
             montoRestante -= aAbonar;
         }
 
-        // 🔥 2. GESTIONAMOS EL SALDO A FAVOR / VUELTOS 🔥
+        // 2. GESTIONAMOS EL SALDO A FAVOR / VUELTOS
         let nuevoSaldoAFavor = saldoActual;
 
         if (metodoPago === 'Saldo a Favor') {
@@ -353,7 +359,6 @@ export default function PagosPacientePage() {
       return toast.error('No tienes permisos para anular pagos.')
     }
 
-    // 🔥 Lógica de confirmación dinámica según el tipo de pago 🔥
     const esAbonoLibre = !pago.item_id;
     const mensajeConfirmacion = esAbonoLibre
       ? `Estás a punto de anular un INGRESO MANUAL a la billetera por $${Number(pago.monto).toLocaleString('es-CL')}.\n\n` +
@@ -363,12 +368,10 @@ export default function PagosPacientePage() {
         `Al presionar "ACEPTAR", el pago se anulará, la deuda del tratamiento se restaurará y el monto se AGREGARÁ al Saldo a Favor (Billetera Virtual) del paciente.\n\n` +
         `Si presionas "CANCELAR", no se realizará ninguna acción.`;
 
-    const enviarASaldo = window.confirm(
-      mensajeConfirmacion
-    );
+    const enviarASaldo = window.confirm(mensajeConfirmacion);
 
     if (!enviarASaldo) {
-      return; // Si el usuario aprieta "Cancelar", no hacemos nada.
+      return;
     }
 
     if (pago.estado === 'Anulado') return toast.info("Este pago ya fue anulado.");
@@ -405,11 +408,9 @@ export default function PagosPacientePage() {
       let detallesAuditoria;
 
       if (pago.item_id) {
-        // Si se anula un pago a tratamiento, el dinero vuelve a la billetera.
         nuevoSaldo = saldoActual + montoReversado;
         detallesAuditoria = `Anuló un pago a tratamiento de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR`;
       } else {
-        // Si se anula un ingreso manual, el dinero se descuenta de la billetera.
         nuevoSaldo = Math.max(0, saldoActual - montoReversado);
         detallesAuditoria = `Anuló un ingreso manual de $${pago.monto.toLocaleString('es-CL')}. Se descuenta de SALDO A FAVOR`;
       }
@@ -439,7 +440,7 @@ export default function PagosPacientePage() {
   }
 
   // ===============================================
-  // 🔥 EDITAR SALDO A FAVOR MANUALMENTE (ADMIN) 🔥
+  // EDITAR SALDO A FAVOR MANUALMENTE (ADMIN)
   // ===============================================
   const handleEditarSaldoAFavor = async () => {
     if (perfil?.rol !== 'ADMIN') {
@@ -544,14 +545,6 @@ export default function PagosPacientePage() {
     catch(e) { return []; }
   }
 
-  const formatearFechaLarga = (fechaIso: string) => {
-    if (!fechaIso) return 'N/A';
-    const opciones: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' };
-    return new Date(fechaIso).toLocaleDateString('es-CL', opciones);
-  }
-
-  const calcularDeudaTotal = () => deudas.reduce((acc, curr) => acc + curr.deuda, 0);
-
   if (cargando) return (
     <div className="h-full min-h-[400px] flex flex-col items-center justify-center print:hidden">
       <Loader2 className="animate-spin text-emerald-500 mb-4" size={40} />
@@ -559,11 +552,11 @@ export default function PagosPacientePage() {
     </div>
   )
 
-  const deudaTotal = calcularDeudaTotal();
+  const deudaTotal = deudas.reduce((acc, curr) => acc + curr.deuda, 0);
   const deudaPlan = deudaTotalPlan;
   const saldoAFavor = Number(pacienteInfo?.saldo_a_favor || 0);
 
-  // 🔥 VISTA PARA ROLES SIN PERMISOS (DENTISTAS) 🔥
+  // VISTA PARA ROLES SIN PERMISOS (DENTISTAS)
   if (perfil && !puedeVerFinanzas) {
     return (
       <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-8">
@@ -658,7 +651,7 @@ export default function PagosPacientePage() {
               </div>
             </div>
 
-            {/* 🔥 NUEVA SECCIÓN: DETALLE DE LO QUE SE DEBE 🔥 */}
+            {/* DETALLE DE LO QUE SE DEBE */}
             {deudas.length > 0 && (
               <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
@@ -889,9 +882,7 @@ export default function PagosPacientePage() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* MODAL INGRESO MANUAL DE BILLETERA VIRTUAL (NUEVO) */}
-      {/* ========================================================================= */}
+      {/* MODAL INGRESO MANUAL DE BILLETERA VIRTUAL */}
       <AnimatePresence>
         {modalAbonoLibreAbierto && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
@@ -933,8 +924,8 @@ export default function PagosPacientePage() {
                 </div>
 
                 <div className="p-8 border-t border-slate-100 bg-white shrink-0 text-right flex gap-3">
-                   <button onClick={() => setModalAbonoLibreAbierto(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
-                   <button onClick={procesarAbonoLibre} disabled={cargandoAccion || !montoAbonoLibre} className="flex-[2] py-4 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                   <button onClick={() => setModalAbonoLibreAbierto(false)} className="w-full py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
+                   <button onClick={procesarAbonoLibre} disabled={cargandoAccion || !montoAbonoLibre} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                       {cargandoAccion ? <Loader2 className="animate-spin" size={16}/> : <Plus size={16}/>} Ingresar Dinero
                    </button>
                 </div>
@@ -943,9 +934,7 @@ export default function PagosPacientePage() {
         )}
       </AnimatePresence>
 
-      {/* ========================================================================= */}
-      {/* VISTA DE IMPRESIÓN (DISEÑO EXACTO DENTALINK) - INVISIBLE EN PANTALLA */}
-      {/* ========================================================================= */}
+      {/* VISTA DE IMPRESIÓN */}
       <div id="comprobante-impresion" className="hidden print:block bg-white text-slate-900 font-sans">
         <div className="p-10">
           
@@ -956,7 +945,7 @@ export default function PagosPacientePage() {
                 src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" 
                 alt="Logo Clínica Dignidad" 
                 className="w-auto mb-4 mix-blend-multiply"
-                style={{ height: '3rem' }} // 48px. Se usa estilo en línea para asegurar la compatibilidad en impresión.
+                style={{ height: '3rem' }}
                 referrerPolicy="no-referrer"
               />
               <h1 className="text-lg font-black text-slate-800">CENTRO MÉDICO Y DENTAL DIGNIDAD SPA</h1>
