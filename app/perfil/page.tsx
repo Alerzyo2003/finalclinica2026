@@ -10,8 +10,7 @@ import { useRole } from '@/app/hooks/useRole'
 
 
 export default function PerfilPage() {
-  const { user: currentUser, role: hookRole } = useRole()
- 
+  const { user: currentUser, rol: hookRole } = useRole() 
   const [datos, setDatos] = useState({ nombre_completo: '' })
   const [rolLocal, setRolLocal] = useState<string | null>(null)
   const [firmaGuardada, setFirmaGuardada] = useState<string | null>(null)
