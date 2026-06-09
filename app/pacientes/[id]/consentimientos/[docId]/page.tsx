@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ChevronLeft, Printer, Loader2, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import DOMPurify from 'dompurify' // <-- Agregado para que no falle la línea 161
+import DOMPurify from 'dompurify'
 
 export default function DetalleConsentimientoPage() {
   const params = useParams()
@@ -53,17 +53,15 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf')!; // <-- ¡AQUÍ ESTÁ EL !
+      const element = document.getElementById('documento-pdf')!; 
 
       const opt = {
         margin:       [15, 15, 20, 15] as [number, number, number, number],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
-        
-        // CORRECCIÓN AQUÍ: Agregamos "as 'jpeg'"
         image:        { type: 'jpeg' as 'jpeg', quality: 1 }, 
-        
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+        // CORRECCIÓN FINAL AQUÍ
+        jsPDF:        { unit: 'mm' as 'mm', format: 'letter', orientation: 'portrait' as 'portrait' },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
 
@@ -94,15 +92,15 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf')!; // <-- ¡CORREGIDO! Faltaba el !
+      const element = document.getElementById('documento-pdf')!; 
 
       const opt = {
-        // Hacemos exactamente lo mismo aquí
         margin:       [15, 15, 20, 15] as [number, number, number, number],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
-        image:        { type: 'jpeg', quality: 1 },
+        image:        { type: 'jpeg' as 'jpeg', quality: 1 }, 
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+        // CORRECCIÓN FINAL AQUÍ
+        jsPDF:        { unit: 'mm' as 'mm', format: 'letter', orientation: 'portrait' as 'portrait' },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
 
