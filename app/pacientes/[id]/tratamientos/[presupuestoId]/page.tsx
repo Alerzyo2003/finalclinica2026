@@ -2280,7 +2280,7 @@ export default function DetalleTratamientoPage() {
                         <div key={cara} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between group shadow-sm">
                           <div className="flex items-center gap-4">
                             <div className="w-8 h-8"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={val as string} /></svg></div>
-                            <span className="text-xs font-black uppercase text-slate-700">{val} (Cara {cara})</span>
+                            <span className="text-xs font-black uppercase text-slate-700">{String(val)} (Cara {cara})</span>
                           </div>
                           <button onClick={async () => {
                                 guardarHistorial();
