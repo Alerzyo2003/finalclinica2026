@@ -53,7 +53,7 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf');
+      const element = document.getElementById('documento-pdf')!;
 
       const opt: any = {
         margin:       [15, 15, 20, 15],
