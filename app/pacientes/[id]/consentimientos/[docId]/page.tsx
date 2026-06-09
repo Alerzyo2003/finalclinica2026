@@ -112,7 +112,11 @@ export default function DetalleConsentimientoPage() {
           pdf.setTextColor(120, 120, 120); 
           pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
         }
-      }).save();
+        
+        // ¡LA SOLUCIÓN! Guardamos el PDF usando su propia instancia interna:
+        pdf.save(opt.filename);
+        
+      });
 
       toast.success("PDF descargado con éxito", { id: toastId });
     } catch (error) {
