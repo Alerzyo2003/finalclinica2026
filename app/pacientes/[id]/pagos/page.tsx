@@ -248,7 +248,8 @@ export default function PagosPacientePage() {
 
     setCargandoAccion(true);
     let montoRestante = pago;
-    let detallesDelPago = []; 
+    // 3. CORRECCIÓN DE UNIÓN DE TIPOS: Definimos explícitamente detallesDelPago como un arreglo dinámico
+    let detallesDelPago: any[] = []; 
     
     try {
         // 1. CREAMOS UN REGISTRO DE PAGO POR CADA TRATAMIENTO ABONADO
