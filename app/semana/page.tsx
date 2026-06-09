@@ -6,7 +6,7 @@ import {
   CalendarDays, Timer, UserCheck, Trash2, Activity, ClipboardList,
   CheckCircle2, Plus, Calendar as CalendarIcon, Briefcase,
   AlertTriangle, Phone, Mail, MessageCircle, Ban, RefreshCcw, ChevronDown, CalendarClock,
-  LayoutGrid, List, Lock, FileText, Send, User, Users, Save
+  LayoutGrid, List, Lock, FileText, Send, User
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -103,7 +103,7 @@ export default function DiarioGlobalPage() {
   const [semanaReagenda, setSemanaReagenda] = useState<Date>(getLunes(new Date()))
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
-  const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
+  const [reagendaProps, setReagendaProps] = useState({ fecha: '', especialistaId: '', duracion: 30, box: 1 })
   const [guardandoConflicto, setGuardandoConflicto] = useState(false)
 
   const [mostrarTicket, setMostrarTicket] = useState(false);
@@ -130,7 +130,6 @@ export default function DiarioGlobalPage() {
   useEffect(() => { fetchDatos(); }, [selectedDate]);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => { if (data.session) setUsuarioLogueado(data.session.user.id); }); }, []);
   useEffect(() => { if (modalAbierto && filtro.profesional_id) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [semanaInicio, modalAbierto, filtro.profesional_id]);
-
   // Efecto para el modal de conflictos
   useEffect(() => {
     if (mostrarModalConflictos && citaEnEdicion) { calcularDisponibilidadSemanalConflicto() }
@@ -450,10 +449,9 @@ export default function DiarioGlobalPage() {
         if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; }
       }
       const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
-        const finDate = new Date(new Date(`${fechaStr}T${horaStr}:00`).getTime() + duracionMin * 60000);
-        const finH = finDate.getHours().toString().padStart(2, '0');
-        const finM = finDate.getMinutes().toString().padStart(2, '0');
-        return { inicio: `${fechaStr}T${horaStr}:00`, fin: `${fechaStr}T${finH}:${finM}:00` };
+        const [h, m] = horaStr.split(':').map(Number);
+        const finH = h + Math.floor((m + duracionMin) / 60), finM = (m + duracionMin) % 60;
+        return { inicio: `${fechaStr}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`, fin: `${fechaStr}T${finH.toString().padStart(2, '0')}:${finM.toString().padStart(2, '0')}:00` };
       };
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0]; const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
@@ -493,21 +491,13 @@ export default function DiarioGlobalPage() {
           <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
             {/* Control de Fechas */}
             <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-2 flex items-center gap-4 shadow-inner">
-              <button onClick={() => {
-                const newDate = new Date(selectedDate);
-                newDate.setDate(newDate.getDate() - 1);
-                setSelectedDate(newDate);
-              }} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
+              <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronLeft size={20} />
               </button>
               <h2 className="text-sm font-black uppercase text-slate-800 tracking-widest min-w-[200px] text-center">
                 {selectedDate.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' })}
               </h2>
-              <button onClick={() => {
-                const newDate = new Date(selectedDate);
-                newDate.setDate(newDate.getDate() + 1);
-                setSelectedDate(newDate);
-              }} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
+              <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronRight size={20} />
               </button>
             </div>
@@ -1024,7 +1014,7 @@ export default function DiarioGlobalPage() {
                                       <p className="font-black text-sm uppercase text-slate-800 tracking-tighter">{p.nombre} {p.apellido}</p>
                                       <p className="text-[10px] font-bold text-slate-400 tracking-widest mt-1">{p.rut}</p>
                                     </div>
-                                    <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                    <ChevronRightIcon size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                                   </button>
                                 ))}
                                 {pacienteSeleccionado && pacientesEncontrados.length === 0 && (
