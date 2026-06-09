@@ -1171,18 +1171,23 @@ export default function DetalleTratamientoPage() {
   const procesarExportacion = async () => {
     setModalExportar({...modalExportar, abierto: false});
     const modo = modalExportar.tipo;
+    
+    // Obtenemos el elemento antes de mostrar el toast
+    const element = document.getElementById('odontograma-container');
+    if (!element) {
+        return toast.error("No se pudo encontrar el documento para exportar.");
+    }
+
     const toastId = toast.loading(`Preparando documento...`);
     
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('odontograma-container');
 
       const opt = {
         margin:       [15, 15, 20, 15] as any, 
         filename:     `Plan_Tratamiento_${pacienteId || 'General'}.pdf`,
         image:        { type: 'jpeg' as const, quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        // 🔥 Agregamos "as const" a todos los strings de jsPDF para que TypeScript no moleste más
         jsPDF:        { unit: 'mm' as const, format: 'letter' as const, orientation: 'portrait' as const },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
@@ -1200,7 +1205,9 @@ export default function DetalleTratamientoPage() {
       else pdf.save();
       
       toast.success("Documento generado con éxito", { id: toastId });
-    } catch (error) { toast.error("Error al procesar la exportación", { id: toastId }); }
+    } catch (error) { 
+      toast.error("Error al procesar la exportación", { id: toastId }); 
+    }
   }
 
   const totalPlan = acciones.reduce((acc, curr) => acc + curr.display_pactado, 0) || Number(presupuestoData?.total || 0);
