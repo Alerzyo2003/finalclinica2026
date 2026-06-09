@@ -26,7 +26,7 @@ export default function PagosPacientePage() {
   const [perfil, setPerfil] = useState<any>(null);
   const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
 
-  // ESTADOS SISIONES Y UI
+  // ESTADOS SESIONES Y UI
   const [usuarioLogueado, setUsuarioLogueado] = useState<any>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [cajaActivaId, setCajaActivaId] = useState<string | null>(null);
@@ -102,7 +102,7 @@ export default function PagosPacientePage() {
             
             let nombreDisplay = item.observacion || "Tratamiento";
             
-            // CORRECCIÓN DE ERROR DE TIPADO: Cast a Record<string, any> resolviendo la relación Supabase
+            // 1. CORRECCIÓN DE PRESTACIONES (Maneja objetos y arreglos de Supabase)
             if (item.prestaciones) {
                 const pres = Array.isArray(item.prestaciones)
                     ? (item.prestaciones[0] as Record<string, any>)
@@ -112,7 +112,12 @@ export default function PagosPacientePage() {
                 nombreDisplay = item.observacion.split('|')[0].trim();
             }
 
-            const doctor = item.profesional ? `Dr/a. ${item.profesional.nombre} ${item.profesional.apellido}` : 'Sin asignar';
+            // 2. CORRECCIÓN DE PROFESIONAL / DOCTOR (Maneja objetos y arreglos de Supabase)
+            const prof = Array.isArray(item.profesional) ? item.profesional[0] : item.profesional;
+            const doctor = prof 
+                ? `Dr/a. ${(prof as any).nombre || ''} ${(prof as any).apellido || ''}`.trim() 
+                : 'Sin asignar';
+
             return { ...item, deuda, nombreDisplay, doctor };
         }).filter(item => item.deuda > 0);
 
