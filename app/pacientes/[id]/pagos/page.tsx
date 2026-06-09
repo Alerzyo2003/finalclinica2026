@@ -78,7 +78,7 @@ export default function PagosPacientePage() {
         .eq('aprobado', true)
 
       const idsPresupuestos = presupuestosPaciente?.map(p => p.id) || [];
-      let itemsConDeuda = [];
+      let itemsConDeuda: any[] = [];
       let deudaPlanCompleto = 0;
       let planesParaVista: any[] = [];
 
