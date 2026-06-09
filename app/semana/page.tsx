@@ -1024,7 +1024,7 @@ export default function DiarioGlobalPage() {
                                       <p className="font-black text-sm uppercase text-slate-800 tracking-tighter">{p.nombre} {p.apellido}</p>
                                       <p className="text-[10px] font-bold text-slate-400 tracking-widest mt-1">{p.rut}</p>
                                     </div>
-                                    <ChevronRightIcon size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                    <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                                   </button>
                                 ))}
                                 {pacienteSeleccionado && pacientesEncontrados.length === 0 && (
