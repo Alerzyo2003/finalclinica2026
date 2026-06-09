@@ -1178,7 +1178,7 @@ export default function DetalleTratamientoPage() {
       const element = document.getElementById('odontograma-container');
 
       const opt = {
-        margin:       [15, 15, 20, 15], 
+        margin:       [15, 15, 20, 15] as any, 
         filename:     `Plan_Tratamiento_${pacienteId || 'General'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
