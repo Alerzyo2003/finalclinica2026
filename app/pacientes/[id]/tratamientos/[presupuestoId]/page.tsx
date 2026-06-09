@@ -1180,7 +1180,7 @@ export default function DetalleTratamientoPage() {
       const opt = {
         margin:       [15, 15, 20, 15] as any, 
         filename:     `Plan_Tratamiento_${pacienteId || 'General'}.pdf`,
-        image:        { type: 'jpeg', quality: 1 },
+        image:        { type: 'jpeg' as const, quality: 1 }, // <-- Aquí es donde falta agregar "as const"
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
         jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
