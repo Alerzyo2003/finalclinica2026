@@ -113,7 +113,7 @@ export default function DoctorSemanaPage() {
   const [semanaReagenda, setSemanaReagenda] = useState<Date>(getLunes(new Date()))
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
-  const [reagendaProps, setReagendaProps] = useState({ fecha: '', especialistaId: '', duracion: 30, box: 1 })
+  const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
   const [guardandoConflicto, setGuardandoConflicto] = useState(false)
 
   const slotsOcupadosSet = useMemo(() => {
