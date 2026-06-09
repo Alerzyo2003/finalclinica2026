@@ -578,7 +578,7 @@ export default function AgendaPage() {
         let total = 0; let abonado = 0;
         let detalleText = `Hola ${cita.pacientes?.nombre}, te compartimos el detalle actualizado de tu Plan de Tratamiento Dental:\n\n`;
 
-        items.forEach(item => {
+        items.forEach((item: any) => {
             let nombreDisplay = item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || 'Tratamiento';
             if (item.observacion && item.observacion.includes('|')) nombreDisplay = item.observacion.split('|')[0].trim();
             
