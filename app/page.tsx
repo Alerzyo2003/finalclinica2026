@@ -81,15 +81,21 @@ export default function WelcomeDashboard() {
           .neq('estado', 'cancelada')
 
         if (citasHoy) {
-          const bdays = citasHoy.filter(c => {
-            if (!c.pacientes?.fecha_nacimiento) return false
-            const [y, m, d] = c.pacientes.fecha_nacimiento.split('-')
+          const bdays = citasHoy.filter((c: any) => {
+            // TypeScript a veces devuelve las relaciones como array, así que lo normalizamos
+            const paciente = Array.isArray(c.pacientes) ? c.pacientes[0] : c.pacientes
+            
+            if (!paciente?.fecha_nacimiento) return false
+            const [y, m, d] = paciente.fecha_nacimiento.split('-')
             return parseInt(m) === mesActual && parseInt(d) === diaActual
-          }).map(c => ({
-            id: c.pacientes.id,
-            nombre: `${c.pacientes.nombre.split(' ')[0]} ${c.pacientes.apellido.split(' ')[0]}`,
-            hora: new Date(c.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
-          }))
+          }).map((c: any) => {
+            const paciente = Array.isArray(c.pacientes) ? c.pacientes[0] : c.pacientes
+            return {
+              id: paciente.id,
+              nombre: `${paciente.nombre.split(' ')[0]} ${paciente.apellido.split(' ')[0]}`,
+              hora: new Date(c.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+            }
+          })
           
           // Eliminar duplicados por si un paciente tiene 2 citas hoy
           const uniqueBdays = Array.from(new Map(bdays.map(item => [item.id, item])).values())
