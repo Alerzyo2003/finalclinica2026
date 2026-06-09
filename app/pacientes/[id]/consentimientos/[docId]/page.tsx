@@ -55,8 +55,9 @@ export default function DetalleConsentimientoPage() {
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('documento-pdf')!; // <-- ¡AQUÍ ESTÁ EL !
 
-      const opt: any = { // <-- ¡AQUÍ ESTÁ EL : any
-        margin:       [15, 15, 20, 15],
+      const opt = {
+        // Agregamos "as [number, number, number, number]" al final del arreglo
+        margin:       [15, 15, 20, 15] as [number, number, number, number],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
@@ -93,8 +94,9 @@ export default function DetalleConsentimientoPage() {
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('documento-pdf')!; // <-- ¡CORREGIDO! Faltaba el !
 
-      const opt: any = { // <-- ¡CORREGIDO! Faltaba el : any
-        margin:       [15, 15, 20, 15],
+      const opt = {
+        // Hacemos exactamente lo mismo aquí
+        margin:       [15, 15, 20, 15] as [number, number, number, number],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
