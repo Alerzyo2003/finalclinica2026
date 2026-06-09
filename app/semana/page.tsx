@@ -3,9 +3,10 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   X, Search, ChevronLeft, ChevronRight, Loader2, Clock,
-  CalendarDays, Timer, Plus, Ban, RefreshCcw, User, CheckCircle2, 
-  Briefcase, ChevronRight as ChevronRightIcon, Stethoscope,
-  Users, Save, CalendarClock, Calendar as CalendarIcon
+  CalendarDays, Timer, UserCheck, Trash2, Activity, ClipboardList,
+  CheckCircle2, Plus, Calendar as CalendarIcon, Briefcase,
+  AlertTriangle, Phone, Mail, MessageCircle, Ban, RefreshCcw, ChevronDown, CalendarClock,
+  LayoutGrid, List, Lock, FileText, Send, User // <-- Asegúrate de que LayoutGrid esté aquí
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
