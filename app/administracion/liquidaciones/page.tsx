@@ -71,7 +71,7 @@ export default function LiquidacionesPage() {
         .lte('periodo_hasta', fechaCortaFin)
         .eq('estado', 'Finalizada')
 
-      const abonosItems = abonosData || [];
+      const abonosItems: any[] = abonosData || [];
       const cerradas = liquidacionesCerradas || [];
 
       // AGRUPAMOS LO YA PAGADO EN ESTE MES POR PROFESIONAL
