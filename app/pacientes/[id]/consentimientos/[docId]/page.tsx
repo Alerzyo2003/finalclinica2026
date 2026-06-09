@@ -56,10 +56,12 @@ export default function DetalleConsentimientoPage() {
       const element = document.getElementById('documento-pdf')!; // <-- ¡AQUÍ ESTÁ EL !
 
       const opt = {
-        // Agregamos "as [number, number, number, number]" al final del arreglo
         margin:       [15, 15, 20, 15] as [number, number, number, number],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
-        image:        { type: 'jpeg', quality: 1 },
+        
+        // CORRECCIÓN AQUÍ: Agregamos "as 'jpeg'"
+        image:        { type: 'jpeg' as 'jpeg', quality: 1 }, 
+        
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
         jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
