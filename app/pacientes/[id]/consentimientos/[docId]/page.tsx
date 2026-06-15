@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ChevronLeft, Printer, Loader2, Download } from 'lucide-react'
-import { toast } from 'sonner'
 import DOMPurify from 'dompurify'
+import { toast } from 'sonner'
 
 export default function DetalleConsentimientoPage() {
   const params = useParams()
@@ -27,6 +27,7 @@ export default function DetalleConsentimientoPage() {
 
       if (doc?.especialista_id) {
         const [profRes, perfRes] = await Promise.all([
+          // CORRECCIÓN: Agregamos firma_base64 a la consulta del profesional
           supabase.from('profesionales').select('nombre, apellido, firma_base64, especialidades(nombre)').eq('user_id', doc.especialista_id).maybeSingle(),
           supabase.from('perfiles').select('rut').eq('id', doc.especialista_id).maybeSingle()
         ])
@@ -35,7 +36,7 @@ export default function DetalleConsentimientoPage() {
             nombre: `Dr/a. ${profRes.data.nombre} ${profRes.data.apellido}`,
             especialidad: (profRes.data as any).especialidades?.nombre || 'Especialista',
             rut: perfRes.data?.rut || '---',
-            firma_base64: profRes.data.firma_base64
+            firma_base64: profRes.data.firma_base64 // Guardamos la firma del especialista
           })
         }
       } else if (doc?.creado_por) {
@@ -53,16 +54,15 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf')!; 
+      const element = document.getElementById('documento-pdf');
 
       const opt = {
-        margin:       [15, 15, 20, 15] as [number, number, number, number],
+        margin:       [15, 15, 20, 15], 
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
-        image:        { type: 'jpeg' as 'jpeg', quality: 1 }, 
+        image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        // CORRECCIÓN FINAL AQUÍ
-        jsPDF:        { unit: 'mm' as 'mm', format: 'letter', orientation: 'portrait' as 'portrait' },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+        jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] }
       };
 
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
@@ -92,16 +92,15 @@ export default function DetalleConsentimientoPage() {
 
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const element = document.getElementById('documento-pdf')!; 
+      const element = document.getElementById('documento-pdf');
 
       const opt = {
-        margin:       [15, 15, 20, 15] as [number, number, number, number],
+        margin:       [15, 15, 20, 15],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
-        image:        { type: 'jpeg' as 'jpeg', quality: 1 }, 
+        image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        // CORRECCIÓN FINAL AQUÍ
-        jsPDF:        { unit: 'mm' as 'mm', format: 'letter', orientation: 'portrait' as 'portrait' },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+        jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] }
       };
 
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
@@ -112,11 +111,7 @@ export default function DetalleConsentimientoPage() {
           pdf.setTextColor(120, 120, 120); 
           pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
         }
-        
-        // ¡LA SOLUCIÓN! Guardamos el PDF usando su propia instancia interna:
-        pdf.save(opt.filename);
-        
-      });
+      }).save();
 
       toast.success("PDF descargado con éxito", { id: toastId });
     } catch (error) {
@@ -150,6 +145,7 @@ export default function DetalleConsentimientoPage() {
             {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
             {generandoPdf ? 'Generando...' : 'Descargar PDF'}
           </button>
+          {/* BOTÓN DE FIRMAR ELIMINADO AQUÍ */}
         </div>
       </nav>
 
@@ -161,7 +157,7 @@ export default function DetalleConsentimientoPage() {
           <div id="documento-pdf" style={{ backgroundColor: '#ffffff', color: '#000000', padding: '50px', fontFamily: 'Arial, sans-serif' }}>
             
             <style>{`
-              #documento-pdf p, #documento-pdf li, #documento-pdf div { page-break-inside: avoid; }
+              #documento-pdf p, #documento-pdf li { page-break-inside: avoid; }
             `}</style>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #000000', paddingBottom: '20px', marginBottom: '30px' }}>
@@ -174,6 +170,9 @@ export default function DetalleConsentimientoPage() {
               <div style={{ textAlign: 'right' }}>
                 <h2 style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#000000', letterSpacing: '1px', margin: '0 0 4px 0' }}>Consentimiento Informado</h2>
                 <p style={{ fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', color: '#000000', fontStyle: 'italic', margin: 0 }}>{documento?.nombre_consentimiento}</p>
+                <p style={{ fontSize: '10px', color: '#555555', margin: '5px 0 0 0' }}>
+                  Generado: {documento?.fecha_creacion ? new Date(documento.fecha_creacion).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                </p>
               </div>
             </div>
 
@@ -210,6 +209,7 @@ export default function DetalleConsentimientoPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '40px', pageBreakInside: 'avoid' }}>
               <div style={{ width: '45%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #000000', paddingBottom: '10px', marginBottom: '10px' }}>
+                  {/* CORRECCIÓN: Ahora carga la firma del especialista desde la tabla profesionales automáticamente */}
                   {(especialista?.firma_base64 || documento?.img_firma_especialista) && (
                     <img 
                       src={especialista?.firma_base64 || documento?.img_firma_especialista} 
@@ -233,6 +233,9 @@ export default function DetalleConsentimientoPage() {
 
           </div>
         </div>
+
+        {/* PAD DE FIRMAS ELIMINADO AQUÍ */}
+
       </main>
     </div>
   )
