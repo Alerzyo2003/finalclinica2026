@@ -57,7 +57,7 @@ export default function DetalleConsentimientoPage() {
       const element = document.getElementById('documento-pdf');
 
       const opt = {
-        margin:       [15, 15, 20, 15] as const, 
+        margin: [15, 15, 20, 15] as [number, number, number, number], 
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
@@ -95,7 +95,7 @@ export default function DetalleConsentimientoPage() {
       const element = document.getElementById('documento-pdf');
 
       const opt = {
-        margin:       [15, 15, 20, 15] as const,
+        margin: [15, 15, 20, 15] as [number, number, number, number],
         filename:     `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
