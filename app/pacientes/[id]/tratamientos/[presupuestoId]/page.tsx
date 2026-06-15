@@ -1212,11 +1212,15 @@ export default function DetalleTratamientoPage() {
 
   const totalPlan = acciones.reduce((acc, curr) => acc + curr.display_pactado, 0) || Number(presupuestoData?.total || 0);
   const abonadoPlan = acciones.reduce((acc, curr) => acc + curr.display_abonado, 0) || Number(presupuestoData?.total_abonado || 0);
-  const deudaPlan = totalPlan - abonadoPlan;
 
   // 🔥 CÁLCULO DEL PORCENTAJE DE DESCUENTO GLOBAL 🔥
   const totalBasePlan = acciones.reduce((acc, curr) => acc + (Number(curr.precio_base) || Number(curr.display_pactado)), 0);
   const porcentajeDctoGlobal = totalBasePlan > 0 ? Math.round(((totalBasePlan - totalPlan) / totalBasePlan) * 100) : 0;
+
+  // 🔥 CÁLCULO DE LA DEUDA REALIZADA (TRABAJO EVOLUCIONADO) 🔥
+  const deudaRealizada = acciones
+    .filter(a => (a.estado === 'realizado' || (a.progreso && a.progreso > 0)))
+    .reduce((acc, curr) => acc + curr.display_saldo, 0);
 
   const totalPorSeccion = (seccion: string) => { return acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto).reduce((acc, curr) => acc + curr.display_pactado, 0); }
 
@@ -1273,9 +1277,9 @@ export default function DetalleTratamientoPage() {
                       <p className="text-[11px] font-black text-slate-800">${abonadoPlan.toLocaleString('es-CL')}</p>
                    </div>
                    <div className="flex flex-col gap-1 border-l border-slate-100">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase leading-tight">Saldo</p>
-                      <p className={`text-[11px] font-black px-1 py-0.5 rounded-md ${deudaPlan > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                         ${deudaPlan.toLocaleString('es-CL')}
+                      <p className="text-[9px] font-bold text-slate-500 uppercase leading-tight">Realizado</p>
+                      <p className={`text-[11px] font-black px-1 py-0.5 rounded-md ${deudaRealizada > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                         ${deudaRealizada.toLocaleString('es-CL')}
                       </p>
                    </div>
                 </div>
