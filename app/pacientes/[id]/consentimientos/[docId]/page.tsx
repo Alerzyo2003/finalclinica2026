@@ -70,7 +70,7 @@ export default function DetalleConsentimientoPage() {
         pagebreak: { mode: ['css', 'legacy'] as const }
       };
 
-      await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
+      await (html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
         const totalPages = pdf.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
           pdf.setPage(i);
@@ -78,6 +78,7 @@ export default function DetalleConsentimientoPage() {
           pdf.setTextColor(120, 120, 120);
           pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
         }
+      }) as any).save();
         
         window.open(pdf.output('bloburl'), '_blank');
       });
@@ -114,7 +115,7 @@ export default function DetalleConsentimientoPage() {
         pagebreak: { mode: ['css', 'legacy'] as const }
       };
 
-      await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
+      await (html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
         const totalPages = pdf.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
           pdf.setPage(i);
@@ -122,7 +123,7 @@ export default function DetalleConsentimientoPage() {
           pdf.setTextColor(120, 120, 120);
           pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
         }
-      }).save();
+      }) as any).save();
 
       toast.success("PDF descargado con éxito", { id: toastId });
     } catch (error) {
