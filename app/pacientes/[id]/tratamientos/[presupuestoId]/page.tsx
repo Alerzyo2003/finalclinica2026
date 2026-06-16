@@ -143,11 +143,16 @@ export default function DetalleTratamientoPage() {
 
   // 🔥 ESTADOS NUEVOS PARA EVOLUCIÓN GRANULAR 🔥
   const [itemsAEvolucionar, setItemsAEvolucionar] = useState<string[]>([]);
-  const [modoSeleccionMultiple, setModoSeleccionMultiple] = useState(false);
   const [modalEvolucionAbierto, setModalEvolucionAbierto] = useState(false);
   const [avanceEvolucion, setAvanceEvolucion] = useState(0);
   const [notaClinica, setNotaClinica] = useState('');
   const [guardandoEvolucion, setGuardandoEvolucion] = useState(false)
+  
+  const [modalAjustesMulti, setModalAjustesMulti] = useState(false);
+  const [dctoMulti, setDctoMulti] = useState(0);
+  const [costoLabMulti, setCostoLabMulti] = useState<number | ''>('');
+  const [labPorDoctorMulti, setLabPorDoctorMulti] = useState(false);
+  const [guardandoMulti, setGuardandoMulti] = useState(false);
   const [modalConfirmarPrestacion, setModalConfirmarPrestacion] = useState<{abierto: boolean, prestacion: any}>({abierto: false, prestacion: null});
 
   const [modalIcono, setModalIcono] = useState<{abierto: boolean, prestacion: any, autoAdd?: boolean}>({
@@ -232,24 +237,37 @@ export default function DetalleTratamientoPage() {
   };
 
   const handleDrop = async (e: React.DragEvent, nuevaSeccion: string) => {
-    e.preventDefault();
-    const itemId = e.dataTransfer.getData('text/plain');
-    if (!itemId) return;
+  e.preventDefault();
+  const itemId = e.dataTransfer.getData('text/plain');
+  if (!itemId) return;
 
-    const item = acciones.find(a => a.id === itemId || a.tempId === itemId);
-    if (!item || item.seccion_nombre === nuevaSeccion) return; 
+  const item = acciones.find(a => a.id === itemId || a.tempId === itemId);
+  if (!item || item.seccion_nombre === nuevaSeccion) return;
 
-    setAcciones(prev => prev.map(a => (a.id === itemId || a.tempId === itemId) ? { ...a, seccion_nombre: nuevaSeccion } : a));
+  setAcciones(prev => prev.map(a =>
+    (a.id === itemId || a.tempId === itemId)
+      ? { ...a, seccion_nombre: nuevaSeccion }
+      : a
+  ));
 
-    let textoBase = item.texto_db || item.nombre_prestacion || item.observacion || '';
-    textoBase = textoBase.replace(/ \| Fase: [^|]+/g, ''); 
-    const nuevoTexto = `${textoBase} | Fase: ${nuevaSeccion}`;
+  let textoBase = item.texto_db || item.nombre_prestacion || item.observacion || '';
+  textoBase = textoBase.replace(/ \| Fase: [^|]+/g, '');
+  const nuevoTexto = `${textoBase} | Fase: ${nuevaSeccion}`;
 
-    if (item.id) {
-       if (item.presupuesto_id) supabase.from('presupuesto_items').update({ observacion: nuevoTexto, nombre_prestacion: nuevoTexto }).eq('id', item.id).then();
-       else supabase.from('temp_items').update({ nombre_prestacion: nuevoTexto, observacion: nuevoTexto }).eq('id', item.id).then();
+  if (item.id) {
+    if (item.presupuesto_id) {
+      await supabase
+        .from('presupuesto_items')
+        .update({ observacion: nuevoTexto, nombre_prestacion: nuevoTexto })
+        .eq('id', item.id);
+    } else {
+      await supabase
+        .from('temp_items')
+        .update({ nombre_prestacion: nuevoTexto, observacion: nuevoTexto })
+        .eq('id', item.id);
     }
-  };
+  }
+};
 
   async function fetchDatosFinales() {
     setCargando(true)
@@ -1114,8 +1132,63 @@ export default function DetalleTratamientoPage() {
       setModalEvolucionAbierto(false);
       setNotaClinica('');
       setItemsAEvolucionar([]);
-      setModoSeleccionMultiple(false);
     } catch (err) { toast.error("Error al registrar la evolución"); } finally { setGuardandoEvolucion(false); }
+  }
+
+  const handleGuardarAjustesMulti = async () => {
+    if (itemsAEvolucionar.length === 0) return toast.error("No hay items seleccionados");
+    setGuardandoMulti(true);
+
+    const updates = itemsAEvolucionar.map(itemId => {
+      const item = acciones.find(a => a.id === itemId);
+      if (!item) return null;
+
+      const dcto = dctoMulti;
+      const precioBase = item.precio_base || item.precio || 0;
+      const nuevoPactado = precioBase * (1 - (dcto / 100));
+
+      let nuevaObs = item.texto_db || item.display_nombre || '';
+      nuevaObs = nuevaObs.replace(/ \| Dcto: [0-9]+/g, '');
+      if (dcto > 0) nuevaObs += ` | Dcto: ${dcto}`;
+
+      const updatePayload: any = {
+        observacion: nuevaObs,
+        nombre_prestacion: nuevaObs,
+        precio_pactado: nuevoPactado,
+      };
+
+      if (costoLabMulti !== '') {
+        updatePayload.costo_laboratorio = Number(costoLabMulti);
+        updatePayload.lab_pagado_por_dr = labPorDoctorMulti;
+      }
+
+      if (item.presupuesto_id) {
+        return supabase.from('presupuesto_items').update(updatePayload).eq('id', item.id);
+      } else {
+        return supabase.from('temp_items').update(updatePayload).eq('id', item.id);
+      }
+    }).filter(Boolean);
+
+    try {
+      await Promise.all(updates);
+
+      setAcciones(prev => prev.map(a => {
+        if (itemsAEvolucionar.includes(a.id)) {
+          const dcto = dctoMulti;
+          const precioBase = a.precio_base || a.precio || 0;
+          const nuevoPactado = precioBase * (1 - (dcto / 100));
+          let nuevaObs = a.texto_db || a.display_nombre || '';
+          nuevaObs = nuevaObs.replace(/ \| Dcto: [0-9]+/g, '');
+          if (dcto > 0) nuevaObs += ` | Dcto: ${dcto}`;
+          const updatedItem: any = { ...a, descuento: dcto, texto_db: nuevaObs, precio_pactado: nuevoPactado, display_pactado: nuevoPactado, display_saldo: nuevoPactado - a.display_abonado, };
+          if (costoLabMulti !== '') { updatedItem.costo_laboratorio = Number(costoLabMulti); updatedItem.lab_pagado_por_dr = labPorDoctorMulti; }
+          return updatedItem;
+        }
+        return a;
+      }));
+      toast.success(`${itemsAEvolucionar.length} prestaciones actualizadas.`);
+      setModalAjustesMulti(false); setItemsAEvolucionar([]);
+    } catch (error) { toast.error("Error al actualizar una o más prestaciones."); } finally { setGuardandoMulti(false); }
   }
 
   const handleGuardarIcono = async (iconoId: string | null) => {
@@ -1477,9 +1550,6 @@ export default function DetalleTratamientoPage() {
           </div>
 
           <div className="flex justify-center gap-4 w-full max-w-2xl" data-html2canvas-ignore="true">
-             <button onClick={() => setModoSeleccionMultiple(!modoSeleccionMultiple)} className={`flex-1 border-2 px-6 py-4 rounded-[1.2rem] font-black text-[11px] uppercase shadow-sm transition-all flex items-center justify-center gap-2 ${modoSeleccionMultiple ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-500 hover:text-blue-600'}`}>
-               {modoSeleccionMultiple ? <X size={16} /> : <Check size={16} />} {modoSeleccionMultiple ? 'Cancelar Selección' : 'Seleccionar Varios'}
-             </button>
              <button onClick={() => setModalNuevaSeccion(true)} className="flex-1 bg-white border-2 border-slate-200 text-slate-600 px-6 py-4 rounded-[1.2rem] font-black text-[11px] uppercase shadow-sm hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center gap-2">
                <Layers size={16} /> Crear Fase Clínica
              </button>
@@ -1589,11 +1659,28 @@ export default function DetalleTratamientoPage() {
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50/50">
-                          {modoSeleccionMultiple && (
                             <th className="px-4 py-4 text-center">
-                              <input type="checkbox" className="w-5 h-5 accent-blue-600" onChange={(e) => setItemsAEvolucionar(e.target.checked ? itemsSeccion.map(i => i.id) : [])} />
+                              <input 
+                                type="checkbox" 
+                                className="w-5 h-5 accent-blue-600" 
+                                ref={el => {
+                                  if (el) {
+                                    const allSelected = itemsSeccion.every(i => itemsAEvolucionar.includes(i.id));
+                                    const someSelected = itemsSeccion.some(i => itemsAEvolucionar.includes(i.id));
+                                    el.checked = allSelected;
+                                    el.indeterminate = someSelected && !allSelected;
+                                  }
+                                }}
+                                onChange={(e) => {
+                                  const idsDeEstaSeccion = itemsSeccion.map(i => i.id);
+                                  if (e.target.checked) {
+                                    setItemsAEvolucionar(prev => [...new Set([...prev, ...idsDeEstaSeccion])]);
+                                  } else {
+                                    setItemsAEvolucionar(prev => prev.filter(id => !idsDeEstaSeccion.includes(id)));
+                                  }
+                                }}
+                              />
                             </th>
-                          )}
                           <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic w-24 text-center">Pieza</th>
                           <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic">Prestación</th>
                           <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-32">Avance</th>
@@ -1618,11 +1705,9 @@ export default function DetalleTratamientoPage() {
                             onDragStart={(e) => handleDragStart(e, item.tempId)}
                             className="hover:bg-blue-50/40 transition-all group cursor-grab active:cursor-grabbing"
                           >
-                            {modoSeleccionMultiple && (
                               <td className="px-4 py-5 text-center">
                                 <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={itemsAEvolucionar.includes(item.id)} onChange={() => setItemsAEvolucionar(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id])} />
                               </td>
-                            )}
                             <td className="px-6 py-5 text-center">
                               <div className={`px-2 py-2 mx-auto rounded-full bg-slate-100 flex flex-col items-center justify-center font-black text-xs text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all leading-none ${item.zona ? 'w-auto' : 'w-10 h-10'}`}>
                                 {editandoDienteId === item.tempId ? (
@@ -1746,6 +1831,20 @@ export default function DetalleTratamientoPage() {
                           <option value={75}>75%</option>
                           <option value={100}>100% (Cortesía)</option>
                       </select>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={dctoInput}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (!isNaN(val) && val >= 0 && val <= 100) setDctoInput(val);
+                          else if (e.target.value === '') setDctoInput(0); // Allow clearing the input
+                        }}
+                        placeholder="0-100"
+                        className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+                      />
                       
                       <div className="pt-2 flex justify-between items-center border-t border-slate-200 mt-4">
                          <span className="text-[10px] font-black uppercase text-slate-400">Precio Final Paciente:</span>
@@ -1792,6 +1891,85 @@ export default function DetalleTratamientoPage() {
         )}
       </AnimatePresence>
 
+      {/* 🔥 MODAL PARA AJUSTES MÚLTIPLES 🔥 */}
+      <AnimatePresence>
+        {modalAjustesMulti && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter">Ajustes en Lote</h3>
+                  <button onClick={() => setModalAjustesMulti(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                </div>
+                
+                <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                   <div>
+                       <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Aplicar a {itemsAEvolucionar.length} prestaciones</p>
+                       <p className="text-xs font-bold text-slate-500 leading-tight">Los cambios se aplicarán a todos los tratamientos seleccionados. Los valores existentes serán sobreescritos.</p>
+                   </div>
+                   
+                   <div className="space-y-2 p-5 bg-slate-50 border border-slate-100 rounded-2xl">
+                      <label className="text-[10px] font-black uppercase text-slate-500">Descuento para todos (%)</label>
+                      <select value={dctoMulti} onChange={(e) => setDctoMulti(parseInt(e.target.value))} className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm">
+                          <option value={0}>Sin Descuento (0%)</option>
+                          <option value={5}>5%</option>
+                          <option value={10}>10%</option>
+                          <option value={15}>15%</option>
+                          <option value={20}>20%</option>
+                          <option value={25}>25%</option>
+                          <option value={30}>30%</option>
+                          <option value={40}>40%</option>
+                          <option value={50}>50%</option>
+                          <option value={75}>75%</option>
+                          <option value={100}>100% (Cortesía)</option>
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={dctoMulti}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (!isNaN(val) && val >= 0 && val <= 100) setDctoMulti(val);
+                          else if (e.target.value === '') setDctoMulti(0); // Allow clearing the input
+                        }}
+                        placeholder="0-100"
+                        className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+                      />
+                   </div>
+
+                   <div className="space-y-4 p-5 bg-purple-50 border border-purple-100 rounded-2xl">
+                      <div>
+                          <label className="text-[10px] font-black uppercase text-purple-600">Costo de Insumo / Laboratorio ($)</label>
+                          <p className="text-[9px] text-purple-400 font-bold mb-2">Dejar en blanco para no modificar. Ingresar 0 para borrar el costo existente.</p>
+                          <input 
+                              type="number" 
+                              placeholder="No modificar"
+                              value={costoLabMulti}
+                              onChange={(e) => setCostoLabMulti(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full p-4 rounded-xl bg-white font-black text-sm text-slate-800 border border-purple-200 outline-none focus:border-purple-500 transition-all shadow-sm"
+                          />
+                      </div>
+                      
+                      {costoLabMulti !== '' && Number(costoLabMulti) > 0 && (
+                          <div className="flex items-center justify-between pt-2">
+                              <span className="text-[10px] font-black uppercase text-slate-600">¿Material aportado por el Doctor?</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" className="sr-only peer" checked={labPorDoctorMulti} onChange={(e) => setLabPorDoctorMulti(e.target.checked)} />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                              </label>
+                          </div>
+                      )}
+                   </div>
+                   <button onClick={handleGuardarAjustesMulti} disabled={guardandoMulti} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-slate-800 transition-all">
+                     {guardandoMulti ? <Loader2 className="animate-spin" /> : <Save size={16}/>} Aplicar Cambios
+                   </button>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* PANEL UNIVERSAL AGREGAR PRESTACIÓN Y PACKS */}
       <AnimatePresence>
         {panelAgregarAbierto && (
@@ -1814,7 +1992,7 @@ export default function DetalleTratamientoPage() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-800 ml-1">Dentista</label>
-                    <select className="w-full px-3 py-2.5 rounded-xl bg-slate-50 font-bold text-xs uppercase border border-slate-200 text-slate-900 outline-none focus:border-blue-500 transition-all cursor-pointer" value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)}>
+                    <select className="w-full px-3 py-2.5 rounded-xl bg-slate-50 font-bold text-xs uppercase border border-slate-200 text-slate-900 outline-none focus:border-blue-500 transition-all cursor-pointer" value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)} disabled={perfil?.rol === 'DENTISTA'}>
                         <option value="">Seleccionar...</option>
                         {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.apellido}</option>)}
                     </select>
@@ -2423,13 +2601,16 @@ export default function DetalleTratamientoPage() {
 
       {/* 🔥 BARRA FLOTANTE PARA EVOLUCIÓN MÚLTIPLE 🔥 */}
       <AnimatePresence>
-        {modoSeleccionMultiple && itemsAEvolucionar.length > 0 && (
+        {itemsAEvolucionar.length > 0 && (
           <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-[2rem] shadow-2xl z-40 flex items-center gap-4">
               <div className="px-5 text-white border-r border-white/10 pr-6 text-left">
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Seleccionados</p>
                   <p className="font-bold">{itemsAEvolucionar.length} tratamientos</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl">
+                  <button onClick={() => setModalAjustesMulti(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-1.5">
+                      <Settings size={14} /> Ajustes
+                  </button>
                   <select onChange={(e) => abrirModalEvolucion(itemsAEvolucionar, parseInt(e.target.value))} className="bg-slate-800 text-white p-3 rounded-xl text-xs font-bold outline-none border border-slate-700 cursor-pointer">
                       <option>Evolucionar a...</option>
                       <option value="25">25%</option>
@@ -2444,15 +2625,13 @@ export default function DetalleTratamientoPage() {
           </motion.div>
         )}
       </AnimatePresence>
-
-    </div>
-  )
-}
-
-function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFaceClick, invert }: any) {
-  const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
-  const faceLeft = screenLeft ? 'D' : 'M';
-  const faceRight = screenLeft ? 'M' : 'D';
+      </div> // <--- AGREGA ESTO
+  ) // <--- AGREGA ESTO
+} // <--- AGREGA ESTO
+    function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFaceClick, invert }: any) {
+      const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
+      const faceLeft = screenLeft ? 'D' : 'M';
+      const faceRight = screenLeft ? 'M' : 'D';
 
   const getFill = (c: string) => {
     // 1. PRIMERA PRIORIDAD: Lesión específica en esta cara
