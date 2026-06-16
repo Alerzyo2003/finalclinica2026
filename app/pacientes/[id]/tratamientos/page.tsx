@@ -1818,6 +1818,19 @@ export default function DetalleTratamientoPage() {
                    {/* SECCIÓN DESCUENTOS */}
                    <div className="space-y-2 p-5 bg-slate-50 border border-slate-100 rounded-2xl">
                       <label className="text-[10px] font-black uppercase text-slate-500">Descuento al Paciente (%)</label>
+                      <select value={dctoInput} onChange={(e) => setDctoInput(parseInt(e.target.value))} className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm">
+                          <option value={0}>Sin Descuento (0%)</option>
+                          <option value={5}>5%</option>
+                          <option value={10}>10%</option>
+                          <option value={15}>15%</option>
+                          <option value={20}>20%</option>
+                          <option value={25}>25%</option>
+                          <option value={30}>30%</option>
+                          <option value={40}>40%</option>
+                          <option value={50}>50%</option>
+                          <option value={75}>75%</option>
+                          <option value={100}>100% (Cortesía)</option>
+                      </select>
                       <input
                         type="number"
                         min="0"
@@ -1896,6 +1909,19 @@ export default function DetalleTratamientoPage() {
                    
                    <div className="space-y-2 p-5 bg-slate-50 border border-slate-100 rounded-2xl">
                       <label className="text-[10px] font-black uppercase text-slate-500">Descuento para todos (%)</label>
+                      <select value={dctoMulti} onChange={(e) => setDctoMulti(parseInt(e.target.value))} className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm">
+                          <option value={0}>Sin Descuento (0%)</option>
+                          <option value={5}>5%</option>
+                          <option value={10}>10%</option>
+                          <option value={15}>15%</option>
+                          <option value={20}>20%</option>
+                          <option value={25}>25%</option>
+                          <option value={30}>30%</option>
+                          <option value={40}>40%</option>
+                          <option value={50}>50%</option>
+                          <option value={75}>75%</option>
+                          <option value={100}>100% (Cortesía)</option>
+                      </select>
                       <input
                         type="number"
                         min="0"
