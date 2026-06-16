@@ -54,7 +54,13 @@ export default function DetalleConsentimientoPage() {
     try {
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('documento-pdf');
-
+      
+      if (!element) {
+        toast.error("No se encontró el documento para generar el PDF", { id: toastId });
+        setGenerandoPdf(false);
+      return;
+      }
+      
       const opt = {
         margin: [15, 15, 20, 15] as [number, number, number, number],
         filename: `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
@@ -93,6 +99,12 @@ export default function DetalleConsentimientoPage() {
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('documento-pdf');
 
+      if (!element) {
+        toast.error("No se encontró el documento para imprimir", { id: toastId });
+        setGenerandoPdf(false);
+      return;
+      }
+      
       const opt = {
         margin: [15, 15, 20, 15] as [number, number, number, number],
         filename: `Consentimiento_${paciente?.rut || 'Clinica'}.pdf`,
