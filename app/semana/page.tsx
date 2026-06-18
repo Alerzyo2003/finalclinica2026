@@ -5,9 +5,8 @@ import {
   X, Search, ChevronLeft, ChevronRight, Loader2, Clock,
   CalendarDays, Timer, UserCheck, Trash2, Activity, ClipboardList,
   CheckCircle2, Plus, Calendar as CalendarIcon, Briefcase,
-  AlertTriangle, Phone, Mail, MessageCircle, Ban, RefreshCcw, 
-  ChevronDown, CalendarClock, LayoutGrid, List, Lock, FileText, 
-  Send, User, Users, Save
+  AlertTriangle, Phone, Mail, MessageCircle, Ban, RefreshCcw, ChevronDown, CalendarClock,
+  LayoutGrid, List, Lock, FileText, Send, User
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -104,7 +103,7 @@ export default function DiarioGlobalPage() {
   const [semanaReagenda, setSemanaReagenda] = useState<Date>(getLunes(new Date()))
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
-  const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
+  const [reagendaProps, setReagendaProps] = useState({ fecha: '', especialistaId: '', duracion: 30, box: 1 })
   const [guardandoConflicto, setGuardandoConflicto] = useState(false)
 
   const [mostrarTicket, setMostrarTicket] = useState(false);
@@ -112,6 +111,16 @@ export default function DiarioGlobalPage() {
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null);
   const duracionesDisponibles = [15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300];
   const alertaRef = useRef(false); // Para evitar doble alerta en StrictMode
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Efecto para actualizar la hora cada minuto
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Se actualiza cada 60 segundos
+    return () => clearInterval(timer);
+  }, []);
 
   const slotsOcupadosSet = useMemo(() => {
     const ocupados = new Set();
@@ -131,6 +140,7 @@ export default function DiarioGlobalPage() {
   useEffect(() => { fetchDatos(); }, [selectedDate]);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => { if (data.session) setUsuarioLogueado(data.session.user.id); }); }, []);
   useEffect(() => { if (modalAbierto && filtro.profesional_id) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [semanaInicio, modalAbierto, filtro.profesional_id]);
+
   // Efecto para el modal de conflictos
   useEffect(() => {
     if (mostrarModalConflictos && citaEnEdicion) { calcularDisponibilidadSemanalConflicto() }
@@ -139,11 +149,18 @@ export default function DiarioGlobalPage() {
   async function fetchDatos() {
     setCargando(true);
     const fechaISO = selectedDate.toISOString().split('T')[0];
+    
     try {
-      const { data: perfilesDentistas } = await supabase.from('perfiles').select('id').eq('rol', 'DENTISTA');
-      const idsDentistas = (perfilesDentistas || []).map(p => p.id);
-      const { data: profs } = await supabase.from('profesionales').select('id, nombre, apellido, user_id').eq('activo', true).in('user_id', idsDentistas);
+      // Buscamos DIRECTAMENTE en la tabla profesionales (saltándonos 'perfiles')
+      const { data: profs, error: profsError } = await supabase
+        .from('profesionales')
+        .select('id, nombre, apellido, user_id')
+        .eq('activo', true);
+
+      if (profsError) throw profsError;
+
       const dentistas = profs || [];
+      const idsDentistas = dentistas.map(p => p.user_id);
 
       if (dentistas.length > 0) {
         const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
@@ -151,17 +168,32 @@ export default function DiarioGlobalPage() {
           supabase.from('disponibilidad_profesional').select('*').in('profesional_id', idsDentistas),
           supabase.from('bloqueos_agenda').select('*').in('profesional_id', idsDentistas).eq('fecha', fechaISO)
         ]);
+        
         setCitas(citasRes.data || []);
         setDisponibilidades(dispoRes.data || []);
         setBloqueos(bloqueosRes.data || []);
         setProfesionales(dentistas);
-      } else { setCitas([]); setProfesionales([]); }
-    } catch (error) { toast.error("Error al cargar la agenda global"); } finally { setCargando(false); }
+      } else { 
+        setCitas([]); 
+        setProfesionales([]); 
+      }
+    } catch (error) { 
+      console.error(error);
+      toast.error("Error al cargar la agenda global"); 
+    } finally { 
+      setCargando(false); 
+    }
   }
 
   const fechaISOActual = selectedDate.toISOString().split('T')[0];
   const diaSemanaActual = selectedDate.getDay();
 
+  const esHoy = getLocalDateISO(selectedDate) === getLocalDateISO(currentTime);
+  const minutosDesdeLas8 = (currentTime.getHours() * 60 + currentTime.getMinutes()) - (8 * 60);
+  const topLineaTiempo = (minutosDesdeLas8 / 15) * 3; 
+  const mostrarLineaTiempo = esHoy && minutosDesdeLas8 >= 0 && minutosDesdeLas8 <= ((21 - 8) * 60);
+
+ 
   const profesionalesDelDia = profesionales.filter(p => {
     const tieneDispo = disponibilidades.some(d => d.profesional_id === p.user_id && ((d.fecha_especifica && d.fecha_especifica === fechaISOActual) || (!d.fecha_especifica && d.dia_semana === diaSemanaActual)));
     return tieneDispo || citas.some(c => c.profesional_id === p.user_id);
@@ -444,15 +476,17 @@ export default function DiarioGlobalPage() {
     try {
       let pId = pacienteSeleccionado?.id;
       let pNombreFull = pacienteSeleccionado ? `${pacienteSeleccionado.nombre} ${pacienteSeleccionado.apellido}` : "";
+      let pTelefono = pacienteSeleccionado?.telefono;
       if (modoNuevoPaciente && !citaEnReprogramacion) {
         const rutLimpio = nuevoPaciente.rut.replace(/[^0-9kK]/g, '').toUpperCase().trim();
         const { data: pNew } = await supabase.from('pacientes').insert([{ nombre: nuevoPaciente.nombre.toUpperCase().trim(), apellido: nuevoPaciente.apellido.toUpperCase().trim(), rut: rutLimpio, telefono: nuevoPaciente.telefono, fecha_nacimiento: nuevoPaciente.fecha_nacimiento, sexo: nuevoPaciente.sexo, activo: true }]).select().single();
-        if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; }
+        if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; pTelefono = nuevoPaciente.telefono; }
       }
       const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
-        const [h, m] = horaStr.split(':').map(Number);
-        const finH = h + Math.floor((m + duracionMin) / 60), finM = (m + duracionMin) % 60;
-        return { inicio: `${fechaStr}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`, fin: `${fechaStr}T${finH.toString().padStart(2, '0')}:${finM.toString().padStart(2, '0')}:00` };
+        const finDate = new Date(new Date(`${fechaStr}T${horaStr}:00`).getTime() + duracionMin * 60000);
+        const finH = finDate.getHours().toString().padStart(2, '0');
+        const finM = finDate.getMinutes().toString().padStart(2, '0');
+        return { inicio: `${fechaStr}T${horaStr}:00`, fin: `${fechaStr}T${finH}:${finM}:00` };
       };
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0]; const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
@@ -464,7 +498,7 @@ export default function DiarioGlobalPage() {
         });
         await supabase.from('citas').insert(nuevasCitas);
       }
-      setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas });
+      setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas, telefono: pTelefono });
       setMostrarTicket(true); await fetchDatos();
     } catch (e) { toast.error("Error al guardar"); } finally { setCargandoAccion(false); }
   };
@@ -492,13 +526,21 @@ export default function DiarioGlobalPage() {
           <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
             {/* Control de Fechas */}
             <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-2 flex items-center gap-4 shadow-inner">
-              <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
+              <button onClick={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() - 1);
+                setSelectedDate(newDate);
+              }} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronLeft size={20} />
               </button>
               <h2 className="text-sm font-black uppercase text-slate-800 tracking-widest min-w-[200px] text-center">
                 {selectedDate.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' })}
               </h2>
-              <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
+              <button onClick={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() + 1);
+                setSelectedDate(newDate);
+              }} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronRight size={20} />
               </button>
             </div>
@@ -562,6 +604,19 @@ export default function DiarioGlobalPage() {
                       )}
                     </div>
                     <div className="relative min-h-[600px]">
+                      {mostrarLineaTiempo && (
+                        <div 
+                          className="absolute left-0 w-full z-20 flex items-center pointer-events-none"
+                          style={{ 
+                            top: `${topLineaTiempo}rem`, 
+                            transform: 'translateY(-50%)' 
+                          }}
+                        >
+                          <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] z-10 -ml-1"></div>
+                          <div className="flex-1 border-b-2 border-red-500 border-dashed opacity-60"></div>
+                        </div>
+                      )}
+
                       {filtroDoctor !== 'TODOS' && !estaDeTurno ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-50/50">
                           <CalendarIcon size={40} className="text-slate-300 mb-4" />
@@ -1015,7 +1070,7 @@ export default function DiarioGlobalPage() {
                                       <p className="font-black text-sm uppercase text-slate-800 tracking-tighter">{p.nombre} {p.apellido}</p>
                                       <p className="text-[10px] font-bold text-slate-400 tracking-widest mt-1">{p.rut}</p>
                                     </div>
-                                    <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                    <ChevronRightIcon size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                                   </button>
                                 ))}
                                 {pacienteSeleccionado && pacientesEncontrados.length === 0 && (
@@ -1121,12 +1176,29 @@ export default function DiarioGlobalPage() {
                     <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.citas[0]?.fecha} • {citaConfirmadaData?.citas[0]?.hora} hrs</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setMostrarTicket(false); setModalAbierto(false); resetEstados(); }}
-                  className="w-full py-5 bg-slate-900 hover:bg-black rounded-3xl text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all active:scale-95"
-                >
-                  Finalizar
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      if (!citaConfirmadaData) return;
+                      const { paciente, citas, telefono } = citaConfirmadaData;
+                      if (!telefono) {
+                          toast.error("El paciente no tiene un número de teléfono registrado.");
+                          return;
+                      }
+                      const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
+                      const hora = citas[0].hora;
+                      const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
+                      const numLimpio = telefono.replace(/\D/g, '');
+                      const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
+                      window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
+                      setMostrarTicket(false); setModalAbierto(false); resetEstados();
+                    }}
+                    className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle size={14}/> Finalizar y Enviar WhatsApp
+                  </button>
+                  <button onClick={() => { setMostrarTicket(false); setModalAbierto(false); resetEstados(); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Finalizar</button>
+                </div>
               </div>
             </motion.div>
           </div>
