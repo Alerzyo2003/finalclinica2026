@@ -3,7 +3,7 @@ import { type CookieOptions, createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/admin'
 
-const VIRTUAL_DOMAIN = '@clinicadignidad.com' // Dominio virtual para correos de staff
+const VIRTUAL_DOMAIN = '@dentapro.com' // Dominio virtual para correos de staff
 
 async function verificarAdmin() {
   // 1. Add "await" here
