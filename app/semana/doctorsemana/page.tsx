@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import {
   X, Search, ChevronLeft, ChevronRight, Loader2, Clock,
   CalendarDays, Timer, Plus, Ban, RefreshCcw, User, CheckCircle2, 
-  Briefcase, ChevronRight as ChevronRightIcon, Stethoscope, Users, Save
+  Briefcase, ChevronRight as ChevronRightIcon, Stethoscope, Users, Save, User
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
