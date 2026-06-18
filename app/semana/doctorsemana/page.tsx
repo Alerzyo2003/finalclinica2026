@@ -2,11 +2,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { 
+import {
   X, Search, ChevronLeft, ChevronRight, Loader2, Clock,
   CalendarDays, Timer, Plus, Ban, RefreshCcw, User, CheckCircle2, 
-  Briefcase, ChevronRight as ChevronRightIcon, Stethoscope,
-  Users, Save, CalendarClock // <-- ¡Aquí agregamos los que faltaban!
+  Briefcase, ChevronRight as ChevronRightIcon, Stethoscope
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -81,7 +80,15 @@ export default function DoctorSemanaPage() {
     return new Date(now.getFullYear(), now.getMonth(), diff);
   });
   const [cargando, setCargando] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
+  // Efecto para actualizar la hora cada minuto
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Se actualiza cada 60 segundos
+    return () => clearInterval(timer);
+  }, []);
   // Modal
   const [modalAbierto, setModalAbierto] = useState(false);
   const [paso, setPaso] = useState(1);
@@ -114,7 +121,7 @@ export default function DoctorSemanaPage() {
   const [semanaReagenda, setSemanaReagenda] = useState<Date>(getLunes(new Date()))
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
-  const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
+  const [reagendaProps, setReagendaProps] = useState({ fecha: '', especialistaId: '', duracion: 30, box: 1 })
   const [guardandoConflicto, setGuardandoConflicto] = useState(false)
 
   const slotsOcupadosSet = useMemo(() => {
@@ -509,6 +516,14 @@ if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra sel
               const getHoraLimpias = (fechaString: string) => fechaString.includes('T') ? fechaString.split('T')[1].substring(0,5) : fechaString.split(' ')[1].substring(0,5);
               const esBloqueoDiaCompleto = bloqueos.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin));
 
+              // 🔥 Cálculos para la línea de tiempo en esta columna
+              const esHoy = fStr === getLocalDateISO(currentTime);
+              const minutosDesdeLas8 = (currentTime.getHours() * 60 + currentTime.getMinutes()) - (8 * 60);
+              const topLineaTiempo = (minutosDesdeLas8 / 15) * 3;
+              
+              // Al quitar 'esHoy' de aquí, permitimos que la línea se dibuje en todos los días
+              const mostrarLineaTiempo = minutosDesdeLas8 >= 0 && minutosDesdeLas8 <= ((21 - 8) * 60);
+
               return (
                 <div key={fStr} className="flex-shrink-0 border-r border-slate-100" style={{ width: '280px' }}>
                   <div className="p-6 text-sm font-black text-slate-700 uppercase border-b border-slate-100 sticky top-0 bg-white z-10 h-[105px] flex items-center justify-between text-center">
@@ -524,6 +539,21 @@ if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra sel
                     )}
                   </div>
                   <div className="relative">
+                    
+                    {/* 🔥 Renderizado de la línea de tiempo */}
+                    {mostrarLineaTiempo && (
+                      <div 
+                        className="absolute left-0 w-full z-20 flex items-center pointer-events-none"
+                        style={{ 
+                          top: `${topLineaTiempo}rem`, 
+                          transform: 'translateY(-50%)' 
+                        }}
+                      >
+                        <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] z-10 -ml-1"></div>
+                        <div className="flex-1 border-b-2 border-red-500 border-dashed opacity-60"></div>
+                      </div>
+                    )}
+
                     {slotsHorarios.map(hora => {
                       const slotInicioMins = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
                       const esBloqueado = bloqueos.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin || (tToMins(b.hora_inicio) <= slotInicioMins && slotInicioMins < tToMins(b.hora_fin))));
