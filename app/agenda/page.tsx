@@ -242,7 +242,15 @@ export default function AgendaPage() {
     }
     
     let query = supabase.from('citas').select('*, pacientes(*)').gte('inicio', inicioRango).lte('inicio', finRango);
-    if (filtroEspecialista !== 'Todos') query = query.eq('profesional_id', filtroEspecialista);
+    
+    // 🔥 RESTRICCIÓN DE SEGURIDAD PARA DOCTORES 🔥
+    if (!puedeVerAgendaCompleta) {
+      // Si es dentista, obligamos a que solo traiga sus propias citas utilizando su ID de usuario logueado
+      query = query.eq('profesional_id', usuarioLogueado);
+    } else if (filtroEspecialista !== 'Todos') {
+      // Si es Admin/Recepcionista, respetamos el selector manual de la cabecera
+      query = query.eq('profesional_id', filtroEspecialista);
+    }
     
     const { data: citasData } = await query.order('inicio', { ascending: true });
     
@@ -324,7 +332,12 @@ export default function AgendaPage() {
         .not('estado', 'in', '("cancelada","atendido","no_asiste")')
         .order('inicio', { ascending: true });
         
-      if (filtroEspecialista !== 'Todos') { queryCitas = queryCitas.eq('profesional_id', filtroEspecialista); }
+      // 🔥 RESTRICCIÓN DE SEGURIDAD PARA CITAS HUÉRFANAS 🔥
+      if (!puedeVerAgendaCompleta) {
+        queryCitas = queryCitas.eq('profesional_id', usuarioLogueado);
+      } else if (filtroEspecialista !== 'Todos') {
+        queryCitas = queryCitas.eq('profesional_id', filtroEspecialista);
+      }
 
       const { data: citasFuturas, error: errCitas } = await queryCitas;
       if (errCitas) console.error("❌ Error en BD al traer citas:", errCitas);
@@ -334,7 +347,14 @@ export default function AgendaPage() {
       }
 
       let queryBloqueos = supabase.from('bloqueos_agenda').select('*').gte('fecha', hoyStr).lte('fecha', limiteStr);
-      if (filtroEspecialista !== 'Todos') queryBloqueos = queryBloqueos.eq('profesional_id', filtroEspecialista);
+      
+      // Aplicamos el mismo filtro restrictivo a los bloqueos de agenda
+      if (!puedeVerAgendaCompleta) {
+        queryBloqueos = queryBloqueos.eq('profesional_id', usuarioLogueado);
+      } else if (filtroEspecialista !== 'Todos') {
+        queryBloqueos = queryBloqueos.eq('profesional_id', filtroEspecialista);
+      }
+      
       const { data: bloqueos, error: errBloq } = await queryBloqueos;
       if (errBloq) console.error("❌ Error en BD al traer bloqueos:", errBloq);
 
