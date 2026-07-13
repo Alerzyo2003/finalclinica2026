@@ -542,19 +542,30 @@ export default function AgendaPage() {
     toast.success("Estado actualizado"); await fetchCitasAgenda();
   }
 
-  const contactarWhatsApp = (telefono: string, nombre: string, estado: string, hora: string) => {
-    if (!telefono) return toast.error("Paciente sin teléfono");
-    const num = telefono.replace(/\D/g, '');
-    let mensaje = `Hola ${nombre}, nos comunicamos de la clínica dental.`;
-    if (estado === 'programada' || estado === 'confirmado_tel') {
-        mensaje = `Hola ${nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
-    } else if (estado === 'atendido') {
-        mensaje = `Hola ${nombre}, esperamos que estés muy bien tras tu atención de hoy en la clínica. ¡Cualquier consulta no dudes en escribirnos!`;
-    } else if (estado === 'no_asiste') {
-        mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita de hoy. ¿Te gustaría reagendar para otro día?`;
-    }
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  const contactarWhatsApp = (telefono, nombre, estado, fechaHoraISO) => {
+  if (!telefono) return toast.error("Paciente sin teléfono");
+  const num = telefono.replace(/\D/g, '');
+
+  let citaDate = new Date(fechaHoraISO.replace(' ', 'T'));
+  if (isNaN(citaDate.getTime())) {
+    citaDate = new Date();
   }
+
+  const diaSemana = citaDate.toLocaleDateString('es-CL', { weekday: 'long' });
+  const hora = citaDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  // 1. Mensaje por defecto (para cualquier estado que no sea atendido o no_asiste)
+  let mensaje = `Hola ${nombre}, te escribimos de la Clínica Dignidad para recordar tu cita del día ${diaSemana} a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
+
+  // 2. Solo cambiamos el mensaje si el estado es específicamente uno de estos
+  if (estado === 'atendido') {
+    mensaje = `Hola ${nombre}, esperamos que hayas tenido una excelente atención en la clínica. ¡Cualquier consulta estamos a tu disposición!`;
+  } else if (estado === 'no_asiste') {
+    mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita del ${diaSemana}. ¿Te gustaría reagendar para otro día?`;
+  }
+
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
+};
 
   const abrirEnvioPresupuesto = async (cita: any) => {
     if (!cita.paciente_id) return toast.error("Cita sin paciente asociado");
@@ -1068,16 +1079,22 @@ export default function AgendaPage() {
         <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 w-full xl:w-auto">
           <div className="space-y-1.5 text-left">
             <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Agenda Clínica</h1>
-            <div className="flex items-center gap-2 text-slate-500">
-               <Stethoscope size={14}/>
-               {puedeVerAgendaCompleta ? (
-                   <select className="text-[11px] font-bold uppercase bg-transparent outline-none cursor-pointer hover:text-blue-600 transition-colors max-w-[220px]" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
-                     <option value="Todos">Todos los especialistas</option>
-                     {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-                   </select>
-               ) : (
-                   <span className="text-[11px] font-bold uppercase text-slate-700">Mis Citas</span>
-               )}
+            
+            {/* NUEVO FILTRO DE ESPECIALISTA */}
+            <div className="flex items-center gap-2 text-slate-200 bg-white border border-slate-200 rounded-2xl p-1 shadow-sm hover:border-slate-300 transition-all">
+              <div className="pl-3 text-blue-300"><Stethoscope size={16} /></div>
+              {puedeVerAgendaCompleta ? (
+                <select 
+                  className="text-xs font-black uppercase bg-transparent outline-none cursor-pointer py-2 pr-8 pl-1 w-[200px] text-slate-700" 
+                  value={filtroEspecialista} 
+                  onChange={(e) => setFiltroEspecialista(e.target.value)}
+                >
+                  <option value="Todos">Todos los especialistas</option>
+                  {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                </select>
+              ) : (
+                <span className="text-xs font-black uppercase px-4 py-2 text-slate-700">Mis Citas</span>
+              )}
             </div>
           </div>
 
@@ -1242,7 +1259,7 @@ export default function AgendaPage() {
                                 <CalendarClock size={14}/>
                             </button>
 
-                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shrink-0" title="WhatsApp Inteligente">
+                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, c.inicio)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shrink-0" title="WhatsApp Inteligente">
                                 <MessageCircle size={14}/>
                             </button>
                             <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all shrink-0" title="Enviar Presupuesto">
@@ -1324,7 +1341,7 @@ export default function AgendaPage() {
                                                 <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-1.5 text-slate-500 hover:bg-purple-50 hover:text-purple-600 rounded-md transition-all"><CalendarClock size={14}/></button>
 
                                                 <button onClick={() => abrirEnvioPresupuesto(c)} className="p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all"><FileText size={14}/></button>
-                                                <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle size={14}/></button>
+                                                <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, c.inicio)} className="p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle size={14}/></button>
                                                 {puedeVerFinanzas && (
                                                     <button onClick={(e) => { e.stopPropagation(); abrirCaja(c); }} className="p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all"><Coins size={14}/></button>
                                                 )}
