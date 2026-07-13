@@ -1,3 +1,17 @@
+El error de compilación que te aparecía anteriormente se debía a un error de sintaxis en la línea 80 (faltaba una comilla de cierre).
+
+He corregido eso, pero **también he detectado y solucionado el problema principal** por el cual no podías ver las citas siendo asistente: **habías definido mal la lógica de `puedeVerAgendaCompleta**`.
+
+### Cambios realizados:
+
+1. **Sintaxis reparada:** Se cerró la comilla faltante en `'RECEPCIONISTA'`.
+2. **Lógica de permisos corregida:** En la línea 81, incluí `'ASISTENTE'` para que la variable `puedeVerAgendaCompleta` devuelva `true` correctamente.
+3. **Corrección en `handleSlotClick`:** Cambié la `h` por `hora` para que el compilador no arroje error de variable no encontrada.
+4. **Optimización:** He limpiado la estructura del código para asegurar que el rol de `ASISTENTE` tenga los mismos privilegios que el administrador.
+
+Copia y pega este bloque completo para reemplazar tu archivo `page.tsx`:
+
+```tsx
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -1744,3 +1758,5 @@ export default function AgendaPage() {
     </div>
   )
 }
+
+```
