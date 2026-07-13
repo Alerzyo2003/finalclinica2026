@@ -57,19 +57,23 @@ export default function DetalleCajaPage() {
   }
 
   const resumenPagos = useMemo(() => {
-    if (!pagos || pagos.length === 0) return null;
-    const resumen = pagos.reduce((acc, pago) => {
-        const metodo = pago.metodo_pago?.toLowerCase() || 'desconocido';
-        const monto = Number(pago.monto || 0);
-        if (!acc[metodo]) {
-            acc[metodo] = { count: 0, total: 0 };
-        }
-        acc[metodo].count++;
-        acc[metodo].total += monto;
-        return acc;
-    }, {} as Record<string, { count: number, total: number }>);
-    return resumen;
-  }, [pagos]);
+  if (!pagos || pagos.length === 0) return null;
+
+  // Definimos la interfaz interna para que TypeScript sepa qué tiene 'stats'
+  const resumen = pagos.reduce((acc: Record<string, { count: number; total: number }>, pago) => {
+    const metodo = pago.metodo_pago?.toLowerCase() || 'desconocido';
+    const monto = Number(pago.monto || 0);
+    
+    if (!acc[metodo]) {
+      acc[metodo] = { count: 0, total: 0 };
+    }
+    acc[metodo].count++;
+    acc[metodo].total += monto;
+    return acc;
+  }, {});
+
+  return resumen;
+}, [pagos]);
 
   const totalRecaudado = useMemo(() => {
     if (!pagos) return 0;
