@@ -77,7 +77,7 @@ export default function AgendaPage() {
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
   const [userRol, setUserRol] = useState<string>('') 
   
-  const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA || userRol === 'ASISTENTE';
+  const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA' || userRol === 'ASISTENTE';
   const puedeVerAgendaCompleta = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA' || userRol === 'ASISTENTE';
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
