@@ -16,7 +16,7 @@ export default function AntecedentesPage() {
   const OPCIONES_PREDEFINIDAS = {
     alerta: ['Alergia Amoxicilina', 'Alergica Amoxicilina Penicilina', 'Alergico a la primavera', 'Problemas al corazón', 'VIH'],
     medicamento: ['Amlodipino', 'Aspirina', 'Atenolol', 'Atorvastatina', 'Celebra', 'Enalapril', 'Fluoxetina', 'Furosemida', 'Iltuxam 20/5', 'Itulsap 25'],
-    enfermedad: ['ACB', 'DIABETES', 'Fibromialgia', 'HPERTENSION', 'Resistencia a la Insulina', 'Sindrome Quino', 'Tiroide', 'VIH'],
+    enfermedad: ['ACV', 'DIABETES', 'Fibromialgia', 'HPERTENSION', 'Resistencia a la Insulina', 'Sindrome Quino', 'Tiroide', 'VIH'],
     habito: ['Fumador', 'Alcohol ocasional', 'Sedentarismo', 'Higiene oral deficiente', 'Bruxismo']
   }
 
