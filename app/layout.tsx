@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Toaster, toast } from 'sonner'
-import { 
+import {
   Search, Calendar, Users, Briefcase, BarChart3, LogOut,
   LayoutGrid, Stethoscope, Package, Beaker, Calculator,
   DoorOpen, BadgeDollarSign, Library, FileSignature, Ban,
@@ -15,35 +15,40 @@ import Link from 'next/link'
 import './globals.css'
 import ChatGlobal from '@/components/ChatEnVivo' // 🔥 Asegúrate de mantener tu Chat Global
 
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  
+ 
   const isAuthPage = pathname === '/login' || pathname === '/register'
-  
+ 
   const [session, setSession] = useState<any>(null)
   const [perfil, setPerfil] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
-  
+ 
   const [busqueda, setBusqueda] = useState('')
   const [resultados, setResultados] = useState<any[]>([])
   const [buscando, setBuscando] = useState(false)
   const [mostrarResultados, setMostrarResultados] = useState(false)
 
+
   const [showAdminMenu, setShowAdminMenu] = useState(false)
   const [showReportMenu, setShowReportMenu] = useState(false)
-  
+ 
   const searchRef = useRef<HTMLDivElement>(null)
   const adminMenuRef = useRef<HTMLDivElement>(null)
   const reportMenuRef = useRef<HTMLDivElement>(null)
+
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
+
   // --- LÓGICA DE NOTIFICACIONES ---
   useEffect(() => {
     if (!mounted || !session?.user?.id || !perfil) return;
+
 
     const canalNotificaciones = supabase
       .channel(`dentista-${session.user.id}`)
@@ -58,8 +63,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       })
       .subscribe();
 
+
     return () => { supabase.removeChannel(canalNotificaciones); }
   }, [session, perfil, mounted]);
+
 
   // --- CLIC FUERA ---
   useEffect(() => {
@@ -72,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+
   // --- BÚSQUEDA AVANZADA ---
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -81,17 +89,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => clearTimeout(delayDebounceFn)
   }, [busqueda])
 
+
   async function ejecutarBusqueda(term: string) {
     setBuscando(true)
     setMostrarResultados(true)
 
+
     const palabras = term.trim().split(/\s+/)
     let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
+
 
     palabras.forEach(palabra => {
       const fuzzy = `%${palabra.split('').join('%')}%`
       const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase()
-      
+     
       if (palabraRut.length > 0) {
         query = query.or(`nombre.ilike.${fuzzy},apellido.ilike.${fuzzy},rut.ilike.%${palabraRut}%`)
       } else {
@@ -99,10 +110,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }
     })
 
+
     const { data } = await query.limit(6)
     setResultados(data || [])
     setBuscando(false)
   }
+
 
   // --- SESIÓN ---
   useEffect(() => {
@@ -127,29 +140,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => subscription.unsubscribe()
   }, [])
 
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  // 🔥 AQUÍ AGREGAMOS AL ASISTENTE Y EL INVENTARIO DIRECTO 🔥
+
+
+
   const modulos = [
     { href: '/agenda', label: 'Agenda', icon: <Calendar size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
     { href: '/pacientes', label: 'Pacientes', icon: <Users size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
     { href: '/cajas', label: 'Cajas', icon: <Briefcase size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA'] },
+    { href: '/perfil', label: 'Perfil', icon: <svg className="w-6 h-6 text-gray-400 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 9h3m-3 3h3m-3 3h3m-6 1c-.306-.613-.933-1-1.618-1H7.618c-.685 0-1.312.387-1.618 1M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm7 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"/></svg>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
     // Módulo extra para que el asistente tenga acceso rápido al stock
   ]
 
+
   if (!mounted) return <html lang="es"><body></body></html>
+
 
   return (
     <html lang="es">
       <body className="bg-slate-50 min-h-screen font-sans antialiased text-slate-800 text-left print:block print:h-auto">
         <Toaster richColors position="top-right" />
 
+
         {!isAuthPage && session && (
           <div className="relative z-[100] flex flex-col print:hidden shadow-sm">
-            
+           
             <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-8 border-b border-white/5">
               <div className="flex items-center gap-12 text-left">
                 <Link href="/" className="flex items-center gap-4 group transition-all text-left">
@@ -164,6 +185,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <span className="text-2xl font-black tracking-tighter uppercase italic leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 text-left">Dignidad</span>
                   </div>
                 </Link>
+
 
                 <div className="relative hidden xl:block" ref={searchRef}>
                   <div className="relative">
@@ -196,6 +218,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
 
+
               <div className="flex items-center gap-4 text-left">
                 <div className="flex items-center gap-3 bg-white/5 pl-4 pr-2 py-1.5 rounded-full border border-white/10 text-left">
                   <div className="flex flex-col items-end text-right">
@@ -208,10 +231,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </header>
 
+
             <nav className="w-full h-14 bg-white border-b border-slate-200 flex items-center px-8 gap-10">
               {modulos.filter(m => m.roles.includes(perfil?.rol)).map((m) => (
                 <ModuleLink key={m.href} href={m.href} label={m.label} icon={m.icon} active={pathname.startsWith(m.href)} />
               ))}
+
 
               {perfil?.rol === 'ADMIN' && (
                 <>
@@ -229,6 +254,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </AnimatePresence>
                   </div>
 
+
                   <div className="relative h-full" ref={adminMenuRef}>
                     <button onClick={() => setShowAdminMenu(!showAdminMenu)} className={`flex items-center gap-2 px-1 h-full border-b-2 transition-all ${showAdminMenu || pathname.startsWith('/administracion') ? 'border-blue-600 text-blue-600 font-black' : 'border-transparent text-slate-400'}`}>
                       <LayoutGrid size={18} /> <span className="text-[11px] font-black uppercase tracking-wider">Administración</span>
@@ -236,7 +262,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <AnimatePresence>
                       {showAdminMenu && (
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-[100%] left-0 bg-white shadow-2xl rounded-[2.5rem] border border-slate-100 p-8 z-[110] w-[850px] mt-1 grid grid-cols-3 gap-8 text-left">
-                          
+                         
                           {/* COLUMNA 1: GESTIÓN CLÍNICA */}
                           <div className="space-y-2 text-left">
                             <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-4 pl-2">Gestión Clínica</p>
@@ -246,12 +272,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                             <MenuOption href="/administracion/box" label="Gestión de Box" icon={<DoorOpen size={12}/>} onClick={() => setShowAdminMenu(false)} />
                           </div>
 
+
                           {/* COLUMNA 2: OPERACIONES */}
                           <div className="space-y-2 text-left">
                             <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-4 pl-2">Operaciones</p>                            <MenuOption href="/administracion/laboratorios" label="Laboratorios" icon={<Beaker size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/liquidaciones" label="Liquidaciones" icon={<Calculator size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/configuracion/pagos-pendientes" label="Pagos Pendientes" icon={<Ban size={12}/>} onClick={() => setShowAdminMenu(false)} />
                           </div>
+
 
                           {/* COLUMNA 3: CONFIGURACIÓN MAESTRO */}
                           <div className="space-y-2 text-left">
@@ -261,6 +289,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                             <MenuOption href="/administracion/configuracion/documentos" label="Docs Clínicos" icon={<FileText size={12}/>} onClick={() => setShowAdminMenu(false)} />
                             <MenuOption href="/administracion/configuracion/consentimientos" label="Consentimientos" icon={<FileSignature size={12}/>} onClick={() => setShowAdminMenu(false)} />
                           </div>
+
 
                         </motion.div>
                       )}
@@ -272,9 +301,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
+
         <main className="flex-1 w-full bg-slate-50 relative z-0 print:bg-white print:overflow-visible">
           {children}
         </main>
+
 
         {/* 🔥 Chat Global Integrado 🔥 */}
         {!isAuthPage && session && (
@@ -285,6 +316,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   )
 }
 
+
 function MenuOption({ href, label, icon, onClick }: any) {
   return (
     <Link href={href} onClick={onClick} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-all group text-left border border-transparent hover:border-slate-100">
@@ -294,6 +326,7 @@ function MenuOption({ href, label, icon, onClick }: any) {
   )
 }
 
+
 function ModuleLink({ href, label, icon, active }: any) {
   return (
     <Link href={href} className={`flex items-center gap-2.5 px-1 h-full border-b-2 transition-all ${active ? 'border-blue-600 text-blue-600 font-black' : 'border-transparent text-slate-400 hover:text-slate-700'}`}>
@@ -301,3 +334,4 @@ function ModuleLink({ href, label, icon, active }: any) {
     </Link>
   )
 }
+
