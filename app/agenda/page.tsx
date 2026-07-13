@@ -74,13 +74,11 @@ export default function AgendaPage() {
   const [citaEnReprogramacion, setCitaEnReprogramacion] = useState<any>(null)
   const [notificacion, setNotificacion] = useState<{ nombre: string } | null>(null)
   
-  // 🔥 ESTADOS DE AUDITORÍA Y ROLES 🔥
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
   const [userRol, setUserRol] = useState<string>('') 
   
-  // Condición maestra de seguridad visual
   const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA'
-  const puedeVerAgendaCompleta = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA' || userRol === 'DENTISTA';
+  const puedeVerAgendaCompleta = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA';
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -208,9 +206,10 @@ export default function AgendaPage() {
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
          if (perfil) {
             setUserRol(perfil.rol);
-            const veAgendaCompleta = perfil.rol === 'ADMIN' || perfil.rol === 'RECEPCIONISTA' || perfil.rol === 'DENTISTA';
+            const veAgendaCompleta = perfil.rol === 'ADMIN' || perfil.rol === 'RECEPCIONISTA';
             if (!veAgendaCompleta) {
                setFiltroEspecialista(session.user.id);
+               setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
             }
          }
       }
@@ -218,7 +217,6 @@ export default function AgendaPage() {
       const { data: pro } = await supabase.from('profesionales').select('*, especialidades(nombre)').eq('activo', true)
       setProfesionales(pro || [])
       
-      // 🔥 OBTENER CAJA ACTIVA 🔥
       const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
       setCajaActivaId(cajaActiva?.id || null);
 
@@ -243,12 +241,9 @@ export default function AgendaPage() {
     
     let query = supabase.from('citas').select('*, pacientes(*)').gte('inicio', inicioRango).lte('inicio', finRango);
     
-    // 🔥 RESTRICCIÓN DE SEGURIDAD PARA DOCTORES 🔥
     if (!puedeVerAgendaCompleta) {
-      // Si es dentista, obligamos a que solo traiga sus propias citas utilizando su ID de usuario logueado
       query = query.eq('profesional_id', usuarioLogueado);
     } else if (filtroEspecialista !== 'Todos') {
-      // Si es Admin/Recepcionista, respetamos el selector manual de la cabecera
       query = query.eq('profesional_id', filtroEspecialista);
     }
     
@@ -332,7 +327,6 @@ export default function AgendaPage() {
         .not('estado', 'in', '("cancelada","atendido","no_asiste")')
         .order('inicio', { ascending: true });
         
-      // 🔥 RESTRICCIÓN DE SEGURIDAD PARA CITAS HUÉRFANAS 🔥
       if (!puedeVerAgendaCompleta) {
         queryCitas = queryCitas.eq('profesional_id', usuarioLogueado);
       } else if (filtroEspecialista !== 'Todos') {
@@ -348,7 +342,6 @@ export default function AgendaPage() {
 
       let queryBloqueos = supabase.from('bloqueos_agenda').select('*').gte('fecha', hoyStr).lte('fecha', limiteStr);
       
-      // Aplicamos el mismo filtro restrictivo a los bloqueos de agenda
       if (!puedeVerAgendaCompleta) {
         queryBloqueos = queryBloqueos.eq('profesional_id', usuarioLogueado);
       } else if (filtroEspecialista !== 'Todos') {
@@ -381,33 +374,25 @@ export default function AgendaPage() {
     } catch (error) { toast.error("Error al escanear la agenda global"); } finally { setCargandoHuerfanas(false); }
   }
 
-  // 🔥 LÓGICA MEJORADA DE REPROGRAMACIÓN DIRECTA 🔥
   const iniciarReprogramacion = (cita: any) => {
     resetEstados(); 
     
-    // 1. Guardamos la cita que queremos mover
     setCitaEnReprogramacion(cita); 
     
-    // 2. Pre-seleccionamos al mismo doctor que tenía la cita original (pero se puede cambiar luego)
     setFiltro({ ...filtro, profesional_id: cita.profesional_id || '' });
     
-    // 3. Calculamos cuánto duraba la cita original para recordarlo
     const tInicio = new Date(cita.inicio.replace(' ', 'T')).getTime();
     const tFin = new Date(cita.fin.replace(' ', 'T')).getTime();
     const duracionMinutos = Math.round((tFin - tInicio) / 60000);
     
-    // Validamos que sea una duración permitida o le ponemos 30 por defecto
     const duracionFinal = duracionesDisponibles.includes(duracionMinutos) ? duracionMinutos : 30;
     setFiltro(prev => ({ ...prev, duracionDefault: duracionFinal }));
 
-    // 4. Pre-cargamos al paciente y su motivo
     seleccionarPacienteExistente(cita.pacientes); 
     setNuevoTratamientoNombre(cita.motivo || ''); 
     
-    // 5. Establecemos la semana del modal a la fecha original de la cita, por si la quiere mover cerquita
     setSemanaInicio(new Date(cita.inicio.replace(' ', 'T')));
 
-    // 6. Abrimos el modal directamente en el paso 1 (Calendario)
     setModalAbierto(true); 
     setPaso(1);
   };
@@ -563,29 +548,27 @@ export default function AgendaPage() {
   }
 
   const contactarWhatsApp = (telefono: any, nombre: any, estado: any, fechaHoraISO: any) => {
-  if (!telefono) return toast.error("Paciente sin teléfono");
-  const num = telefono.replace(/\D/g, '');
+    if (!telefono) return toast.error("Paciente sin teléfono");
+    const num = telefono.replace(/\D/g, '');
 
-  let citaDate = new Date(fechaHoraISO.replace(' ', 'T'));
-  if (isNaN(citaDate.getTime())) {
-    citaDate = new Date();
-  }
+    let citaDate = new Date(fechaHoraISO.replace(' ', 'T'));
+    if (isNaN(citaDate.getTime())) {
+      citaDate = new Date();
+    }
 
-  const diaSemana = citaDate.toLocaleDateString('es-CL', { weekday: 'long' });
-  const hora = citaDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const diaSemana = citaDate.toLocaleDateString('es-CL', { weekday: 'long' });
+    const hora = citaDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-  // 1. Mensaje por defecto (para cualquier estado que no sea atendido o no_asiste)
-  let mensaje = `Hola ${nombre}, te escribimos de la Clínica Dignidad para recordar tu cita del día ${diaSemana} a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
+    let mensaje = `Hola ${nombre}, te escribimos de la Clínica Dignidad para recordar tu cita del día ${diaSemana} a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
 
-  // 2. Solo cambiamos el mensaje si el estado es específicamente uno de estos
-  if (estado === 'atendido') {
-    mensaje = `Hola ${nombre}, esperamos que hayas tenido una excelente atención en la clínica. ¡Cualquier consulta estamos a tu disposición!`;
-  } else if (estado === 'no_asiste') {
-    mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita del ${diaSemana}. ¿Te gustaría reagendar para otro día?`;
-  }
+    if (estado === 'atendido') {
+      mensaje = `Hola ${nombre}, esperamos que hayas tenido una excelente atención en la clínica. ¡Cualquier consulta estamos a tu disposición!`;
+    } else if (estado === 'no_asiste') {
+      mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita del ${diaSemana}. ¿Te gustaría reagendar para otro día?`;
+    }
 
-  window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
-};
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  };
 
   const abrirEnvioPresupuesto = async (cita: any) => {
     if (!cita.paciente_id) return toast.error("Cita sin paciente asociado");
@@ -784,7 +767,7 @@ export default function AgendaPage() {
   try {
     let pId = pacienteSeleccionado?.id;
     let pNombreFull = pacienteSeleccionado ? `${pacienteSeleccionado.nombre} ${pacienteSeleccionado.apellido}` : "";
-    let pTelefono = pacienteSeleccionado?.telefono || null; // 🔥 Captura teléfono
+    let pTelefono = pacienteSeleccionado?.telefono || null;
 
     if (modoNuevoPaciente && !citaEnReprogramacion) {
       const rutLimpio = nuevoPaciente.rut.replace(/[^0-9kK]/g, '').toUpperCase().trim();
@@ -803,7 +786,7 @@ export default function AgendaPage() {
       if (pErr) throw pErr;
       pId = pNew.id;
       pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`;
-      pTelefono = nuevoPaciente.telefono; // 🔥 Asigna teléfono del nuevo paciente
+      pTelefono = nuevoPaciente.telefono;
     }
 
     const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
@@ -860,7 +843,6 @@ export default function AgendaPage() {
       }]);
     }
 
-    // 🔥 Guarda el teléfono en el ticket
     setCitaConfirmadaData({
       paciente: pNombreFull.toUpperCase(),
       citas: horasSeleccionadas,
@@ -886,9 +868,9 @@ export default function AgendaPage() {
   }
 
   const handleSlotClick = (fecha: string, hora: string) => {
-    const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === hora);
+    const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === h);
     if (sel) {
-      toggleHora(fecha, hora); // Permitir deselección
+      toggleHora(fecha, hora);
       return;
     }
 
@@ -916,7 +898,26 @@ export default function AgendaPage() {
     const nueva = new Date(semanaInicio); nueva.setDate(nueva.getDate() + (sentido === 'adelante' ? 7 : -7)); setSemanaInicio(nueva);
   }
 
-  const resetEstados = () => { setPaso(1); setHorasSeleccionadas([]); setPacienteSeleccionado(null); setBusqueda(''); setModoNuevoPaciente(false); setNuevoTratamientoNombre(''); setCitasOcupadas([]); setCitaEnReprogramacion(null); setSemanaInicio(new Date()); setTratamientosPaciente([]); setTratamientoSeleccionadoId(null); setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); setBloqueosSemana([]); }
+  const resetEstados = () => { 
+    setPaso(1); 
+    setHorasSeleccionadas([]); 
+    setPacienteSeleccionado(null); 
+    setBusqueda(''); 
+    setModoNuevoPaciente(false); 
+    setNuevoTratamientoNombre(''); 
+    setCitasOcupadas([]); 
+    setCitaEnReprogramacion(null); 
+    setSemanaInicio(new Date()); 
+    setTratamientosPaciente([]); 
+    setTratamientoSeleccionadoId(null); 
+    setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); 
+    setBloqueosSemana([]); 
+    
+    // 🔥 CAMBIO AQUÍ: Mantener el ID forzado si es odontólogo al resetear
+    if (!puedeVerAgendaCompleta && usuarioLogueado) {
+      setFiltro(prev => ({ ...prev, profesional_id: usuarioLogueado }));
+    }
+  }
 
   const abrirCaja = async (cita: any) => {
     if (!cita.pacientes || !cita.pacientes.id) return toast.error("Cita no tiene paciente asignado");
@@ -979,7 +980,6 @@ export default function AgendaPage() {
 
         const itemsConDeuda = todosLosItemsMapeados.filter(item => {
             const estado = String(item.estado || 'pendiente').toLowerCase();
-            // REGLA: Solo se puede cobrar lo que está terminado o tiene avance.
             return ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(estado) || (item.progreso && item.progreso > 0);
         });
         
@@ -1020,7 +1020,7 @@ export default function AgendaPage() {
                 abonado_ahora: aAbonar 
             };
 
-            await supabase.from('pagos').insert([{ 
+          await supabase.from('pagos').insert([{ 
                 paciente_id: pacientePago.id, 
                 monto: aAbonar, 
                 metodo_pago: metodoPago, 
@@ -1060,7 +1060,7 @@ export default function AgendaPage() {
                 await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
                 toast.info(`¡Quedó un vuelto de $${montoRestante.toLocaleString('es-CL')} guardado a favor del paciente!`);
             } else {
-                toast.success(`Pago procesado exitosamente.`);
+                toast.success(`Pago processed exitosamente.`);
             }
         }
 
@@ -1098,9 +1098,8 @@ export default function AgendaPage() {
         
         <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 w-full xl:w-auto">
           <div className="space-y-1.5 text-left">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Agenda Clínica</h1>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Agenda Clinical</h1>
             
-            {/* NUEVO FILTRO DE ESPECIALISTA */}
             <div className="flex items-center gap-2 text-slate-200 bg-white border border-slate-200 rounded-2xl p-1 shadow-sm hover:border-slate-300 transition-all">
               <div className="pl-3 text-blue-300"><Stethoscope size={16} /></div>
               {puedeVerAgendaCompleta ? (
@@ -1168,8 +1167,6 @@ export default function AgendaPage() {
             <CalendarDays size={14} className="text-blue-500" /> <span className="hidden md:inline">Bloque Semanal</span>
           </Link>
 
-          {/* 🔥 ELIMINAMOS EL BOTÓN GLOBAL DE REPROGRAMAR 🔥 */}
-
           <button onClick={() => { fetchCitasHuerfanas(); setModalHuerfanasAbierto(true); }} className="bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase shadow-sm hover:border-slate-300 hover:text-slate-900 transition-all flex items-center gap-2 whitespace-nowrap">
             <AlertTriangle size={14} className="text-amber-500" /> <span className="hidden md:inline">Huérfanas</span>
           </button>
@@ -1182,7 +1179,6 @@ export default function AgendaPage() {
 
       <main className={`mx-auto w-full pt-8 px-4 md:px-6 text-left ${vistaAgenda === 'dia' ? 'max-w-5xl' : 'max-w-full'}`}>
 
-        {/* BUSCADOR Y CONTADOR */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 text-left">
            <div className="relative w-full max-w-md group">
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
@@ -1201,7 +1197,6 @@ export default function AgendaPage() {
            </div>
         </div>
 
-        {/* VISTA DIARIA (TIMELINE) */}
         {vistaAgenda === 'dia' && (
             <div className="space-y-4 text-left relative pb-20">
               {citasFiltradas.length > 0 && ( <div className="absolute left-[88px] top-6 bottom-0 w-px bg-slate-200 hidden md:block z-0"></div> )}
@@ -1258,11 +1253,11 @@ export default function AgendaPage() {
                          <div className="flex items-center gap-2 flex-wrap text-left text-slate-900">
                             {puedeVerFinanzas && c.requiereCobroInmediato ? (
                                <span onClick={() => abrirCaja(c)} className="text-[9px] font-black text-white uppercase tracking-widest bg-red-500 px-2 py-1 rounded-lg shadow-sm animate-pulse cursor-pointer hover:scale-105 transition-transform">
-                                  🔔 Por Cobrar: ${c.finanzas?.deuda_realizada.toLocaleString('es-CL')}
+                                 🔔 Por Cobrar: ${c.finanzas?.deuda_realizada.toLocaleString('es-CL')}
                                </span>
                             ) : puedeVerFinanzas && c.estadoFinanciero === 'deuda' ? ( 
                                <span className="text-[9px] font-black text-red-600 uppercase tracking-widest bg-red-50 px-2 py-1 rounded-lg border border-red-100/50 flex items-center gap-1">
-                                  Deuda: ${c.finanzas?.deuda.toLocaleString('es-CL')}
+                                 Deuda: ${c.finanzas?.deuda.toLocaleString('es-CL')}
                                </span> 
                             ) : null}
 
@@ -1271,10 +1266,8 @@ export default function AgendaPage() {
                             {c.estado === 'en_espera' && hLlegadaStr && ( <div className="flex items-center gap-1 text-[9px] font-black text-amber-600 uppercase tracking-widest px-2 py-1 bg-amber-50 rounded-lg"><Timer size={12} /> Sala ({hLlegadaStr})</div> )}
                          </div>
                          
-                         {/* TOOLBAR */}
                          <div className="flex items-center bg-slate-50 p-1 rounded-xl border border-slate-100 gap-1 w-full xl:w-auto text-left overflow-x-auto">
                             
-                            {/* 🔥 NUEVO BOTÓN DE REPROGRAMAR DIRECTO EN LA CITA 🔥 */}
                             <button onClick={() => iniciarReprogramacion(c)} className="p-2 text-slate-400 hover:text-purple-600 hover:bg-white rounded-lg transition-all shrink-0" title="Reprogramar esta cita">
                                 <CalendarClock size={14}/>
                             </button>
@@ -1286,9 +1279,9 @@ export default function AgendaPage() {
                                 <FileText size={14}/>
                             </button>
                             {puedeVerFinanzas && (
-                                <button onClick={() => abrirCaja(c)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white rounded-lg transition-all shrink-0" title="Caja / Pagar">
-                                    <Coins size={14}/>
-                                </button>
+                                 <button onClick={() => abrirCaja(c)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white rounded-lg transition-all shrink-0" title="Caja / Pagar">
+                                     <Coins size={14}/>
+                                 </button>
                             )}
                             <Link href={`/pacientes/${c.paciente_id}`} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all flex items-center gap-1.5 font-black text-[9px] uppercase pr-3 shrink-0" title="Ver Ficha">
                                 <ClipboardList size={14}/> Ficha
@@ -1308,7 +1301,6 @@ export default function AgendaPage() {
             </div>
         )}
 
-        {/* VISTA SEMANAL (GRID DE LUNES A SÁBADO) COMPACTA */}
         {vistaAgenda === 'semana' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pb-20">
                 {getDiasLunesSabado(selectedDate).map(dia => {
@@ -1341,7 +1333,6 @@ export default function AgendaPage() {
                                                         <span className={`text-[8px] font-black uppercase ${configEstado.text}`}>{configEstado.label}</span>
                                                     </div>
                                                     
-                                                    {/* FINANZAS EN VISTA SEMANAL */}
                                                     {puedeVerFinanzas && c.requiereCobroInmediato ? (
                                                         <span className="w-full text-center text-[8px] font-black text-white bg-red-500 px-1.5 py-1 rounded shadow-sm animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); abrirCaja(c); }}>
                                                             🔔 Cobrar: ${c.finanzas?.deuda_realizada.toLocaleString('es-CL')}
@@ -1354,10 +1345,8 @@ export default function AgendaPage() {
                                                 </div>
                                             </div>
                                             
-                                            {/* Hover Toolbar Mini */}
                                             <div className="absolute inset-0 bg-white/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
                                                 
-                                                {/* 🔥 NUEVO BOTÓN DE REPROGRAMAR DIRECTO EN LA CITA (SEMANA) 🔥 */}
                                                 <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-1.5 text-slate-500 hover:bg-purple-50 hover:text-purple-600 rounded-md transition-all"><CalendarClock size={14}/></button>
 
                                                 <button onClick={() => abrirEnvioPresupuesto(c)} className="p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all"><FileText size={14}/></button>
@@ -1586,8 +1575,8 @@ export default function AgendaPage() {
                       disabled={cargandoAccion || deudasPaciente.length === 0 || !montoIngresado}
                       className="w-full py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                    >
-                      {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <Coins size={18}/>}
-                      Registrar Pago Seguro
+                     {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <Coins size={18}/>}
+                     Registrar Pago Seguro
                    </button>
                 </div>
              </motion.div>
@@ -1613,7 +1602,7 @@ export default function AgendaPage() {
               
               <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50/50">
                 {cargandoHuerfanas ? (
-                  <div className="h-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4">
+                  <div className="w-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 className="animate-spin" size={40} />
                     <p className="text-xs font-black uppercase tracking-widest">Analizando agenda global...</p>
                   </div>
@@ -1661,7 +1650,7 @@ export default function AgendaPage() {
             }} className="px-4 py-2 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white rounded-xl transition-all flex items-center gap-2 shadow-sm">
               <CalendarClock size={14} /> Reagendar
             </button>
-                                <button onClick={() => anularCitaDirecta(cita.id)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
+            <button onClick={() => anularCitaDirecta(cita.id)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
               <Ban size={16} />
             </button>
           </div>
@@ -1784,7 +1773,15 @@ export default function AgendaPage() {
                       <div className="space-y-6 text-left">
                         <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Especialista</label>
-                          <select className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none text-slate-900 cursor-pointer shadow-sm focus:border-blue-500" value={filtro.profesional_id || ""} onChange={(e) => { setFiltro({...filtro, profesional_id: e.target.value}); setHorasSeleccionadas([]); }}><option value="">Seleccionar...</option>{profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}</select>
+                          <select 
+                            className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none text-slate-900 cursor-pointer shadow-sm focus:border-blue-500" 
+                            value={filtro.profesional_id || ""} 
+                            onChange={(e) => { setFiltro({...filtro, profesional_id: e.target.value}); setHorasSeleccionadas([]); }}
+                            disabled={!puedeVerAgendaCompleta} // 🔥 CAMBIO AQUÍ: Dentista no puede cambiar de doctor en el agendamiento
+                          >
+                            <option value="">Seleccionar...</option>
+                            {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                          </select>
                         </div>
                         <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Duración base</label>
@@ -1946,65 +1943,63 @@ export default function AgendaPage() {
       </AnimatePresence>
 
       <AnimatePresence>
-  {mostrarTicket && (
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm">
-        <div className="bg-white rounded-[3rem] shadow-2xl p-10 text-center space-y-8">
-          <CheckCircle2 className="mx-auto text-emerald-500" size={64} />
-          <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-800">¡Cita Lista!</h2>
-          <div className="text-left bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Paciente</p>
-              <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.paciente}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fecha y Hora</p>
-              <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.citas[0]?.fecha} • {citaConfirmadaData?.citas[0]?.hora} hrs</p>
-            </div>
+        {mostrarTicket && (
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm">
+              <div className="bg-white rounded-[3rem] shadow-2xl p-10 text-center space-y-8">
+                <CheckCircle2 className="mx-auto text-emerald-500" size={64} />
+                <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-800">¡Cita Lista!</h2>
+                <div className="text-left bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Paciente</p>
+                    <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.paciente}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fecha y Hora</p>
+                    <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.citas[0]?.fecha} • {citaConfirmadaData?.citas[0]?.hora} hrs</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      if (!citaConfirmadaData) return;
+                      const { paciente, citas, telefono } = citaConfirmadaData;
+                      if (!telefono) {
+                        toast.error("El paciente no tiene un número de teléfono registrado.");
+                        return;
+                      }
+                      const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
+                      const hora = citas[0].hora;
+                      const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
+                      const numLimpio = telefono.replace(/\D/g, '');
+                      const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
+                      window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
+                      setMostrarTicket(false);
+                      setModalAbierto(false);
+                      resetEstados();
+                      fetchCitasAgenda();
+                    }}
+                    className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle size={14} /> Finalizar y Enviar WhatsApp
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMostrarTicket(false);
+                      setModalAbierto(false);
+                      resetEstados();
+                      fetchCitasAgenda();
+                    }}
+                    className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Finalizar sin enviar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
-          <div className="flex flex-col gap-2">
-            {/* Botón WhatsApp */}
-            <button
-              onClick={() => {
-                if (!citaConfirmadaData) return;
-                const { paciente, citas, telefono } = citaConfirmadaData;
-                if (!telefono) {
-                  toast.error("El paciente no tiene un número de teléfono registrado.");
-                  return;
-                }
-                const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
-                const hora = citas[0].hora;
-                const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
-                const numLimpio = telefono.replace(/\D/g, '');
-                const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
-                window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
-                setMostrarTicket(false);
-                setModalAbierto(false);
-                resetEstados();
-                fetchCitasAgenda();
-              }}
-              className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
-            >
-              <MessageCircle size={14} /> Finalizar y Enviar WhatsApp
-            </button>
-            {/* Botón solo finalizar */}
-            <button
-              onClick={() => {
-                setMostrarTicket(false);
-                setModalAbierto(false);
-                resetEstados();
-                fetchCitasAgenda();
-              }}
-              className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
-            >
-              Finalizar sin enviar
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  )}
-</AnimatePresence>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
