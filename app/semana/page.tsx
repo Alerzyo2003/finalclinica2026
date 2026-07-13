@@ -147,43 +147,59 @@ export default function DiarioGlobalPage() {
   }, [semanaReagenda, citaEnEdicion, reagendaProps.especialistaId, reagendaProps.duracion])
 
   async function fetchDatos() {
-    setCargando(true);
-    const fechaISO = selectedDate.toISOString().split('T')[0];
+  setCargando(true);
+  const fechaISO = selectedDate.toISOString().split('T')[0];
+  
+  try {
+    // Obtenemos la sesión del usuario actual
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
     
-    try {
-      // Buscamos DIRECTAMENTE en la tabla profesionales (saltándonos 'perfiles')
-      const { data: profs, error: profsError } = await supabase
-        .from('profesionales')
-        .select('id, nombre, apellido, user_id')
-        .eq('activo', true);
+    // Obtenemos el perfil para saber si es ADMIN/RECEPCIONISTA
+    const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', userId).maybeSingle();
+    const esAdmin = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
 
-      if (profsError) throw profsError;
-
-      const dentistas = profs || [];
-      const idsDentistas = dentistas.map(p => p.user_id);
-
-      if (dentistas.length > 0) {
-        const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
-          supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo').in('profesional_id', idsDentistas).gte('inicio', `${fechaISO}T00:00:00`).lte('inicio', `${fechaISO}T23:59:59`).neq('estado', 'cancelada'),
-          supabase.from('disponibilidad_profesional').select('*').in('profesional_id', idsDentistas),
-          supabase.from('bloqueos_agenda').select('*').in('profesional_id', idsDentistas).eq('fecha', fechaISO)
-        ]);
-        
-        setCitas(citasRes.data || []);
-        setDisponibilidades(dispoRes.data || []);
-        setBloqueos(bloqueosRes.data || []);
-        setProfesionales(dentistas);
-      } else { 
-        setCitas([]); 
-        setProfesionales([]); 
-      }
-    } catch (error) { 
-      console.error(error);
-      toast.error("Error al cargar la agenda global"); 
-    } finally { 
-      setCargando(false); 
+    let queryProfs = supabase.from('profesionales').select('id, nombre, apellido, user_id').eq('activo', true);
+    
+    // Si NO es admin, filtramos solo su profesional asociado
+    if (!esAdmin) {
+      queryProfs = queryProfs.eq('user_id', userId);
     }
+
+    const { data: profs, error: profsError } = await queryProfs;
+    if (profsError) throw profsError;
+
+    const dentistas = profs || [];
+    const idsDentistas = dentistas.map(p => p.user_id);
+
+    if (dentistas.length > 0) {
+      const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
+        supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo')
+          .in('profesional_id', idsDentistas)
+          .gte('inicio', `${fechaISO}T00:00:00`)
+          .lte('inicio', `${fechaISO}T23:59:59`)
+          .neq('estado', 'cancelada'),
+        supabase.from('disponibilidad_profesional').select('*').in('profesional_id', idsDentistas),
+        supabase.from('bloqueos_agenda').select('*').in('profesional_id', idsDentistas).eq('fecha', fechaISO)
+      ]);
+      
+      setCitas(citasRes.data || []);
+      setDisponibilidades(dispoRes.data || []);
+      setBloqueos(bloqueosRes.data || []);
+      setProfesionales(dentistas);
+      
+      // Si solo hay un profesional (el doctor logueado), fijamos el filtro automáticamente
+      if (!esAdmin && dentistas.length > 0) {
+        setFiltroDoctor(dentistas[0].user_id);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    toast.error("Error al cargar la agenda");
+  } finally {
+    setCargando(false);
   }
+}
 
   const fechaISOActual = selectedDate.toISOString().split('T')[0];
   const diaSemanaActual = selectedDate.getDay();
