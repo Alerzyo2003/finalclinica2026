@@ -868,7 +868,8 @@ export default function AgendaPage() {
   }
 
   const handleSlotClick = (fecha: string, hora: string) => {
-    const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === h);
+    // 🔥 CORREGIDO: Cambiado 'x.hora === h' por 'x.hora === hora'
+    const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === hora);
     if (sel) {
       toggleHora(fecha, hora);
       return;
@@ -893,7 +894,7 @@ export default function AgendaPage() {
     
     toggleHora(fecha, hora);
   };
-
+  
   const navegarSemana = (sentido: 'atras' | 'adelante') => {
     const nueva = new Date(semanaInicio); nueva.setDate(nueva.getDate() + (sentido === 'adelante' ? 7 : -7)); setSemanaInicio(nueva);
   }
