@@ -662,13 +662,14 @@ if (perfil) {
           if (error) throw error;
           
           const profesionalBloqueadoData = profesionales.find(p => p.user_id === profesionalBloqueo);
-          const nombreProfesional = profesionalBloqueadoData ? `${profesionalBloqueoData.nombre} ${profesionalBloqueoData.apellido}` : `ID ${profesionalBloqueo}`;
-          await supabase.from('auditoria_clinica').insert([{
-              usuario_id: usuarioLogueado,
-              accion: 'INSERT / BLOQUEO AGENDA',
-              tabla: 'bloqueos_agenda',
-              detalles: `Bloqueó agenda para Dr/a. ${nombreProfesional} el día ${fechaBloqueo}. Motivo: ${motivoBloqueo}.`
-          }]);
+const nombreProfesional = profesionalBloqueadoData ? `${profesionalBloqueadoData.nombre} ${profesionalBloqueadoData.apellido}` : `ID ${profesionalBloqueo}`;
+
+await supabase.from('auditoria_clinica').insert([{
+    usuario_id: usuarioLogueado,
+    accion: 'INSERT / BLOQUEO AGENDA',
+    tabla: 'bloqueos_agenda',
+    detalles: `Bloqueó agenda para Dr/a. ${nombreProfesional} el día ${fechaBloqueo}. Motivo: ${motivoBloqueo}.`
+}]);
 
           toast.success("Agenda bloqueada exitosamente");
           setModalBloqueo(false);
