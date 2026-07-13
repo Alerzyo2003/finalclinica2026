@@ -89,14 +89,20 @@ export default function DetalleCajaPage() {
         return;
       }
 
-      const opt = {
-        margin:       [15, 15, 20, 15], 
-        filename:     `Cierre_Caja_${caja?.nombre_responsable.replace(' ', '_') || 'reporte'}.pdf`,
-        image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] }
-      };
+      const opt: any = { // Usar 'any' ignora la validación estricta de tipos que está fallando
+  margin: [15, 15, 20, 15] as [number, number, number, number], 
+  filename: `Cierre_Caja_${caja?.nombre_responsable.replace(' ', '_') || 'reporte'}.pdf`,
+  image: { type: 'jpeg', quality: 1 },
+  html2canvas: { 
+    scale: 2, 
+    useCORS: true, 
+    letterRendering: true, 
+    backgroundColor: '#ffffff', 
+    scrollY: 0 
+  }, 
+  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+  pagebreak: { mode: ['css', 'legacy'] }
+};
 
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
         const totalPages = pdf.internal.getNumberOfPages();
