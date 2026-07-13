@@ -542,7 +542,7 @@ export default function AgendaPage() {
     toast.success("Estado actualizado"); await fetchCitasAgenda();
   }
 
-  const contactarWhatsApp = (telefono, nombre, estado, fechaHoraISO) => {
+  const contactarWhatsApp = (telefono: any, nombre: any, estado: any, fechaHoraISO: any) => {
   if (!telefono) return toast.error("Paciente sin teléfono");
   const num = telefono.replace(/\D/g, '');
 
