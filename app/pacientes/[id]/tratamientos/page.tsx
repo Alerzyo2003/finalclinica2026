@@ -50,26 +50,35 @@ export default function ListaTratamientosPage() {
 
 
   async function fetchInicial() {
-    setCargando(true)
-    try {
-      // Obtenemos el perfil del usuario activo para saber qué mostrarle
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const { data: pData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
-        setPerfil(pData)
-        if (pData?.rol === 'DENTISTA') {
-          setNuevoPlan(prev => ({ ...prev, especialista_id: session.user.id }));
+  setCargando(true)
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) {
+      // 1. Obtener el rol del perfil
+      const { data: pData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
+      setPerfil(pData)
+      
+      // 2. Si es DENTISTA, buscamos su ID real en la tabla de profesionales usando su user_id
+      if (pData?.rol === 'DENTISTA') {
+        const { data: profData } = await supabase
+          .from('profesionales')
+          .select('user_id') // <-- Si tu FK en presupuestos apunta a user_id, dejamos este. Si apunta a un 'id' numérico, cámbialo aquí por 'id'
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (profData) {
+          setNuevoPlan(prev => ({ ...prev, especialista_id: profData.user_id }));
         }
       }
-
-
-      await Promise.all([fetchPlanes(), fetchProfesionales()])
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setCargando(false)
     }
+
+    await Promise.all([fetchPlanes(), fetchProfesionales()])
+  } catch (error) {
+    console.error("Error en carga inicial:", error)
+  } finally {
+    setCargando(false)
   }
+}
 
 
   // REGLAS VISUALES
@@ -209,23 +218,39 @@ export default function ListaTratamientosPage() {
 
 
   const handleCrearPlan = async () => {
-    if (!nuevoPlan.nombre || !nuevoPlan.especialista_id) return toast.error("Completa los datos");
-    setCreandoPlan(true);
-    try {
-      const { error } = await supabase.from('presupuestos').insert([{
+  if (!nuevoPlan.nombre || !nuevoPlan.especialista_id) {
+    return toast.error("Completa los datos");
+  }
+  
+  setCreandoPlan(true);
+  try {
+    const { data, error } = await supabase
+      .from('presupuestos')
+      .insert([
+        {
           paciente_id: paciente_id,
           nombre_tratamiento: nuevoPlan.nombre.toUpperCase(),
           especialista_id: nuevoPlan.especialista_id,
-          estado: 'borrador',
-          aprobado: false
-      }]);
-      if (error) throw error;
-      toast.success("Plan creado");
-      setModalNuevoPlan(false);
-      setNuevoPlan({ nombre: '', especialista_id: '' });
-      fetchPlanes();
-    } catch (e) { toast.error("Error al crear"); } finally { setCreandoPlan(false); }
+          estado: 'BORRADOR', // <-- Cambiado a MAYÚSCULAS para mantener consistencia
+          aprobado: false,
+        },
+      ])
+      .select(); // El .select() ayuda a resolver problemas de respuesta 406 en inserciones
+
+    if (error) throw error;
+
+    toast.success("Plan creado exitosamente");
+    setModalNuevoPlan(false);
+    setNuevoPlan({ nombre: '', especialista_id: '' });
+    fetchPlanes();
+  } catch (e: any) { 
+    // Esto te dirá el campo exacto que falló si hay un problema de base de datos
+    console.error("Error detallado de Supabase:", e);
+    toast.error(e.message || "Error al crear el tratamiento"); 
+  } finally { 
+    setCreandoPlan(false); 
   }
+}
 
 
   const planesFiltrados = planes.filter(plan => {
@@ -367,7 +392,11 @@ export default function ListaTratamientosPage() {
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Especialista</label>
                   <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-black text-sm text-slate-800" value={nuevoPlan.especialista_id} onChange={(e) => setNuevoPlan({...nuevoPlan, especialista_id: e.target.value})} disabled={perfil?.rol === 'DENTISTA'}>
                     <option value="">SELECCIONAR...</option>
-                    {profesionales.map(p => <option key={p.user_id} value={p.user_id}>DR/A. {p.nombre} {p.apellido}</option>)}
+                    {profesionales.map(p => (
+  <option key={p.user_id} value={p.user_id}>
+    DR/A. {p.nombre} {p.apellido}
+  </option>
+))}
                   </select>
                 </div>
                 <button onClick={handleCrearPlan} disabled={creandoPlan} className="w-full bg-blue-600 text-white py-6 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3 disabled:bg-slate-300">
