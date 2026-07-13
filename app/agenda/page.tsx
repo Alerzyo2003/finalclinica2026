@@ -199,14 +199,16 @@ export default function AgendaPage() {
          setUsuarioLogueado(session.user.id);
          
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
-         if (perfil) {
-            setUserRol(perfil.rol);
-            const veAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil.rol);
-            if (!veAgendaCompleta) {
-               setFiltroEspecialista(session.user.id);
-               setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
-            }
-         }
+if (perfil) {
+  setUserRol(perfil.rol);
+  // Cambia esta línea:
+  const veAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil.rol);
+  
+  if (!veAgendaCompleta) {
+     setFiltroEspecialista(session.user.id);
+     setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
+  }
+}
       }
 
       const { data: pro } = await supabase.from('profesionales').select('*, especialidades(nombre)').eq('activo', true)
