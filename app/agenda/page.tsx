@@ -77,19 +77,14 @@ export default function AgendaPage() {
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
   const [userRol, setUserRol] = useState<string>('') 
   
-  const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA'
+  // 🔥 PERMISOS CORRECTOS: solo ADMIN, RECEPCIONISTA y ASISTENTE ven toda la agenda
+  const puedeVerFinanzas = ['ADMIN', 'RECEPCIONISTA'].includes(userRol);
   const puedeVerAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(userRol);
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [realtimeTrigger, setRealtimeTrigger] = useState(0);
-
-  const statsDia = useMemo(() => {
-    const anuladas = citasDia.filter(c => c.estado === 'cancelada').length;
-    const reprogramadas = citasDia.filter(c => c.estado === 'reprogramada').length;
-    return { totalPerdidas: anuladas + reprogramadas };
-  }, [citasDia]);
 
   const citasFiltradas = useMemo(() => {
     if (!busquedaAgenda.trim()) return citasDia;
@@ -206,9 +201,12 @@ export default function AgendaPage() {
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
          if (perfil) {
             setUserRol(perfil.rol);
+            // Si el usuario NO es ADMIN, RECEPCIONISTA o ASISTENTE, entonces solo ve sus propias citas
             const veAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil.rol);
-              if (!veAgendaCompleta) {
-             setFiltroEspecialista(session.user.id);
+            if (!veAgendaCompleta) {
+               setFiltroEspecialista(session.user.id);
+               // También forzamos el filtro en el modal
+               setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
             }
          }
       }
@@ -219,7 +217,8 @@ export default function AgendaPage() {
       const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
       setCajaActivaId(cajaActiva?.id || null);
 
-      if (pro?.length && filtroEspecialista === 'Todos') {
+      // Solo si puede ver toda la agenda y no ha seleccionado un especialista, se pone el primero
+      if (pro?.length && filtroEspecialista === 'Todos' && puedeVerAgendaCompleta) {
           setFiltro(prev => ({ ...prev, profesional_id: pro[0].user_id || '' }))
       }
     } finally { setCargandoPagina(false) }
@@ -1731,7 +1730,10 @@ export default function AgendaPage() {
                       <div className="space-y-6 text-left">
                         <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Especialista</label>
-                          <select className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none text-slate-900 cursor-pointer shadow-sm focus:border-blue-500" value={filtro.profesional_id || ""} onChange={(e) => { setFiltro({...filtro, profesional_id: e.target.value}); setHorasSeleccionadas([]); }}><option value="">Seleccionar...</option>{profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}</select>
+                          <select className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none text-slate-900 cursor-pointer shadow-sm focus:border-blue-500" value={filtro.profesional_id || ""} onChange={(e) => { setFiltro({...filtro, profesional_id: e.target.value}); setHorasSeleccionadas([]); }}>
+                            <option value="">Seleccionar...</option>
+                            {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                          </select>
                         </div>
                         <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Duración base</label>
@@ -1823,133 +1825,4 @@ export default function AgendaPage() {
                     </main>
                   </>
                 ) : (
-                  <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white text-slate-900 text-left">
-                    <div className="w-full md:w-1/2 border-r border-slate-200 p-8 md:p-12 bg-slate-50 overflow-y-auto space-y-6 text-left text-slate-900 custom-scrollbar">
-                        <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2 text-left"><Timer size={16}/> Ajustar Tiempos</h3>
-                        {horasSeleccionadas.map((s, idx) => ( 
-                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm text-left text-slate-900">
-                             <div className="text-left text-slate-900">
-                                <p className="text-[10px] font-black text-slate-400 uppercase text-left">{s.fecha}</p>
-                                <p className="text-lg font-black text-slate-700 text-left">{s.hora} hrs</p>
-                             </div>
-                             <select 
-                               className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none text-slate-900 focus:border-blue-500" 
-                               value={s.duracion} 
-                               onChange={(e) => { 
-                                 const newDur = Number(e.target.value);
-                                 const laboral = esHorarioLaboral(s.fecha, s.hora, newDur);
-                                 const ocupado = esCitaOcupada(s.fecha, s.hora, newDur);
-                                 
-                                 const chocaConOtraSeleccion = horasSeleccionadas.some((otra, idxOtra) => {
-                                     if (idx === idxOtra) return false;
-                                     const otraStart = new Date(`${otra.fecha}T${otra.hora}:00`).getTime();
-                                     const otraEnd = otraStart + otra.duracion * 60000;
-                                     const miStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
-                                     const miEnd = miStart + newDur * 60000;
-                                     return miStart < otraEnd && miEnd > otraStart;
-                                 });
-
-                                 if (!laboral || ocupado || chocaConOtraSeleccion) {
-                                     toast.error("La nueva duración excede el turno o choca con otra cita.");
-                                     return;
-                                 }
-                                 
-                                 const c = [...horasSeleccionadas]; 
-                                 c[idx].duracion = newDur; 
-                                 setHorasSeleccionadas(c); 
-                               }}
-                             >
-                               {duracionesDisponibles.map(d => <option key={d} value={d} className="text-slate-900">{d} min</option>)}
-                             </select>
-                          </div> 
-                        ))}
-                    </div>
-                    <div className="w-full md:w-1/2 p-8 md:p-12 overflow-y-auto space-y-8 text-left text-slate-900 custom-scrollbar">
-                        <div className="space-y-4 text-left text-slate-900">
-                            <h3 className="text-sm font-black uppercase text-slate-800 tracking-tight text-left">Paciente</h3>
-                            {citaEnReprogramacion ? ( <div className="p-6 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="text-base font-black uppercase text-purple-900 leading-none text-left">{citaEnReprogramacion.pacientes?.nombre} {citaEnReprogramacion.pacientes?.apellido}</p><p className="text-[10px] font-bold text-purple-500 mt-2 tracking-widest text-left">RUT: {citaEnReprogramacion.pacientes?.rut}</p></div><RefreshCcw className="text-purple-500" size={20} /></div> ) : ( <div className="space-y-4 text-left text-slate-900">{modoNuevoPaciente ? ( <div className="grid grid-cols-1 gap-3 bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm text-left"><input placeholder="Nombre" className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({...prev, nombre: e.target.value}))}/><input placeholder="Apellido" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({...prev, apellido: e.target.value}))}/><input placeholder="RUT" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.rut} onChange={e => setNuevoPaciente(prev => ({...prev, rut: e.target.value}))}/><input placeholder="Teléfono" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({...prev, telefono: e.target.value}))}/></div> ) : ( <div className="text-left space-y-4 text-slate-900"><div className="relative group text-left"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input placeholder="Buscar por Nombre o RUT..." className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-blue-500 shadow-sm text-slate-900" value={busqueda} onChange={e => {setBusqueda(e.target.value); buscarPacientes(e.target.value);}} /></div>{pacientesEncontrados.map(p => ( <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 shadow-sm transition-all flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="font-black text-sm uppercase text-left">{p.nombre} {p.apellido}</p><p className="text-[10px] font-bold text-slate-400 text-left mt-1">{p.rut}</p></div><ChevronRightIcon size={16} className="text-slate-300"/></button> ))}{pacienteSeleccionado && pacientesEncontrados.length === 0 && ( <div className="p-5 rounded-2xl border border-blue-500 bg-blue-50 flex items-center justify-between text-left text-slate-900"><p className="font-black text-sm uppercase text-blue-900 text-left">{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p><CheckCircle2 className="text-blue-500" /></div> )}</div> )}</div> )}
-                        </div>
-                        {(pacienteSeleccionado || modoNuevoPaciente) && ( <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-slate-900 rounded-2xl text-white shadow-xl text-left"><h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest text-left"><Briefcase size={14}/> Tratamiento</h4>{!modoNuevoPaciente && tratamientosPaciente.length > 0 ? ( <div className="space-y-3 text-left"><label className="text-[9px] font-bold text-slate-400 uppercase pl-1 text-left">Plan activo</label><select className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white appearance-none cursor-pointer" value={tratamientoSeleccionadoId || ''} onChange={(e) => { const val = e.target.value; setTratamientoSeleccionadoId(val); if (val !== 'MANUAL') { const t = tratamientosPaciente.find(x => x.id === val); setNuevoTratamientoNombre(t?.nombre_tratamiento || ''); } else setNuevoTratamientoNombre(''); }}>{tratamientosPaciente.map(t => <option key={t.id} value={t.id} className="text-slate-900">{t.nombre_tratamiento.toUpperCase()}</option>)}<option value="MANUAL" className="text-slate-900 italic">+ OTRO MOTIVO</option></select>{(tratamientoSeleccionadoId === 'MANUAL' || !tratamientoSeleccionadoId) && ( <input placeholder="Especifique motivo..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white uppercase mt-2 shadow-inner" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</div> ) : ( <input placeholder="Ej: Evaluación General, Urgencia..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white uppercase" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</motion.div> )}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="p-6 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 text-slate-900 text-left">
-                 <div className="flex items-center gap-3 text-left text-slate-900">
-                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-600 font-black border border-slate-200 shadow-sm">{horasSeleccionadas.length}</div>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">Turnos</p>
-                 </div>
-                 <div className="flex gap-3 items-center text-left text-slate-900 w-full sm:w-auto">
-                    <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); }} className="text-[10px] font-black text-blue-600 uppercase underline mr-4 text-left whitespace-nowrap">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
-                    {paso === 2 && <button onClick={() => setPaso(1)} className="px-6 py-3.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] uppercase text-slate-600 hover:bg-slate-100 shadow-sm transition-all text-left">Atrás</button>}
-                    <button disabled={cargandoAccion || horasSeleccionadas.length === 0 || (paso === 2 && !modoNuevoPaciente && !pacienteSeleccionado)} onClick={() => { if(paso === 1) { setPaso(2); } else { handleGuardar(); } }} className={`px-10 py-3.5 rounded-xl font-black text-white text-[10px] uppercase shadow-md transition-all active:scale-95 whitespace-nowrap w-full sm:w-auto ${citaEnReprogramacion ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
-                        {cargandoAccion ? <Loader2 className="animate-spin" size={16} /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
-                    </button>
-                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-  {mostrarTicket && (
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm">
-        <div className="bg-white rounded-[3rem] shadow-2xl p-10 text-center space-y-8">
-          <CheckCircle2 className="mx-auto text-emerald-500" size={64} />
-          <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-800">¡Cita Lista!</h2>
-          <div className="text-left bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Paciente</p>
-              <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.paciente}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fecha y Hora</p>
-              <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.citas[0]?.fecha} • {citaConfirmadaData?.citas[0]?.hora} hrs</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={() => {
-                if (!citaConfirmadaData) return;
-                const { paciente, citas, telefono } = citaConfirmadaData;
-                if (!telefono) {
-                  toast.error("El paciente no tiene un número de teléfono registrado.");
-                  return;
-                }
-                const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
-                const hora = citas[0].hora;
-                const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
-                const numLimpio = telefono.replace(/\D/g, '');
-                const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
-                window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
-                setMostrarTicket(false);
-                setModalAbierto(false);
-                resetEstados();
-                fetchCitasAgenda();
-              }}
-              className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
-            >
-              <MessageCircle size={14} /> Finalizar y Enviar WhatsApp
-            </button>
-            <button
-              onClick={() => {
-                setMostrarTicket(false);
-                setModalAbierto(false);
-                resetEstados();
-                fetchCitasAgenda();
-              }}
-              className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
-            >
-              Finalizar sin enviar
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  )}
-</AnimatePresence>
-    </div>
-  )
-}
+                  <div className="flex-1 flex flex-col md:
