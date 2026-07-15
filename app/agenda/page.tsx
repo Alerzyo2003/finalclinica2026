@@ -78,7 +78,7 @@ export default function AgendaPage() {
   const [userRol, setUserRol] = useState<string>('') 
   
   const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA'
-  const puedeVerAgendaCompleta = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA' || userRol === 'DENTISTA';
+  const puedeVerAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(userRol);
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -206,9 +206,9 @@ export default function AgendaPage() {
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
          if (perfil) {
             setUserRol(perfil.rol);
-            const veAgendaCompleta = perfil.rol === 'ADMIN' || perfil.rol === 'RECEPCIONISTA' || perfil.rol === 'DENTISTA';
-            if (!veAgendaCompleta) {
-               setFiltroEspecialista(session.user.id);
+            const veAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil.rol);
+              if (!veAgendaCompleta) {
+             setFiltroEspecialista(session.user.id);
             }
          }
       }
