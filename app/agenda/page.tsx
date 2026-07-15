@@ -232,18 +232,20 @@ export default function AgendaPage() {
     let inicioRango, finRango;
 
     if (vistaAgenda === 'dia') {
-        const d = new Date(selectedDate);
-        inicioRango = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0).toISOString();
-        finRango = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).toISOString();
+        // Obtenemos la fecha seleccionada en formato local 'YYYY-MM-DD'
+        const fechaLocalStr = getLocalDateISO(selectedDate);
+        // Definimos el inicio y fin absoluto del día en hora local sin desfases de conversión a UTC
+        inicioRango = `${fechaLocalStr}T00:00:00`;
+        finRango = `${fechaLocalStr}T23:59:59`;
     } else {
         const dias = getDiasLunesSabado(selectedDate);
         inicioRango = new Date(dias[0].setHours(0,0,0,0)).toISOString();
         finRango = new Date(dias[5].setHours(23,59,59,999)).toISOString();
     }
     
+    // El resto de la función se mantiene exactamente igual...
     let query = supabase.from('citas').select('*, pacientes(*)').gte('inicio', inicioRango).lte('inicio', finRango);
     
-    // Usamos el parámetro forzado si viene (carga inicial), de lo contrario usamos el estado
     const especialistaActivo = especialistaForzado !== undefined ? especialistaForzado : filtroEspecialista;
     
     if (especialistaActivo !== 'Todos') {
