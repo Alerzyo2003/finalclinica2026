@@ -195,6 +195,8 @@ export default function AgendaPage() {
   async function cargarBasicos() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      let especialistaInicial = 'Todos';
+
       if (session?.user) {
          setUsuarioLogueado(session.user.id);
          
@@ -203,8 +205,9 @@ export default function AgendaPage() {
             setUserRol(perfil.rol);
             const veAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil.rol);
             if (!veAgendaCompleta) {
-               setFiltroEspecialista(session.user.id);
-               setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
+                especialistaInicial = session.user.id;
+                setFiltroEspecialista(session.user.id);
+                setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
             }
          }
       }
@@ -215,13 +218,17 @@ export default function AgendaPage() {
       const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
       setCajaActivaId(cajaActiva?.id || null);
 
-      if (pro?.length && filtroEspecialista === 'Todos' && puedeVerAgendaCompleta) {
+      if (pro?.length && especialistaInicial === 'Todos' && ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(userRol)) {
           setFiltro(prev => ({ ...prev, profesional_id: pro[0].user_id || '' }))
       }
+
+      // Forzamos la primera carga con el especialista correcto determinado en este instante
+      fetchCitasAgenda(especialistaInicial);
+
     } finally { setCargandoPagina(false) }
   }
 
-  async function fetchCitasAgenda() {
+  async function fetchCitasAgenda(especialistaForzado?: string) {
     let inicioRango, finRango;
 
     if (vistaAgenda === 'dia') {
@@ -235,7 +242,13 @@ export default function AgendaPage() {
     }
     
     let query = supabase.from('citas').select('*, pacientes(*)').gte('inicio', inicioRango).lte('inicio', finRango);
-    if (filtroEspecialista !== 'Todos') query = query.eq('profesional_id', filtroEspecialista);
+    
+    // Usamos el parámetro forzado si viene (carga inicial), de lo contrario usamos el estado
+    const especialistaActivo = especialistaForzado !== undefined ? especialistaForzado : filtroEspecialista;
+    
+    if (especialistaActivo !== 'Todos') {
+        query = query.eq('profesional_id', especialistaActivo);
+    }
     
     const { data: citasData } = await query.order('inicio', { ascending: true });
     
