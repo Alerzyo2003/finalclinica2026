@@ -77,14 +77,19 @@ export default function AgendaPage() {
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
   const [userRol, setUserRol] = useState<string>('') 
   
-  // 🔥 CORRECCIÓN AQUÍ: Definición correcta de permisos para ASISTENTE
-  const puedeVerFinanzas = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(userRol);
-  const puedeVerAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(userRol);
+  const puedeVerFinanzas = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA'
+  const puedeVerAgendaCompleta = userRol === 'ADMIN' || userRol === 'RECEPCIONISTA' || userRol === 'DENTISTA';
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [realtimeTrigger, setRealtimeTrigger] = useState(0);
+
+  const statsDia = useMemo(() => {
+    const anuladas = citasDia.filter(c => c.estado === 'cancelada').length;
+    const reprogramadas = citasDia.filter(c => c.estado === 'reprogramada').length;
+    return { totalPerdidas: anuladas + reprogramadas };
+  }, [citasDia]);
 
   const citasFiltradas = useMemo(() => {
     if (!busquedaAgenda.trim()) return citasDia;
@@ -182,7 +187,7 @@ export default function AgendaPage() {
   }, []);
 
   useEffect(() => { cargarBasicos() }, [])
-  useEffect(() => { if (userRol) fetchCitasAgenda() }, [selectedDate, filtroEspecialista, vistaAgenda, realtimeTrigger, userRol])
+  useEffect(() => { fetchCitasAgenda() }, [selectedDate, filtroEspecialista, vistaAgenda, realtimeTrigger])
   
   useEffect(() => {
     if (modalAbierto && filtro.profesional_id) {
@@ -199,16 +204,13 @@ export default function AgendaPage() {
          setUsuarioLogueado(session.user.id);
          
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
-if (perfil) {
-  setUserRol(perfil.rol);
-  // Cambia esta línea:
-  const veAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil.rol);
-  
-  if (!veAgendaCompleta) {
-     setFiltroEspecialista(session.user.id);
-     setFiltro(prev => ({ ...prev, profesional_id: session.user.id }));
-  }
-}
+         if (perfil) {
+            setUserRol(perfil.rol);
+            const veAgendaCompleta = perfil.rol === 'ADMIN' || perfil.rol === 'RECEPCIONISTA' || perfil.rol === 'DENTISTA';
+            if (!veAgendaCompleta) {
+               setFiltroEspecialista(session.user.id);
+            }
+         }
       }
 
       const { data: pro } = await supabase.from('profesionales').select('*, especialidades(nombre)').eq('activo', true)
@@ -237,12 +239,7 @@ if (perfil) {
     }
     
     let query = supabase.from('citas').select('*, pacientes(*)').gte('inicio', inicioRango).lte('inicio', finRango);
-    
-    if (!puedeVerAgendaCompleta) {
-      query = query.eq('profesional_id', usuarioLogueado);
-    } else if (filtroEspecialista !== 'Todos') {
-      query = query.eq('profesional_id', filtroEspecialista);
-    }
+    if (filtroEspecialista !== 'Todos') query = query.eq('profesional_id', filtroEspecialista);
     
     const { data: citasData } = await query.order('inicio', { ascending: true });
     
@@ -324,11 +321,7 @@ if (perfil) {
         .not('estado', 'in', '("cancelada","atendido","no_asiste")')
         .order('inicio', { ascending: true });
         
-      if (!puedeVerAgendaCompleta) {
-        queryCitas = queryCitas.eq('profesional_id', usuarioLogueado);
-      } else if (filtroEspecialista !== 'Todos') {
-        queryCitas = queryCitas.eq('profesional_id', filtroEspecialista);
-      }
+      if (filtroEspecialista !== 'Todos') { queryCitas = queryCitas.eq('profesional_id', filtroEspecialista); }
 
       const { data: citasFuturas, error: errCitas } = await queryCitas;
       if (errCitas) console.error("❌ Error en BD al traer citas:", errCitas);
@@ -338,13 +331,7 @@ if (perfil) {
       }
 
       let queryBloqueos = supabase.from('bloqueos_agenda').select('*').gte('fecha', hoyStr).lte('fecha', limiteStr);
-      
-      if (!puedeVerAgendaCompleta) {
-        queryBloqueos = queryBloqueos.eq('profesional_id', usuarioLogueado);
-      } else if (filtroEspecialista !== 'Todos') {
-        queryBloqueos = queryBloqueos.eq('profesional_id', filtroEspecialista);
-      }
-      
+      if (filtroEspecialista !== 'Todos') queryBloqueos = queryBloqueos.eq('profesional_id', filtroEspecialista);
       const { data: bloqueos, error: errBloq } = await queryBloqueos;
       if (errBloq) console.error("❌ Error en BD al traer bloqueos:", errBloq);
 
@@ -544,28 +531,19 @@ if (perfil) {
     toast.success("Estado actualizado"); await fetchCitasAgenda();
   }
 
-  const contactarWhatsApp = (telefono: any, nombre: any, estado: any, fechaHoraISO: any) => {
+  const contactarWhatsApp = (telefono: string, nombre: string, estado: string, hora: string) => {
     if (!telefono) return toast.error("Paciente sin teléfono");
     const num = telefono.replace(/\D/g, '');
-
-    let citaDate = new Date(fechaHoraISO.replace(' ', 'T'));
-    if (isNaN(citaDate.getTime())) {
-      citaDate = new Date();
-    }
-
-    const diaSemana = citaDate.toLocaleDateString('es-CL', { weekday: 'long' });
-    const hora = citaDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
-
-    let mensaje = `Hola ${nombre}, te escribimos de la Clínica Dignidad para recordar tu cita del día ${diaSemana} a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
-
-    if (estado === 'atendido') {
-      mensaje = `Hola ${nombre}, esperamos que hayas tenido una excelente atención en la clínica. ¡Cualquier consulta estamos a tu disposición!`;
+    let mensaje = `Hola ${nombre}, nos comunicamos de la clínica dental.`;
+    if (estado === 'programada' || estado === 'confirmado_tel') {
+        mensaje = `Hola ${nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
+    } else if (estado === 'atendido') {
+        mensaje = `Hola ${nombre}, esperamos que estés muy bien tras tu atención de hoy en la clínica. ¡Cualquier consulta no dudes en escribirnos!`;
     } else if (estado === 'no_asiste') {
-      mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita del ${diaSemana}. ¿Te gustaría reagendar para otro día?`;
+        mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita de hoy. ¿Te gustaría reagendar para otro día?`;
     }
-
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
-  };
+  }
 
   const abrirEnvioPresupuesto = async (cita: any) => {
     if (!cita.paciente_id) return toast.error("Cita sin paciente asociado");
@@ -579,7 +557,7 @@ if (perfil) {
         }
 
         const ids = presupuestos.map(p => p.id);
-        const { data: items = [] } = await supabase.from('presupuesto_items').select('observacion, precio_pactado, abonado, prestaciones:prestacion_id("Nombre Accion", "Nombre")').in('presupuesto_id', ids).neq('estado', 'cancelada');
+        const { data: items } = await supabase.from('presupuesto_items').select('observacion, precio_pactado, abonado, prestaciones:prestacion_id("Nombre Accion", "Nombre")').in('presupuesto_id', ids).neq('estado', 'cancelada');
 
         if (!items || items.length === 0) {
             toast.error("El plan no contiene tratamientos activos.", { id: toastId });
@@ -662,14 +640,13 @@ if (perfil) {
           if (error) throw error;
           
           const profesionalBloqueadoData = profesionales.find(p => p.user_id === profesionalBloqueo);
-const nombreProfesional = profesionalBloqueadoData ? `${profesionalBloqueadoData.nombre} ${profesionalBloqueadoData.apellido}` : `ID ${profesionalBloqueo}`;
-
-await supabase.from('auditoria_clinica').insert([{
-    usuario_id: usuarioLogueado,
-    accion: 'INSERT / BLOQUEO AGENDA',
-    tabla: 'bloqueos_agenda',
-    detalles: `Bloqueó agenda para Dr/a. ${nombreProfesional} el día ${fechaBloqueo}. Motivo: ${motivoBloqueo}.`
-}]);
+          const nombreProfesional = profesionalBloqueadoData ? `${profesionalBloqueadoData.nombre} ${profesionalBloqueadoData.apellido}` : `ID ${profesionalBloqueo}`;
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'INSERT / BLOQUEO AGENDA',
+              tabla: 'bloqueos_agenda',
+              detalles: `Bloqueó agenda para Dr/a. ${nombreProfesional} el día ${fechaBloqueo}. Motivo: ${motivoBloqueo}.`
+          }]);
 
           toast.success("Agenda bloqueada exitosamente");
           setModalBloqueo(false);
@@ -677,18 +654,16 @@ await supabase.from('auditoria_clinica').insert([{
       } catch (e) { toast.error("Error al bloquear el horario."); } finally { setCargandoAccion(false); }
   }
 
-  const fetchCitasOcupadas = async () => {
+  async function fetchCitasOcupadas() {
     const dias = getDiasLunesSabado(semanaInicio);
     const inicioSemana = new Date(dias[0].getFullYear(), dias[0].getMonth(), dias[0].getDate(), 0, 0, 0).toISOString();
     const finSemana = new Date(dias[5].getFullYear(), dias[5].getMonth(), dias[5].getDate(), 23, 59, 59).toISOString();
-    
-    // Se asegura de traer citas del profesional seleccionado
     const { data } = await supabase.from('citas').select('id, inicio, fin').eq('profesional_id', filtro.profesional_id).gte('inicio', inicioSemana).lte('inicio', finSemana).neq('estado', 'cancelada');
     const filtradas = citaEnReprogramacion ? (data || []).filter(c => c.id !== citaEnReprogramacion.id) : (data || []);
     setCitasOcupadas(filtradas);
   }
 
-  const fetchHorariosDoctor = async () => {
+  async function fetchHorariosDoctor() {
     const { data } = await supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', filtro.profesional_id)
     setHorariosConfigurados(data || [])
   }
@@ -893,39 +868,15 @@ await supabase.from('auditoria_clinica').insert([{
     
     toggleHora(fecha, hora);
   };
-  
+
   const navegarSemana = (sentido: 'atras' | 'adelante') => {
     const nueva = new Date(semanaInicio); nueva.setDate(nueva.getDate() + (sentido === 'adelante' ? 7 : -7)); setSemanaInicio(nueva);
   }
 
-  const resetEstados = () => { 
-    setPaso(1); 
-    setHorasSeleccionadas([]); 
-    setPacienteSeleccionado(null); 
-    setBusqueda(''); 
-    setModoNuevoPaciente(false); 
-    setNuevoTratamientoNombre(''); 
-    setCitasOcupadas([]); 
-    setCitaEnReprogramacion(null); 
-    setSemanaInicio(new Date()); 
-    setTratamientosPaciente([]); 
-    setTratamientoSeleccionadoId(null); 
-    setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); 
-    setBloqueosSemana([]); 
-    
-    if (!puedeVerAgendaCompleta && usuarioLogueado) {
-      setFiltro(prev => ({ ...prev, profesional_id: usuarioLogueado }));
-    }
-  }
+  const resetEstados = () => { setPaso(1); setHorasSeleccionadas([]); setPacienteSeleccionado(null); setBusqueda(''); setModoNuevoPaciente(false); setNuevoTratamientoNombre(''); setCitasOcupadas([]); setCitaEnReprogramacion(null); setSemanaInicio(new Date()); setTratamientosPaciente([]); setTratamientoSeleccionadoId(null); setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); setBloqueosSemana([]); }
 
   const abrirCaja = async (cita: any) => {
     if (!cita.pacientes || !cita.pacientes.id) return toast.error("Cita no tiene paciente asignado");
-    
-    if (!cajaActivaId) {
-        return toast.error("No se puede cobrar: No hay ninguna caja abierta.", {
-            description: "Pídele a un recepcionista que abra un turno para continuar."
-        });
-    }
     
     setPacientePago(cita.pacientes); 
     setMontoIngresado(''); 
@@ -993,88 +944,107 @@ await supabase.from('auditoria_clinica').insert([{
   }
 
   const procesarPagoCaja = async () => {
-    const pago = Number(montoIngresado);
-    if (!montoIngresado || pago <= 0) return toast.error("Ingrese un monto válido a recaudar");
-    
-    const requiereComprobante = metodoPago !== 'Saldo a Favor';
-    if (requiereComprobante && !codigoTransaccion.trim()) return toast.error("Ingrese el N° de boleta o código de transacción");
+  const pago = Number(montoIngresado);
+  if (!montoIngresado || pago <= 0) return toast.error("Ingrese un monto válido a recaudar");
+  
+  const requiereComprobante = metodoPago !== 'Saldo a Favor';
+  if (requiereComprobante && !codigoTransaccion.trim()) return toast.error("Ingrese el N° de boleta o código de transacción");
 
-    if (metodoPago === 'Saldo a Favor') {
-       if (pago > saldoAFavor) return toast.error("El monto supera el saldo disponible en la billetera.");
-    }
+  if (metodoPago === 'Saldo a Favor') {
+     if (pago > saldoAFavor) return toast.error("El monto supera el saldo disponible en la billetera.");
+  }
 
-    setCargandoAccion(true); 
-    let montoRestante = pago;
-    
-    try {
-        for (const item of deudasPaciente) {
-            if (montoRestante <= 0) break;
-            const aAbonar = Math.min(item.deuda, montoRestante);
-            
-            const detalleAbono = { 
-                id: item.id,
-                prestacion: item.nombreDisplay, 
-                precio: item.precio_pactado, 
-                doctor: item.doctor,
-                abonado_ahora: aAbonar 
-            };
+  setCargandoAccion(true); 
+  let montoRestante = pago;
+  
+  try {
+      let currentCajaId = cajaActivaId;
+      if (!currentCajaId) {
+          const { data: perfilData } = await supabase.from('perfiles').select('nombre_completo').eq('id', usuarioLogueado).maybeSingle();
+          const userName = perfilData?.nombre_completo || 'Recepcionista';
+
+          const { data: nuevaCaja, error: errCaja } = await supabase.from('sesiones_caja').insert([{
+              usuario_id: usuarioLogueado,
+              nombre_responsable: userName,
+              monto_apertura: 0,
+              estado: 'abierta',
+              fecha_apertura: new Date().toISOString()
+          }]).select('id').single();
+
+          if (errCaja) throw errCaja;
+          currentCajaId = nuevaCaja.id;
+          setCajaActivaId(currentCajaId);
+          toast.success("Turno de caja iniciado automáticamente ($0 inicial)");
+      }
+
+      for (const item of deudasPaciente) {
+          if (montoRestante <= 0) break;
+          const aAbonar = Math.min(item.deuda, montoRestante);
+          
+          const detalleAbono = { 
+              id: item.id,
+              prestacion: item.nombreDisplay, 
+              precio: item.precio_pactado, 
+              doctor: item.doctor,
+              abonado_ahora: aAbonar 
+          };
 
           await supabase.from('pagos').insert([{ 
-                paciente_id: pacientePago.id, 
-                monto: aAbonar, 
-                metodo_pago: metodoPago, 
-                numero_referencia: codigoTransaccion.trim() || null, 
-                numero_boleta: codigoTransaccion.trim() || 'S/N', 
-                fecha_pago: new Date().toISOString(),
-                item_id: item.id,
-                comentario: JSON.stringify([detalleAbono]),
-                caja_id: cajaActivaId
-            }]);
+              paciente_id: pacientePago.id, 
+              monto: aAbonar, 
+              metodo_pago: metodoPago, 
+              numero_referencia: codigoTransaccion.trim() || null, 
+              numero_boleta: codigoTransaccion.trim() || 'S/N', 
+              fecha_pago: new Date().toISOString(),
+              item_id: item.id,
+              comentario: JSON.stringify([detalleAbono]),
+              caja_id: currentCajaId
+          }]);
 
-            await supabase.from('presupuesto_items').update({ abonado: Number(item.abonado) + aAbonar }).eq('id', item.id);
-            montoRestante -= aAbonar;
-        }
-        
-        let nuevoSaldo = saldoAFavor;
+          await supabase.from('presupuesto_items').update({ abonado: Number(item.abonado) + aAbonar }).eq('id', item.id);
+          montoRestante -= aAbonar;
+      }
+      
+      let nuevoSaldo = saldoAFavor;
 
-        if (metodoPago === 'Saldo a Favor') {
-            nuevoSaldo = saldoAFavor - pago;
-            await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
-            toast.success(`Se utilizaron $${pago.toLocaleString('es-CL')} de su saldo a favor.`);
-        } else {
-            if (montoRestante > 0) {
-                const detalleSobrante = [{ prestacion: "Saldo a Favor (Abono extra/Vuelto)", precio: montoRestante, abonado_ahora: montoRestante }];
-                await supabase.from('pagos').insert([{ 
-                    paciente_id: pacientePago.id, 
-                    monto: montoRestante, 
-                    metodo_pago: metodoPago, 
-                    numero_referencia: codigoTransaccion.trim() || null, 
-                    numero_boleta: codigoTransaccion.trim() || 'S/N',
-                    fecha_pago: new Date().toISOString(),
-                    comentario: JSON.stringify(detalleSobrante),
-                    caja_id: cajaActivaId
-                }]);
+      if (metodoPago === 'Saldo a Favor') {
+          nuevoSaldo = saldoAFavor - pago;
+          await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
+          toast.success(`Se utilizaron $${pago.toLocaleString('es-CL')} de su saldo a favor.`);
+      } else {
+          if (montoRestante > 0) {
+              const detalleSobrante = [{ prestacion: "Saldo a Favor (Abono extra/Vuelto)", precio: montoRestante, abonado_ahora: montoRestante }];
+              await supabase.from('pagos').insert([{ 
+                  paciente_id: pacientePago.id, 
+                  monto: montoRestante, 
+                  metodo_pago: metodoPago, 
+                  numero_referencia: codigoTransaccion.trim() || null, 
+                  numero_boleta: codigoTransaccion.trim() || 'S/N',
+                  fecha_pago: new Date().toISOString(),
+                  comentario: JSON.stringify(detalleSobrante),
+                  caja_id: currentCajaId
+              }]);
 
-                nuevoSaldo = saldoAFavor + montoRestante;
-                await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
-                toast.info(`¡Quedó un vuelto de $${montoRestante.toLocaleString('es-CL')} guardado a favor del paciente!`);
-            } else {
-                toast.success(`Pago procesado exitosamente.`);
-            }
-        }
+              nuevoSaldo = saldoAFavor + montoRestante;
+              await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
+              toast.info(`¡Quedó un vuelto de $${montoRestante.toLocaleString('es-CL')} guardado a favor del paciente!`);
+          } else {
+              toast.success(`Pago procesado exitosamente.`);
+          }
+      }
 
-        setSaldoAFavor(nuevoSaldo);
-        setModalPagoAbierto(false); 
-        setMontoIngresado(''); 
-        setCodigoTransaccion('');
-        await fetchCitasAgenda(); 
+      setSaldoAFavor(nuevoSaldo);
+      setModalPagoAbierto(false); 
+      setMontoIngresado(''); 
+      setCodigoTransaccion('');
+      await fetchCitasAgenda(); 
 
-    } catch (e) { 
-        toast.error("Ocurrió un error al procesar el pago"); 
-    } finally { 
-        setCargandoAccion(false); 
-    }
+  } catch (e) { 
+      toast.error("Ocurrió un error al procesar el pago"); 
+  } finally { 
+      setCargandoAccion(false); 
   }
+}
 
   const calcularDeudaTotalCaja = () => deudasPaciente.reduce((acc, curr) => acc + curr.deuda, 0);
 
@@ -1097,25 +1067,20 @@ await supabase.from('auditoria_clinica').insert([{
         
         <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 w-full xl:w-auto">
           <div className="space-y-1.5 text-left">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Agenda Clinical</h1>
-            
-            <div className="flex items-center gap-2 text-slate-200 bg-white border border-slate-200 rounded-2xl p-1 shadow-sm hover:border-slate-300 transition-all">
-              <div className="pl-3 text-blue-300"><Stethoscope size={16} /></div>
-              {puedeVerAgendaCompleta ? (
-                <select 
-                  className="text-xs font-black uppercase bg-transparent outline-none cursor-pointer py-2 pr-8 pl-1 w-[200px] text-slate-700" 
-                  value={filtroEspecialista} 
-                  onChange={(e) => setFiltroEspecialista(e.target.value)}
-                >
-                  <option value="Todos">Todos los especialistas</option>
-                  {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-                </select>
-              ) : (
-                <span className="text-xs font-black uppercase px-4 py-2 text-slate-700">Mis Citas</span>
-              )}
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Agenda Clínica</h1>
+            <div className="flex items-center gap-2 text-slate-500">
+               <Stethoscope size={14}/>
+               {puedeVerAgendaCompleta ? (
+                   <select className="text-[11px] font-bold uppercase bg-transparent outline-none cursor-pointer hover:text-blue-600 transition-colors max-w-[220px]" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
+                     <option value="Todos">Todos los especialistas</option>
+                     {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                   </select>
+               ) : (
+                   <span className="text-[11px] font-bold uppercase text-slate-700">Mis Citas</span>
+               )}
             </div>
           </div>
-
+          
           <div className="flex items-center gap-2 xl:border-l xl:border-slate-200 xl:pl-6 w-full xl:w-auto overflow-x-auto pb-2 md:pb-0">
               
               <div className="flex items-center bg-slate-100/80 rounded-2xl p-1.5 border border-slate-200 shrink-0 shadow-sm">
@@ -1228,7 +1193,7 @@ await supabase.from('auditoria_clinica').insert([{
                       <div className="flex items-start justify-between gap-3 text-left">
                          <div className="flex items-center gap-3 text-left">
                             <div className={`w-9 h-9 rounded-full ${avatarColor} flex items-center justify-center font-black text-xs tracking-widest shadow-inner ring-2 ring-slate-50 shrink-0`}>
-                                {getInitials(pNombre, pApellido)}
+                               {getInitials(pNombre, pApellido)}
                             </div>
                             <div className="text-left text-slate-900">
                                <h3 className="text-base font-black text-slate-900 uppercase tracking-tight leading-none mb-1">{pNombre} {pApellido}</h3>
@@ -1252,11 +1217,11 @@ await supabase.from('auditoria_clinica').insert([{
                          <div className="flex items-center gap-2 flex-wrap text-left text-slate-900">
                             {puedeVerFinanzas && c.requiereCobroInmediato ? (
                                <span onClick={() => abrirCaja(c)} className="text-[9px] font-black text-white uppercase tracking-widest bg-red-500 px-2 py-1 rounded-lg shadow-sm animate-pulse cursor-pointer hover:scale-105 transition-transform">
-                                 🔔 Por Cobrar: ${c.finanzas?.deuda_realizada.toLocaleString('es-CL')}
+                                  🔔 Por Cobrar: ${c.finanzas?.deuda_realizada.toLocaleString('es-CL')}
                                </span>
                             ) : puedeVerFinanzas && c.estadoFinanciero === 'deuda' ? ( 
                                <span className="text-[9px] font-black text-red-600 uppercase tracking-widest bg-red-50 px-2 py-1 rounded-lg border border-red-100/50 flex items-center gap-1">
-                                 Deuda: ${c.finanzas?.deuda.toLocaleString('es-CL')}
+                                  Deuda: ${c.finanzas?.deuda.toLocaleString('es-CL')}
                                </span> 
                             ) : null}
 
@@ -1271,16 +1236,16 @@ await supabase.from('auditoria_clinica').insert([{
                                 <CalendarClock size={14}/>
                             </button>
 
-                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, c.inicio)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shrink-0" title="WhatsApp Inteligente">
+                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shrink-0" title="WhatsApp Inteligente">
                                 <MessageCircle size={14}/>
                             </button>
                             <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all shrink-0" title="Enviar Presupuesto">
                                 <FileText size={14}/>
                             </button>
                             {puedeVerFinanzas && (
-                                 <button onClick={() => abrirCaja(c)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white rounded-lg transition-all shrink-0" title="Caja / Pagar">
-                                     <Coins size={14}/>
-                                 </button>
+                                <button onClick={() => abrirCaja(c)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white rounded-lg transition-all shrink-0" title="Caja / Pagar">
+                                    <Coins size={14}/>
+                                </button>
                             )}
                             <Link href={`/pacientes/${c.paciente_id}`} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all flex items-center gap-1.5 font-black text-[9px] uppercase pr-3 shrink-0" title="Ver Ficha">
                                 <ClipboardList size={14}/> Ficha
@@ -1349,7 +1314,7 @@ await supabase.from('auditoria_clinica').insert([{
                                                 <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-1.5 text-slate-500 hover:bg-purple-50 hover:text-purple-600 rounded-md transition-all"><CalendarClock size={14}/></button>
 
                                                 <button onClick={() => abrirEnvioPresupuesto(c)} className="p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all"><FileText size={14}/></button>
-                                                <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, c.inicio)} className="p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle size={14}/></button>
+                                                <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle size={14}/></button>
                                                 {puedeVerFinanzas && (
                                                     <button onClick={(e) => { e.stopPropagation(); abrirCaja(c); }} className="p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all"><Coins size={14}/></button>
                                                 )}
@@ -1369,7 +1334,6 @@ await supabase.from('auditoria_clinica').insert([{
         )}
       </main>
 
-      {/* MODAL ENVÍO DE PRESUPUESTO WHATSAPP */}
       <AnimatePresence>
         {modalEnvioPresupuesto.abierto && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
@@ -1411,7 +1375,6 @@ await supabase.from('auditoria_clinica').insert([{
         )}
       </AnimatePresence>
 
-      {/* MODAL BLOQUEO RÁPIDO */}
       <AnimatePresence>
         {modalBloqueo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
@@ -1472,7 +1435,6 @@ await supabase.from('auditoria_clinica').insert([{
         )}
       </AnimatePresence>
 
-      {/* MODAL DE CAJA (RECAUDACIÓN DE PAGOS) */}
       <AnimatePresence>
         {modalPagoAbierto && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
@@ -1574,8 +1536,8 @@ await supabase.from('auditoria_clinica').insert([{
                       disabled={cargandoAccion || deudasPaciente.length === 0 || !montoIngresado}
                       className="w-full py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                    >
-                     {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <Coins size={18}/>}
-                     Registrar Pago Seguro
+                      {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <Coins size={18}/>}
+                      Registrar Pago Seguro
                    </button>
                 </div>
              </motion.div>
@@ -1583,7 +1545,6 @@ await supabase.from('auditoria_clinica').insert([{
         )}
       </AnimatePresence>
 
-      {/* MODAL CITAS HUÉRFANAS */}
       <AnimatePresence>
         {modalHuerfanasAbierto && (
           <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
@@ -1601,7 +1562,7 @@ await supabase.from('auditoria_clinica').insert([{
               
               <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50/50">
                 {cargandoHuerfanas ? (
-                  <div className="w-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4">
+                  <div className="h-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 className="animate-spin" size={40} />
                     <p className="text-xs font-black uppercase tracking-widest">Analizando agenda global...</p>
                   </div>
@@ -1649,7 +1610,7 @@ await supabase.from('auditoria_clinica').insert([{
             }} className="px-4 py-2 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white rounded-xl transition-all flex items-center gap-2 shadow-sm">
               <CalendarClock size={14} /> Reagendar
             </button>
-            <button onClick={() => anularCitaDirecta(cita.id)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
+                                <button onClick={() => anularCitaDirecta(cita.id)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
               <Ban size={16} />
             </button>
           </div>
@@ -1673,7 +1634,6 @@ await supabase.from('auditoria_clinica').insert([{
                 </div>
               </div>
 
-              {/* CALENDARIO SEMANAL */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col">
                 <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-xl shadow-sm border border-slate-100">
                   <button onClick={prevWeekEdicion} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronLeft size={18}/></button>
@@ -1747,16 +1707,249 @@ await supabase.from('auditoria_clinica').insert([{
     </div>
   )
 })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {modalAbierto && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-7xl h-full max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
+              <div className="p-6 md:p-8 border-b border-slate-100 bg-white flex justify-between items-center shrink-0 text-left">
+                <div className="flex items-center gap-5 text-left"><div className={`p-3 rounded-2xl ${citaEnReprogramacion ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}><CalendarDays size={24} /></div><h2 className="font-black uppercase text-xl tracking-tight text-slate-900 leading-none text-left">{citaEnReprogramacion ? 'Reagendar Cita' : 'Nueva Reserva'} • Paso {paso}</h2></div>
+                <button onClick={() => { setModalAbierto(false); setCitaEnReprogramacion(null); }} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-all text-left"><X size={20} /></button>
+              </div>
+              <div className="flex flex-1 overflow-hidden">
+                {paso === 1 ? (
+                  <>
+                    <aside className="w-[300px] border-r border-slate-200 p-8 bg-slate-50 space-y-8 overflow-y-auto hidden md:block text-left text-slate-900 custom-scrollbar">
+                      <div className={`p-6 rounded-2xl shadow-sm border text-left ${citaEnReprogramacion ? 'bg-white border-purple-200' : 'bg-white border-blue-200'}`}><p className="text-[10px] font-black uppercase mb-1 text-slate-400 tracking-widest text-left">Seleccionado</p><p className={`text-4xl font-black leading-none text-left ${citaEnReprogramacion ? 'text-purple-600' : 'text-blue-600'}`}>{horasSeleccionadas.length}</p></div>
+                      <div className="space-y-6 text-left">
+                        <div className="space-y-2 text-left">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Especialista</label>
+                          <select className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none text-slate-900 cursor-pointer shadow-sm focus:border-blue-500" value={filtro.profesional_id || ""} onChange={(e) => { setFiltro({...filtro, profesional_id: e.target.value}); setHorasSeleccionadas([]); }}><option value="">Seleccionar...</option>{profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}</select>
+                        </div>
+                        <div className="space-y-2 text-left">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Duración base</label>
+                          <div className="grid grid-cols-3 gap-2 text-left">
+                            {duracionesDisponibles.slice(0,6).map(m => ( 
+                                <button 
+                                  key={m} 
+                                  onClick={() => {
+                                      setFiltro({...filtro, duracionDefault: m});
+                                      
+                                      setHorasSeleccionadas(prev => {
+                                          const validas = prev.filter(s => {
+                                              const laboral = esHorarioLaboral(s.fecha, s.hora, m);
+                                              const ocupado = esCitaOcupada(s.fecha, s.hora, m);
+                                              if (!laboral || ocupado) {
+                                                  toast.warning(`La hora ${s.hora} se quitó por falta de tiempo`);
+                                                  return false;
+                                              }
+                                              return true;
+                                          });
+                                          return validas.map(v => ({ ...v, duracion: m }));
+                                      });
+                                  }} 
+                                  className={`py-3 rounded-xl text-[10px] font-black border transition-all ${filtro.duracionDefault === m ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 shadow-sm'}`}
+                                >
+                                  {m}m
+                                </button> 
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </aside>
+                    <main className="flex-1 p-6 md:p-8 bg-[#F8FAFC] overflow-hidden flex flex-col text-slate-900 text-left">
+                      <div className="flex justify-between items-center mb-6 bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-left">
+                        <button onClick={() => navegarSemana('atras')} className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-[10px] uppercase text-slate-500 transition-all text-left"><ChevronLeft size={14}/> Ant.</button>
+                        <span className="font-black text-xs uppercase tracking-widest text-slate-600 text-center">Disponibilidad</span>
+                        <button onClick={() => navegarSemana('adelante')} className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-[10px] uppercase text-slate-700 transition-all text-left">Sig. <ChevronRight size={14}/></button>
+                      </div>
+                      <div className="flex-1 grid grid-cols-6 gap-2 md:gap-4 overflow-y-auto pr-2 custom-scrollbar text-left text-slate-900">
+                        {getDiasLunesSabado(semanaInicio).map(dia => { 
+                          const fStr = getLocalDateISO(dia); 
+                          
+                          const bloqueosDelDia = bloqueosSemana.filter(b => b.fecha === fStr);
+                          const diaCompletamenteBloqueado = bloqueosDelDia.some(b => !b.hora_inicio || !b.hora_fin);
+
+                          return ( 
+                            <div key={fStr} className="space-y-2 text-center text-slate-900 relative">
+                              <p className="text-[10px] font-black uppercase text-slate-500 bg-white py-2 rounded-lg border border-slate-200 shadow-sm">{dia.toLocaleDateString('es-CL', {weekday: 'short', day: 'numeric'})}</p>
+                              
+                              {diaCompletamenteBloqueado && (
+                                <div className="absolute top-10 inset-x-0 z-10 flex flex-col items-center justify-start pt-10 h-full bg-white/60 backdrop-blur-[1px] rounded-lg">
+                                  <Ban className="text-red-500 mb-2" size={20} />
+                                </div>
+                              )}
+                              <div className="space-y-1.5 text-left text-slate-900">
+                                {slotsHorarios.map(h => { 
+                                  const laboral = esHorarioLaboral(fStr, h, filtro.duracionDefault); 
+                                  const ocupado = esCitaOcupada(fStr, h, filtro.duracionDefault); 
+                                  const sel = horasSeleccionadas.some(x => x.fecha === fStr && x.hora === h); 
+                                  
+                                  const chocaConSeleccion = horasSeleccionadas.some(s => {
+                                      if (s.fecha === fStr && s.hora === h) return false; 
+                                      const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
+                                      const selEnd = selStart + s.duracion * 60000;
+                                      const slotStart = new Date(`${fStr}T${h}:00`).getTime();
+                                      const slotEnd = slotStart + filtro.duracionDefault * 60000;
+                                      return slotStart < selEnd && slotEnd > selStart;
+                                  });
+
+                                  let btnClass = "w-full py-2.5 text-[10px] font-black rounded-lg border transition-all "; 
+                                  if (sel) btnClass += "bg-blue-600 text-white border-blue-600 shadow-md"; 
+                                  else if (ocupado || diaCompletamenteBloqueado || chocaConSeleccion) btnClass += "bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed opacity-50 line-through decoration-slate-300"; 
+                                  else if (laboral) btnClass += "bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 shadow-sm"; 
+                                  else btnClass += "bg-transparent text-slate-300 border-transparent cursor-not-allowed opacity-40"; 
+                                  
+                                  return ( 
+                                    <button 
+                                      key={h}
+                                      onClick={() => handleSlotClick(fStr, h)} 
+                                      className={btnClass}
+                                    >{h}</button> 
+                                  ) 
+                                })}
+                              </div>
+                            </div> 
+                          ) 
+                        })}
+                      </div>
+                    </main>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white text-slate-900 text-left">
+                    <div className="w-full md:w-1/2 border-r border-slate-200 p-8 md:p-12 bg-slate-50 overflow-y-auto space-y-6 text-left text-slate-900 custom-scrollbar">
+                        <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2 text-left"><Timer size={16}/> Ajustar Tiempos</h3>
+                        {horasSeleccionadas.map((s, idx) => ( 
+                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm text-left text-slate-900">
+                             <div className="text-left text-slate-900">
+                                <p className="text-[10px] font-black text-slate-400 uppercase text-left">{s.fecha}</p>
+                                <p className="text-lg font-black text-slate-700 text-left">{s.hora} hrs</p>
+                             </div>
+                             <select 
+                               className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none text-slate-900 focus:border-blue-500" 
+                               value={s.duracion} 
+                               onChange={(e) => { 
+                                 const newDur = Number(e.target.value);
+                                 const laboral = esHorarioLaboral(s.fecha, s.hora, newDur);
+                                 const ocupado = esCitaOcupada(s.fecha, s.hora, newDur);
+                                 
+                                 const chocaConOtraSeleccion = horasSeleccionadas.some((otra, idxOtra) => {
+                                     if (idx === idxOtra) return false;
+                                     const otraStart = new Date(`${otra.fecha}T${otra.hora}:00`).getTime();
+                                     const otraEnd = otraStart + otra.duracion * 60000;
+                                     const miStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
+                                     const miEnd = miStart + newDur * 60000;
+                                     return miStart < otraEnd && miEnd > otraStart;
+                                 });
+
+                                 if (!laboral || ocupado || chocaConOtraSeleccion) {
+                                     toast.error("La nueva duración excede el turno o choca con otra cita.");
+                                     return;
+                                 }
+                                 
+                                 const c = [...horasSeleccionadas]; 
+                                 c[idx].duracion = newDur; 
+                                 setHorasSeleccionadas(c); 
+                               }}
+                             >
+                               {duracionesDisponibles.map(d => <option key={d} value={d} className="text-slate-900">{d} min</option>)}
+                             </select>
+                          </div> 
+                        ))}
+                    </div>
+                    <div className="w-full md:w-1/2 p-8 md:p-12 overflow-y-auto space-y-8 text-left text-slate-900 custom-scrollbar">
+                        <div className="space-y-4 text-left text-slate-900">
+                            <h3 className="text-sm font-black uppercase text-slate-800 tracking-tight text-left">Paciente</h3>
+                            {citaEnReprogramacion ? ( <div className="p-6 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="text-base font-black uppercase text-purple-900 leading-none text-left">{citaEnReprogramacion.pacientes?.nombre} {citaEnReprogramacion.pacientes?.apellido}</p><p className="text-[10px] font-bold text-purple-500 mt-2 tracking-widest text-left">RUT: {citaEnReprogramacion.pacientes?.rut}</p></div><RefreshCcw className="text-purple-500" size={20} /></div> ) : ( <div className="space-y-4 text-left text-slate-900">{modoNuevoPaciente ? ( <div className="grid grid-cols-1 gap-3 bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm text-left"><input placeholder="Nombre" className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({...prev, nombre: e.target.value}))}/><input placeholder="Apellido" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({...prev, apellido: e.target.value}))}/><input placeholder="RUT" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.rut} onChange={e => setNuevoPaciente(prev => ({...prev, rut: e.target.value}))}/><input placeholder="Teléfono" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({...prev, telefono: e.target.value}))}/></div> ) : ( <div className="text-left space-y-4 text-slate-900"><div className="relative group text-left"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input placeholder="Buscar por Nombre o RUT..." className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-blue-500 shadow-sm text-slate-900" value={busqueda} onChange={e => {setBusqueda(e.target.value); buscarPacientes(e.target.value);}} /></div>{pacientesEncontrados.map(p => ( <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 shadow-sm transition-all flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="font-black text-sm uppercase text-left">{p.nombre} {p.apellido}</p><p className="text-[10px] font-bold text-slate-400 text-left mt-1">{p.rut}</p></div><ChevronRightIcon size={16} className="text-slate-300"/></button> ))}{pacienteSeleccionado && pacientesEncontrados.length === 0 && ( <div className="p-5 rounded-2xl border border-blue-500 bg-blue-50 flex items-center justify-between text-left text-slate-900"><p className="font-black text-sm uppercase text-blue-900 text-left">{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p><CheckCircle2 className="text-blue-500" /></div> )}</div> )}</div> )}
+                        </div>
+                        {(pacienteSeleccionado || modoNuevoPaciente) && ( <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-slate-900 rounded-2xl text-white shadow-xl text-left"><h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest text-left"><Briefcase size={14}/> Tratamiento</h4>{!modoNuevoPaciente && tratamientosPaciente.length > 0 ? ( <div className="space-y-3 text-left"><label className="text-[9px] font-bold text-slate-400 uppercase pl-1 text-left">Plan activo</label><select className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white appearance-none cursor-pointer" value={tratamientoSeleccionadoId || ''} onChange={(e) => { const val = e.target.value; setTratamientoSeleccionadoId(val); if (val !== 'MANUAL') { const t = tratamientosPaciente.find(x => x.id === val); setNuevoTratamientoNombre(t?.nombre_tratamiento || ''); } else setNuevoTratamientoNombre(''); }}>{tratamientosPaciente.map(t => <option key={t.id} value={t.id} className="text-slate-900">{t.nombre_tratamiento.toUpperCase()}</option>)}<option value="MANUAL" className="text-slate-900 italic">+ OTRO MOTIVO</option></select>{(tratamientoSeleccionadoId === 'MANUAL' || !tratamientoSeleccionadoId) && ( <input placeholder="Especifique motivo..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white uppercase mt-2 shadow-inner" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</div> ) : ( <input placeholder="Ej: Evaluación General, Urgencia..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white uppercase" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</motion.div> )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="p-6 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 text-slate-900 text-left">
+                 <div className="flex items-center gap-3 text-left text-slate-900">
+                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-600 font-black border border-slate-200 shadow-sm">{horasSeleccionadas.length}</div>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">Turnos</p>
+                 </div>
+                 <div className="flex gap-3 items-center text-left text-slate-900 w-full sm:w-auto">
+                    <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); }} className="text-[10px] font-black text-blue-600 uppercase underline mr-4 text-left whitespace-nowrap">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
+                    {paso === 2 && <button onClick={() => setPaso(1)} className="px-6 py-3.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] uppercase text-slate-600 hover:bg-slate-100 shadow-sm transition-all text-left">Atrás</button>}
+                    <button disabled={cargandoAccion || horasSeleccionadas.length === 0 || (paso === 2 && !modoNuevoPaciente && !pacienteSeleccionado)} onClick={() => { if(paso === 1) { setPaso(2); } else { handleGuardar(); } }} className={`px-10 py-3.5 rounded-xl font-black text-white text-[10px] uppercase shadow-md transition-all active:scale-95 whitespace-nowrap w-full sm:w-auto ${citaEnReprogramacion ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
+                        {cargandoAccion ? <Loader2 className="animate-spin" size={16} /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
+                    </button>
+                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+  {mostrarTicket && (
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm">
+        <div className="bg-white rounded-[3rem] shadow-2xl p-10 text-center space-y-8">
+          <CheckCircle2 className="mx-auto text-emerald-500" size={64} />
+          <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-800">¡Cita Lista!</h2>
+          <div className="text-left bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Paciente</p>
+              <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.paciente}</p>
             </div>
-          )}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fecha y Hora</p>
+              <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.citas[0]?.fecha} • {citaConfirmadaData?.citas[0]?.hora} hrs</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => {
+                if (!citaConfirmadaData) return;
+                const { paciente, citas, telefono } = citaConfirmadaData;
+                if (!telefono) {
+                  toast.error("El paciente no tiene un número de teléfono registrado.");
+                  return;
+                }
+                const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
+                const hora = citas[0].hora;
+                const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
+                const numLimpio = telefono.replace(/\D/g, '');
+                const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
+                window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
+                setMostrarTicket(false);
+                setModalAbierto(false);
+                resetEstados();
+                fetchCitasAgenda();
+              }}
+              className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
+            >
+              <MessageCircle size={14} /> Finalizar y Enviar WhatsApp
+            </button>
+            <button
+              onClick={() => {
+                setMostrarTicket(false);
+                setModalAbierto(false);
+                resetEstados();
+                fetchCitasAgenda();
+              }}
+              className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+            >
+              Finalizar sin enviar
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
   )}
-      </AnimatePresence>
+</AnimatePresence>
     </div>
   )
 }
-
-
-                                        
