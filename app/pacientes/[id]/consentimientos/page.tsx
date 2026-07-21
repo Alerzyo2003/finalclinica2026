@@ -24,6 +24,9 @@ export default function ConsentimientosPacientePage() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [creando, setCreando] = useState(false)
 
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [sessionUserRole, setSessionUserRole] = useState<string | null>(null)
+
 
   const [form, setForm] = useState({
     tipo_id: '',
@@ -33,7 +36,16 @@ export default function ConsentimientosPacientePage() {
 
 
   useEffect(() => {
-    if (pacienteId) fetchData()
+    if (pacienteId) {
+      supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (user) {
+          setSessionUserId(user.id)
+          const { data: profile } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
+          if (profile) setSessionUserRole(profile.rol)
+        }
+      })
+      fetchData()
+    }
   }, [pacienteId])
 
 
@@ -50,7 +62,7 @@ export default function ConsentimientosPacientePage() {
       const [tipos, pres, pros] = await Promise.all([
         supabase.from('consentimientos').select('*').eq('estado', 'Sí'),
         supabase.from('presupuestos').select('id, nombre_tratamiento').eq('paciente_id', pacienteId),
-        supabase.from('profesionales').select('user_id, nombre, apellido').eq('activo', true)
+        supabase.from('profesionales').select('id, user_id, nombre, apellido').eq('activo', true)
       ]);
 
 
@@ -68,7 +80,19 @@ export default function ConsentimientosPacientePage() {
     }
   }
 
-
+  const handleAbrirModal = () => {
+  const initialFormState = {
+    tipo_id: '',
+    presupuesto_id: '',
+    especialista_id: ''
+  }
+  if (sessionUserRole === 'DENTISTA' && sessionUserId) {
+    const propio = profesionales.find(p => p.user_id === sessionUserId);
+    if (propio) initialFormState.especialista_id = propio.id;
+  }
+  setForm(initialFormState)
+  setModalAbierto(true)
+}
   async function handleCrearConsentimiento() {
     if (!form.tipo_id || !form.especialista_id) {
       toast.error("Selecciona plantilla y especialista");
@@ -79,7 +103,7 @@ export default function ConsentimientosPacientePage() {
     setCreando(true);
     try {
       const plantilla = tiposConsentimientos.find(t => t.id === form.tipo_id);
-      const pro = profesionales.find(p => p.user_id === form.especialista_id);
+      const pro = profesionales.find(p => p.id === form.especialista_id);
 
 
       // MAPEADO SEGÚN TU SQL:
@@ -156,7 +180,7 @@ export default function ConsentimientosPacientePage() {
           </div>
         </div>
         <button 
-          onClick={() => setModalAbierto(true)} 
+          onClick={handleAbrirModal} 
           className="bg-blue-600 text-white px-10 py-5 rounded-[2rem] font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center gap-3 active:scale-95"
         >
           <Plus size={18} /> Generar Registro
@@ -244,7 +268,7 @@ export default function ConsentimientosPacientePage() {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Especialista</label>
                     <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
                       <option value="">Selecciona especialista...</option>
-                      {profesionales.map(p => <option key={p.user_id} value={p.user_id}>{p.nombre.toUpperCase()} {p.apellido.toUpperCase()}</option>)}
+                      {profesionales.map(p => <option key={p.id} value={p.id}>{p.nombre.toUpperCase()} {p.apellido.toUpperCase()}</option>)}
                     </select>
                   </div>
 
@@ -274,5 +298,3 @@ export default function ConsentimientosPacientePage() {
     </main>
   )
 }
-
-
