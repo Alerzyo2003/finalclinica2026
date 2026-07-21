@@ -129,6 +129,11 @@ export default function RecetasPage() {
     const elementoOriginal = document.getElementById('hoja-impresion');
     if (!elementoOriginal) return toast.error("No hay documento para imprimir");
 
+    // Captura todos los estilos del documento principal para replicarlos en la ventana de impresión.
+    // Esto es mucho más fiable que usar el CDN de Tailwind en la nueva ventana, que puede causar inconsistencias.
+    const styles = Array.from(document.head.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('');
 
     const contenido = elementoOriginal.outerHTML;
     const ventanaPoderosa = window.open('', '_blank');
@@ -140,34 +145,26 @@ export default function RecetasPage() {
       <html lang="es">
         <head>
           <title>Receta - ${paciente?.nombre} ${paciente?.apellido}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
+          ${styles}
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-           
-            /* Eliminamos márgenes nativos para controlar el tamaño internamente */
-            @page { size: A4; margin: 0; }
-           
+            /* Estilos específicos y robustos para la impresión */
+            @page { 
+              size: A4;
+              margin: 0; 
+            }
             body {
-              font-family: 'Inter', sans-serif;
-              margin: 0;
-              padding: 0;
-              background: white;
-              color: black;
+              background-color: white !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            .no-print { display: none !important; }
-            img { max-width: 100%; object-fit: contain; }
-            .whitespace-pre-wrap { white-space: pre-wrap; }
-           
-            /* Forzamos el contenedor a comportarse como una hoja exacta sin rebalse */
             #hoja-impresion {
               width: 210mm !important;
-              height: 296mm !important; /* 1mm menos de A4 para evitar página blanca extra */
-              max-width: none !important;
+              height: 297mm !important;
               margin: 0 !important;
+              padding: 1.5cm !important; /* Un margen de impresión razonable */
+              box-sizing: border-box !important;
               box-shadow: none !important;
-              overflow: hidden !important;
+              border: none !important;
             }
           </style>
         </head>
@@ -175,7 +172,11 @@ export default function RecetasPage() {
           ${contenido}
           <script>
             window.onload = function() {
-              setTimeout(() => { window.print(); window.close(); }, 1200);
+              // Un pequeño timeout para asegurar que todo se renderice bien antes de imprimir
+              setTimeout(() => { 
+                window.print(); 
+                window.close(); 
+              }, 500);
             };
           </script>
         </body>
@@ -183,6 +184,7 @@ export default function RecetasPage() {
     `);
     ventanaPoderosa.document.close();
   };
+
 
 
   if (cargando) return (
@@ -265,80 +267,82 @@ export default function RecetasPage() {
                 {/* CONTENEDOR MAESTRO DE LA HOJA
                   Estructurado como flex-col para que mt-auto empuje la firma abajo
                 */}
-                <div
+                <div 
                   id="hoja-impresion"
-                  className="bg-white shadow-2xl relative w-full max-w-[210mm] mx-auto flex flex-col p-10 md:p-12 min-h-[280mm]"
+                  className="bg-white shadow-2xl relative w-full max-w-[210mm] mx-auto flex flex-col justify-between p-10 md:p-12 min-h-[280mm]"
                 >
                  
-                  {/* ENCABEZADO */}
-                  <div className="text-left border-b-2 border-slate-900 pb-4 mb-6 flex items-center gap-6">
-                    <img src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg"
-                          className="w-20 h-20 rounded-full object-cover shrink-0 mix-blend-multiply" alt="Logo" referrerPolicy="no-referrer" />
-                    <div className="flex-1 text-left">
-                      <h1 className="text-lg font-black text-slate-900 leading-tight text-left">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
-                      <p className="text-[13px] font-black text-slate-800 uppercase mt-1 text-left">
-                        Dr/a. {recetaSeleccionada.profesional_data?.nombre} {recetaSeleccionada.profesional_data?.apellido}
-                      </p>
-                      <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed text-left">
-                        {recetaSeleccionada.profesional_data?.especialidad_nombre}
-                        {recetaSeleccionada.profesional_data?.rut && ` • RUT: ${recetaSeleccionada.profesional_data.rut}`}
+                  {/* Contenedor del contenido principal (todo menos el pie de página) */}
+                  <div>
+                    {/* ENCABEZADO */}
+                    <div className="text-left border-b-2 border-slate-900 pb-4 mb-6 flex items-center gap-6">
+                      <img 
+                          src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg"
+                          className="w-20 h-20 rounded-full object-cover shrink-0 mix-blend-multiply" 
+                          style={{ width: '80px', height: '80px' }}
+                          alt="Logo" referrerPolicy="no-referrer" />
+                      <div className="flex-1 text-left">
+                        <h1 className="text-lg font-black text-slate-900 leading-tight text-left">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
+                        <p className="text-[13px] font-black text-slate-800 uppercase mt-1 text-left">
+                          Dr/a. {recetaSeleccionada.profesional_data?.nombre} {recetaSeleccionada.profesional_data?.apellido}
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed text-left">
+                          {recetaSeleccionada.profesional_data?.especialidad_nombre}
+                          {recetaSeleccionada.profesional_data?.rut && ` • RUT: ${recetaSeleccionada.profesional_data.rut}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <h2 className="text-xl font-black uppercase italic text-center border-y border-slate-100 py-2 mb-6">Receta Médica</h2>
+
+                    {/* DATOS DEL PACIENTE */}
+                    <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-100 text-left print:bg-white print:border-slate-200">
+                      <div className="grid grid-cols-2 gap-y-3 gap-x-10 text-left">
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Nombre Paciente</p><p className="text-xs font-bold text-slate-900 uppercase text-left">{paciente?.nombre} {paciente?.apellido}</p></div>
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">RUT</p><p className="text-xs font-bold text-slate-900 text-left">{paciente?.rut || '---'}</p></div>
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Edad</p><p className="text-xs font-bold text-slate-900 text-left">{calcularEdad(paciente?.fecha_nacimiento)}</p></div>
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Sexo</p><p className="text-xs font-bold text-slate-900 uppercase text-left">{paciente?.sexo || '---'}</p></div>
+                          <div className="col-span-2 text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Fecha Emisión</p><p className="text-xs font-bold text-slate-900 text-left">{recetaSeleccionada.fecha_emision ? new Date(recetaSeleccionada.fecha_emision).toLocaleDateString('es-CL') : 'S/F'}</p></div>
+                      </div>
+                    </div>
+
+                    {/* RP. CUERPO */}
+                    <div className="text-left">
+                      <h3 className="text-2xl font-black text-slate-900 mb-4 italic opacity-10 text-left">Rp.</h3>
+                      <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-medium pl-6 border-l-2 border-slate-200 text-left">
+                        {recetaSeleccionada.indicaciones}
                       </p>
                     </div>
                   </div>
 
-
-                  <h2 className="text-xl font-black uppercase italic text-center border-y border-slate-100 py-2 mb-6">Receta Médica</h2>
-
-
-                  {/* DATOS DEL PACIENTE */}
-                  <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-100 text-left print:bg-white print:border-slate-200">
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-10 text-left">
-                        <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Nombre Paciente</p><p className="text-xs font-bold text-slate-900 uppercase text-left">{paciente?.nombre} {paciente?.apellido}</p></div>
-                        <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">RUT</p><p className="text-xs font-bold text-slate-900 text-left">{paciente?.rut || '---'}</p></div>
-                        <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Edad</p><p className="text-xs font-bold text-slate-900 text-left">{calcularEdad(paciente?.fecha_nacimiento)}</p></div>
-                        <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Sexo</p><p className="text-xs font-bold text-slate-900 uppercase text-left">{paciente?.sexo || '---'}</p></div>
-                        <div className="col-span-2 text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Fecha Emisión</p><p className="text-xs font-bold text-slate-900 text-left">{recetaSeleccionada.fecha_emision ? new Date(recetaSeleccionada.fecha_emision).toLocaleDateString('es-CL') : 'S/F'}</p></div>
+                  {/* Contenedor del pie de página (firma y dirección). justify-between en el padre lo empuja al fondo. */}
+                  <div>
+                    <div className="pt-16 flex justify-end">
+                      <div className="w-80 flex flex-col items-center text-center">
+                        <div className="w-full h-20 mb-2 flex items-center justify-center relative">
+                          {recetaSeleccionada.profesional_data?.firma_base64 ? (
+                            <img
+                              src={recetaSeleccionada.profesional_data.firma_base64}
+                              alt="Firma Especialista"
+                              className="max-h-20 w-auto object-contain mix-blend-multiply"
+                            />
+                          ) : (
+                            <div className="text-[8px] text-slate-300 uppercase font-black mb-4 italic">Firma no registrada</div>
+                          )}
+                        </div>
+                        <div className="h-px bg-slate-900 w-full mb-2"/>
+                        <p className="text-xs font-black uppercase text-slate-900 leading-tight">
+                          Dr/a. {recetaSeleccionada.profesional_data?.nombre} {recetaSeleccionada.profesional_data?.apellido}
+                        </p>
+                        <p className="text-[10px] font-bold uppercase text-slate-500">{recetaSeleccionada.profesional_data?.especialidad_nombre}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 italic">RUT: {recetaSeleccionada.profesional_data?.rut}</p>
+                      </div>
                     </div>
-                  </div>
-
-
-                  {/* RP. CUERPO (flex-1 rellena el espacio vacío) */}
-                  <div className="flex-1 text-left">
-                    <h3 className="text-2xl font-black text-slate-900 mb-4 italic opacity-10 text-left">Rp.</h3>
-                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-medium pl-6 border-l-2 border-slate-200 text-left">
-                      {recetaSeleccionada.indicaciones}
+                  
+                    <p className="mt-6 text-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.4em] text-center">
+                      Venancia Leiva 1871, La Pintana • +569 6646 7641
                     </p>
                   </div>
-
-
-                  {/* FIRMA ALINEADA AL FONDO GRACIAS A mt-auto */}
-                  <div className="mt-auto pt-8 flex justify-end text-right">
-                    <div className="text-center w-80 flex flex-col items-center">
-                      <div className="w-full h-20 mb-2 flex items-end justify-center relative bg-white">
-                        {recetaSeleccionada.profesional_data?.firma_base64 ? (
-                          <img
-                            src={recetaSeleccionada.profesional_data.firma_base64}
-                            alt="Firma Especialista"
-                            className="max-h-20 w-auto object-contain scale-110 origin-bottom translate-y-2 mix-blend-multiply"
-                            style={{ display: 'block' }}
-                          />
-                        ) : (
-                          <div className="text-[8px] text-slate-300 uppercase font-black mb-4 italic">Firma no registrada</div>
-                        )}
-                      </div>
-                      <div className="h-[2px] bg-slate-900 w-full mb-2"/>
-                      <p className="text-[11px] font-black uppercase text-slate-900 leading-tight text-center">
-                        Dr/a. {recetaSeleccionada.profesional_data?.nombre} {recetaSeleccionada.profesional_data?.apellido}
-                      </p>
-                      <p className="text-[9px] font-bold uppercase text-slate-500 text-center">{recetaSeleccionada.profesional_data?.especialidad_nombre}</p>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase mt-1 italic text-center">RUT: {recetaSeleccionada.profesional_data?.rut}</p>
-                    </div>
-                  </div>
-                 
-                  <p className="mt-6 text-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.4em] text-center">
-                    Venancia Leiva 1871, La Pintana • +569 6646 7641
-                  </p>
-                 
                 </div>
 
 
@@ -365,6 +369,3 @@ export default function RecetasPage() {
     </div>
   )
 }
-
-
-
