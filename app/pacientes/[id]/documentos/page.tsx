@@ -45,20 +45,46 @@ export default function DocumentosClinicosPage() {
   }
 
   async function fetchDatosEspecialistas() {
-    try {
-      const { data: profs } = await supabase.from('profesionales').select(`user_id, nombre, apellido, firma_base64, especialidades ( nombre )`).eq('activo', true);
-      const { data: perfiles } = await supabase.from('perfiles').select('id, rut');
-      const mapeados = profs?.map((p: any) => ({
-        user_id: p.user_id,
-        nombre_completo: `Dr/a. ${p.nombre} ${p.apellido}`,
-        iniciales: `${p.nombre[0]}${p.apellido[0]}`.toUpperCase(),
-        especialidad: p.especialidades?.nombre || 'Especialista',
-        rut: perfiles?.find(perf => perf.id === p.user_id)?.rut || '---',
-        firma_base64: p.firma_base64 || null
-      }));
-      if (mapeados) setProfesionalesFull(mapeados);
-    } catch (error) { console.error(error); }
+  try {
+    const { data: profs, error: errProfs } = await supabase
+      .from('profesionales')
+      .select(`
+        user_id,
+        nombre,
+        apellido,
+        firma_base64,
+        activo,
+        especialidades ( nombre )
+      `)
+      .eq('activo', true);
+
+    if (errProfs) throw errProfs;
+
+    const { data: perfiles, error: errPerf } = await supabase
+      .from('perfiles')
+      .select('id, rut');
+
+    if (errPerf) throw errPerf;
+
+    const mapeados = (profs || [])
+      .filter((prof: any) => prof.user_id) // por si algún profesional no tiene user_id asociado
+      .map((prof: any) => {
+        const perf = perfiles?.find((p: any) => p.id === prof.user_id);
+        return {
+          user_id: prof.user_id,
+          nombre_completo: `Dr/a. ${prof.nombre} ${prof.apellido}`,
+          iniciales: `${(prof.nombre || ' ')[0]}${(prof.apellido || ' ')[0]}`.toUpperCase(),
+          especialidad: prof.especialidades?.nombre || 'Especialista',
+          rut: perf?.rut || '---',
+          firma_base64: prof.firma_base64 || null
+        };
+      });
+
+    setProfesionalesFull(mapeados as any[]);
+  } catch (error) {
+    console.error("Error al cargar datos de especialistas:", error);
   }
+}
 
   async function fetchDocumentos() {
     const { data } = await supabase.from('documentos_clinicos').select('*').eq('paciente_id', paciente_id).order('fecha_creacion', { ascending: false })
