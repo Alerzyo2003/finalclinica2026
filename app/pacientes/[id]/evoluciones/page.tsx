@@ -15,7 +15,9 @@ export default function EvolucionesPage() {
   const [evoluciones, setEvoluciones] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [sessionUserProfile, setSessionUserProfile] = useState<any>(null)
   const [sessionUser, setSessionUser] = useState<any>(null)
+  const [especialistaId, setEspecialistaId] = useState<string | null>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   
   const [verAnuladas, setVerAnuladas] = useState(false)
@@ -36,6 +38,24 @@ export default function EvolucionesPage() {
   async function obtenerUsuario() {
     const { data: { user } } = await supabase.auth.getUser()
     setSessionUser(user)
+
+    if (user) {
+      const { data: profile } = await supabase.from('perfiles').select('nombre_completo, rol').eq('id', user.id).single();
+      if (profile) setSessionUserProfile(profile);
+    }
+
+    if (user) {
+      // Buscamos el ID real en la tabla pública de profesionales usando el user_id de la sesión
+      const { data: profesional, error } = await supabase
+        .from('profesionales')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (!error && profesional) {
+        setEspecialistaId(profesional.id)
+      } 
+    }
   }
 
   async function fetchEvoluciones() {
@@ -72,13 +92,21 @@ export default function EvolucionesPage() {
           .eq('id', editandoId)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('evoluciones').insert([{ 
+        const insertData: any = { 
           paciente_id,
           descripcion_procedimiento: nuevaEv.descripcion_procedimiento,
           observaciones: nuevaEv.observaciones,
-          especialista_id: sessionUser?.id,
-          estado: 'activa'
-        }])
+          especialista_id: especialistaId,
+          estado: 'activa',
+          creado_por: sessionUser?.id
+        };
+
+        if (!especialistaId) {
+          const creatorName = sessionUserProfile?.nombre_completo || sessionUser?.email || 'Usuario del Sistema';
+          insertData.descripcion_procedimiento = `[REGISTRADO POR: ${creatorName}]\n\n${nuevaEv.descripcion_procedimiento}`;
+        }
+
+        const { error } = await supabase.from('evoluciones').insert([insertData])
         if (error) throw error
       }
       
@@ -94,21 +122,39 @@ export default function EvolucionesPage() {
     const nuevoEstado = estadoActual === 'anulada' ? 'activa' : 'anulada';
     const confirmar = window.confirm(`¿Seguro que desea ${nuevoEstado === 'anulada' ? 'anular' : 'restaurar'} este registro?`);
     if (confirmar) {
-      const { error } = await supabase.from('evoluciones').update({ estado: nuevoEstado }).eq('id', evId)
-      if (error) toast.error("Error al cambiar estado")
-      else { toast.success(`Registro ${nuevoEstado}`); fetchEvoluciones(); }
+      const evolucionesOriginales = [...evoluciones];
+      // Actualización optimista: cambiamos el estado en la UI inmediatamente.
+      setEvoluciones(prev => prev.map(ev => ev.id === evId ? { ...ev, estado: nuevoEstado } : ev));
+
+      const { data, error } = await supabase
+        .from('evoluciones')
+        .update({ estado: nuevoEstado })
+        .eq('id', evId)
+        .select(); // Importante: .select() para que devuelva la fila actualizada
+      
+      if (error || data?.length === 0) {
+        toast.error("Error al anular. Es posible que no tengas permisos.");
+        // Si hay un error o no se actualizó ninguna fila, revertimos el cambio en la UI.
+        setEvoluciones(evolucionesOriginales);
+      } else { 
+        toast.success(`Registro marcado como '${nuevoEstado}'.`); 
+      }
     }
   }
 
   const imprimirEvolucion = (ev: any) => {
     const prof = ev.profesionales;
+    const creador = ev.creador_nombre;
+    const descripcion = ev.descripcion_limpia;
+    const responsable = prof ? `Dr/a. ${prof.nombre} ${prof.apellido}` : creador || 'Sistema';
+
     const ventanaImpresion = window.open('', '_blank');
     if (!ventanaImpresion) return;
     const fecha = new Date(ev.fecha_registro).toLocaleString('es-CL');
     ventanaImpresion.document.write(`
       <html>
         <head><style>body { font-family: sans-serif; padding: 40px; } .header { border-bottom: 2px solid #000; }</style></head>
-        <body><div class="header"><h2>EVOLUCIÓN CLÍNICA</h2></div><p><strong>Fecha:</strong> ${fecha}</p><p><strong>Dr/a:</strong> ${prof?.nombre} ${prof?.apellido}</p><hr/><p>${ev.descripcion_procedimiento.replace(/\n/g, '<br/>')}</p></body>
+        <body><div class="header"><h2>EVOLUCIÓN CLÍNICA</h2></div><p><strong>Fecha:</strong> ${fecha}</p><p><strong>Responsable:</strong> ${responsable}</p><hr/><p>${descripcion.replace(/\n/g, '<br/>')}</p></body>
       </html>
     `);
     ventanaImpresion.document.close();
@@ -121,9 +167,36 @@ export default function EvolucionesPage() {
     setNuevaEv({ descripcion_procedimiento: '', observaciones: '' })
   }
 
-  const evolucionesFiltradas = evoluciones.filter(ev => {
+  const evolucionesProcesadas = evoluciones.map(ev => {
+    let creadorNombre: string | null = null;
+    let descripcionLimpia = ev.descripcion_procedimiento;
+
+    if (!ev.profesionales) {
+        const match = ev.descripcion_procedimiento?.match(/^\[REGISTRADO POR: (.*?)\]\n\n/);
+        if (match && match[1]) {
+            creadorNombre = match[1];
+            descripcionLimpia = ev.descripcion_procedimiento.replace(match[0], '');
+        }
+    }
+    return { ...ev, creador_nombre: creadorNombre, descripcion_limpia: descripcionLimpia };
+  });
+
+  const evolucionesFiltradas = evolucionesProcesadas.filter(ev => {
     const cumpleEstado = verAnuladas ? ev.estado === 'anulada' : ev.estado === 'activa';
-    const cumpleAutor = soloMias ? ev.especialista_id === sessionUser?.id : true;
+    
+    let cumpleAutor = true;
+    if (soloMias) {
+      if (especialistaId) { // El usuario actual es un especialista.
+        cumpleAutor = ev.especialista_id === especialistaId;
+      } else if (sessionUserProfile?.nombre_completo) { // El usuario no es especialista (asistente, admin, etc.)
+        // Una evolución es "mía" si no tiene especialista y el nombre del creador en el texto coincide con mi nombre.
+        cumpleAutor = !ev.especialista_id && ev.creador_nombre === sessionUserProfile.nombre_completo;
+      } else {
+        // Si no podemos identificar al usuario actual, no mostramos nada en "Mis Registros".
+        cumpleAutor = false;
+      }
+    }
+
     return cumpleEstado && cumpleAutor;
   });
 
@@ -180,7 +253,12 @@ export default function EvolucionesPage() {
           ) : (
             evolucionesFiltradas.map((ev) => {
               const prof = ev.profesionales as any;
-              const esMio = ev.especialista_id === sessionUser?.id;
+              const creador = ev.creador_nombre;
+              const esAdmin = sessionUserProfile?.rol === 'ADMIN';
+              
+              // La comprobación de permisos ahora se basa en el ID de usuario que creó el registro.
+              const esCreadorOriginal = ev.creado_por === sessionUser?.id;
+              const puedeModificar = esAdmin || esCreadorOriginal;
               
               return (
                 <motion.div 
@@ -207,10 +285,10 @@ export default function EvolucionesPage() {
                     {/* BOTONES DE ACCIÓN */}
                     <div className="flex gap-2 relative z-20 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all">
                       <button onClick={() => imprimirEvolucion(ev)} className="p-2.5 bg-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Printer size={16}/></button>
-                      {esMio && ev.estado !== 'anulada' && (
+                      {puedeModificar && ev.estado !== 'anulada' && (
                         <button onClick={() => { setEditandoId(ev.id); setNuevaEv({ descripcion_procedimiento: ev.descripcion_procedimiento, observaciones: ev.observaciones }); setModalAbierto(true); }} className="p-2.5 bg-slate-100 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"><Edit3 size={16}/></button>
                       )}
-                      {esMio && (
+                      {puedeModificar && (
                         <button onClick={() => anularEvolucion(ev.id, ev.estado)} className={`p-2.5 bg-slate-100 rounded-xl transition-all ${ev.estado === 'anulada' ? 'text-green-500 hover:bg-green-50' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`}>
                           {ev.estado === 'anulada' ? <Plus size={16}/> : <EyeOff size={16}/>}
                         </button>
@@ -220,9 +298,9 @@ export default function EvolucionesPage() {
 
                   <div className={`bg-slate-50/50 p-6 rounded-3xl border ${ev.estado === 'anulada' ? 'border-slate-200' : 'border-blue-50/50'} relative z-10 text-left`}>
                     <p className="text-xs text-slate-600 font-medium leading-relaxed italic text-left whitespace-pre-wrap">
-                      {ev.descripcion_procedimiento}
+                      {ev.descripcion_limpia}
                     </p>
-                    {ev.observaciones && esMio && (
+                    {ev.observaciones && puedeModificar && (
                       <div className="mt-4 pt-4 border-t border-slate-100">
                         <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mb-1">Notas Internas:</span>
                         <p className="text-xs text-slate-500 italic">{ev.observaciones}</p>
@@ -234,10 +312,10 @@ export default function EvolucionesPage() {
                     <span className="text-[7px] font-black text-slate-300 uppercase tracking-[0.2em] block mb-1">Responsable Clínico</span>
                     <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
                         <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] text-white font-black uppercase">
-                          {prof?.nombre?.[0] || 'D'}
+                          {prof?.nombre?.[0] || creador?.split(' ').map((n: string) => n[0]).join('') || 'S'}
                         </div>
                         <span className="text-[9px] font-black text-slate-600 uppercase italic">
-                          Dr/a. {prof?.nombre} {prof?.apellido}
+                          {prof ? `Dr/a. ${prof.nombre} ${prof.apellido}` : creador || 'Sistema'}
                         </span>
                     </div>
                   </div>
