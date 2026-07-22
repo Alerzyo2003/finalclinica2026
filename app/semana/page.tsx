@@ -157,7 +157,7 @@ export default function DiarioGlobalPage() {
     
     // Obtenemos el perfil para saber si es ADMIN/RECEPCIONISTA
     const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', userId).maybeSingle();
-    const esAdmin = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
+    const esAdmin = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'ASISTENTE';
 
     let queryProfs = supabase.from('profesionales').select('id, nombre, apellido, user_id').eq('activo', true);
     
