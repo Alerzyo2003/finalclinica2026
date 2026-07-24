@@ -1,45 +1,51 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   X, Search, ChevronLeft, ChevronRight, Loader2, Clock,
-  CalendarDays, Timer, UserCheck, Trash2, Activity, ClipboardList,
-  CheckCircle2, Plus, Calendar as CalendarIcon, Briefcase,
-  AlertTriangle, Phone, Mail, MessageCircle, Ban, RefreshCcw, ChevronDown, CalendarClock,
-  LayoutGrid, List, Lock, FileText, Send, User, Users, Save
+  CalendarDays, Timer, Plus, Ban, RefreshCcw, User, CheckCircle2, 
+  Briefcase, ChevronRight as ChevronRightIcon, Stethoscope, Users, Save, CalendarClock
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
-// 🎨 PALETA DE ESTADOS MODERNA
 const ESTADOS_CITA: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-  programada: { label: 'No confirmado', bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
-  confirmado_tel: { label: 'Confirmado', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-400' },
-  en_espera: { label: 'En espera', bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-400' },
-  atendiendose: { label: 'En box', bg: 'bg-sky-50', text: 'text-sky-700', dot: 'bg-sky-400' },
-  atendido: { label: 'Atendido', bg: 'bg-teal-50', text: 'text-teal-700', dot: 'bg-teal-400' },
-  no_asiste: { label: 'No asistió', bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-400' },
-  cancelada: { label: 'Anulada', bg: 'bg-gray-100', text: 'text-gray-500', dot: 'bg-gray-400' },
-  reprogramada: { label: 'Reprogramada', bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-400' }
+  programada:     { label: 'No confirmado', bg: 'bg-amber-50',  text: 'text-amber-700', dot: 'bg-amber-400' },
+  confirmado_tel: { label: 'Confirmado',    bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-400' },
+  en_espera:      { label: 'En espera',     bg: 'bg-orange-50',  text: 'text-orange-700', dot: 'bg-orange-400' },
+  atendiendose:   { label: 'En box',        bg: 'bg-sky-50',     text: 'text-sky-700',    dot: 'bg-sky-400' },
+  atendido:       { label: 'Atendido',      bg: 'bg-teal-50',    text: 'text-teal-700',   dot: 'bg-teal-400' },
+  no_asiste:      { label: 'No asistió',    bg: 'bg-rose-50',    text: 'text-rose-700',   dot: 'bg-rose-400' },
+  cancelada:      { label: 'Anulada',       bg: 'bg-gray-100',   text: 'text-gray-500',   dot: 'bg-gray-400' },
+  reprogramada:   { label: 'Reprogramada',  bg: 'bg-violet-50',  text: 'text-violet-700', dot: 'bg-violet-400' }
 };
 
 const slotsHorarios = [
-  "08:00", "08:15", "08:30", "08:45", "09:00", "09:15", "09:30", "09:45",
-  "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45",
-  "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30", "13:45",
-  "14:00", "14:15", "14:30", "14:45", "15:00", "15:15", "15:30", "15:45",
-  "16:00", "16:15", "16:30", "16:45", "17:00", "17:15", "17:30", "17:45",
-  "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45",
-  "20:00", "20:15", "20:30", "20:45", "21:00"
+  "08:00","08:15","08:30","08:45","09:00","09:15","09:30","09:45",
+  "10:00","10:15","10:30","10:45","11:00","11:15","11:30","11:45",
+  "12:00","12:15","12:30","12:45","13:00","13:15","13:30","13:45",
+  "14:00","14:15","14:30","14:45","15:00","15:15","15:30","15:45",
+  "16:00","16:15","16:30","16:45","17:00","17:15","17:30","17:45",
+  "18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45",
+  "20:00","20:15","20:30","20:45","21:00"
 ];
 
-// Utilidades para calcular tiempos
+const getDiasLunesSabado = (d: Date) => {
+  const curr = new Date(d);
+  const day = curr.getDay();
+  const diff = curr.getDate() - day + (day === 0 ? -6 : 1);
+  return Array.from({ length: 6 }, (_, i) => new Date(curr.getFullYear(), curr.getMonth(), diff + i));
+};
+
+const getLocalDateISO = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+const getIniciales = (n: string, a: string) => `${n?.charAt(0) || ''}${a?.charAt(0) || ''}`.toUpperCase();
 const tToMins = (t: string) => {
   if (!t) return 0;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
-}
+};
 const minsToT = (m: number) => {
   const h = Math.floor(m / 60).toString().padStart(2, '0');
   const min = (m % 60).toString().padStart(2, '0');
@@ -51,69 +57,29 @@ const getMinsFromDateStr = (dtString: string) => {
   if (!timePart) return 0;
   return tToMins(timePart.substring(0,5));
 }
-const getLunes = (d: Date) => { const date = new Date(d); const day = date.getDay() || 7; date.setDate(date.getDate() - day + 1); date.setHours(0,0,0,0); return date; }
-
-interface NuevoPaciente {
-  nombre: string; apellido: string; rut: string; telefono: string; fecha_nacimiento: string; sexo: string;
+const getLunes = (d: Date) => {
+  const date = new Date(d);
+  const day = date.getDay() || 7;
+  date.setDate(date.getDate() - day + 1);
+  date.setHours(0,0,0,0);
+  return date;
 }
 
-const getDiasLunesSabado = (d: Date) => {
-  const curr = new Date(d);
-  const day = curr.getDay();
-  const diff = curr.getDate() - day + (day === 0 ? -6 : 1);
-  return Array.from({ length: 6 }, (_, i) => new Date(curr.getFullYear(), curr.getMonth(), diff + i));
-};
+export default function DoctorSemanaPage() {
+  const searchParams = useSearchParams();
+  const doctorId = searchParams.get('doctorId') || '';
 
-const getLocalDateISO = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-const getIniciales = (n: string, a: string) => `${n?.charAt(0) || ''}${a?.charAt(0) || ''}`.toUpperCase();
-
-export default function DiarioGlobalPage() {
-  const [semanaInicio, setSemanaInicio] = useState(() => getLunes(new Date()));
-  const [profesionales, setProfesionales] = useState<any[]>([]);
+  const [doctor, setDoctor] = useState<any>(null);
   const [citas, setCitas] = useState<any[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<any[]>([]);
   const [bloqueos, setBloqueos] = useState<any[]>([]);
+  const [semanaInicio, setSemanaInicio] = useState(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(now.getFullYear(), now.getMonth(), diff);
+  });
   const [cargando, setCargando] = useState(true);
-  const [filtroDoctor, setFiltroDoctor] = useState('TODOS');
-
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [paso, setPaso] = useState(1);
-  const [semanaAgendamiento, setSemanaAgendamiento] = useState(new Date());
-  const [filtro, setFiltro] = useState({ profesional_id: '', duracionDefault: 15 });
-  const [horasSeleccionadas, setHorasSeleccionadas] = useState<{ fecha: string; hora: string; duracion: number }[]>([]);
-  const [horariosConfigurados, setHorariosConfigurados] = useState<any[]>([]);
-  const [citasOcupadas, setCitasOcupadas] = useState<any[]>([]);
-  const [bloqueosSemana, setBloqueosSemana] = useState<any[]>([]);
-  const [citaEnReprogramacion, setCitaEnReprogramacion] = useState<any>(null);
-
-  const [modoNuevoPaciente, setModoNuevoPaciente] = useState(false);
-  const [nuevoPaciente, setNuevoPaciente] = useState<NuevoPaciente>({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' });
-  const [busquedaPac, setBusquedaPac] = useState('');
-  const [pacientesEncontrados, setPacientesEncontrados] = useState<any[]>([]);
-  const [pacienteSeleccionado, setPacienteSeleccionado] = useState<any>(null);
-  const [cargandoAccion, setCargandoAccion] = useState(false);
-  const [nuevoTratamientoNombre, setNuevoTratamientoNombre] = useState('');
-  const [tratamientosPaciente, setTratamientosPaciente] = useState<any[]>([]);
-  const [tratamientoSeleccionadoId, setTratamientoSeleccionadoId] = useState<string | null>(null);
-
-  // ESTADOS DEL MODAL DE CONFLICTOS
-  const [citasConflictivas, setCitasConflictivas] = useState<any[]>([])
-  const [mostrarModalConflictos, setMostrarModalConflictos] = useState(false)
-  const [citaEnEdicion, setCitaEnEdicion] = useState<string | null>(null)
-  const [semanaReagenda, setSemanaReagenda] = useState<Date>(getLunes(new Date()))
-  const [dispoSemana, setDispoSemana] = useState<any[]>([])
-  const [cargandoSlots, setCargandoSlots] = useState(false)
-  const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
-  const [guardandoConflicto, setGuardandoConflicto] = useState(false)
-
-  const [esOtroDocumento, setEsOtroDocumento] = useState(false);
-
-  const [mostrarTicket, setMostrarTicket] = useState(false);
-  const [citaConfirmadaData, setCitaConfirmadaData] = useState<any>(null);
-  const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null);
-  const duracionesDisponibles = [15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300];
-  const alertaRef = useRef(false); // Para evitar doble alerta en StrictMode
-
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Efecto para actualizar la hora cada minuto
@@ -123,6 +89,44 @@ export default function DiarioGlobalPage() {
     }, 60000); // Se actualiza cada 60 segundos
     return () => clearInterval(timer);
   }, []);
+
+  const esSemanaActual = getLunes(semanaInicio).getTime() === getLunes(new Date()).getTime();
+  // Modal
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [paso, setPaso] = useState(1);
+  const [filtro, setFiltro] = useState({ profesional_id: '', duracionDefault: 30 });
+  const [horasSeleccionadas, setHorasSeleccionadas] = useState<{ fecha: string; hora: string; duracion: number }[]>([]);
+  const [citasOcupadas, setCitasOcupadas] = useState<any[]>([]);
+  const [bloqueosSemana, setBloqueosSemana] = useState<any[]>([]);
+  const [citaEnReprogramacion, setCitaEnReprogramacion] = useState<any>(null);
+  const [horariosConfigurados, setHorariosConfigurados] = useState<any[]>([]);
+
+  const [modoNuevoPaciente, setModoNuevoPaciente] = useState(false);
+  const [nuevoPaciente, setNuevoPaciente] = useState({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' });
+  const [busquedaPac, setBusquedaPac] = useState('');
+  const [pacientesEncontrados, setPacientesEncontrados] = useState<any[]>([]);
+  const [pacienteSeleccionado, setPacienteSeleccionado] = useState<any>(null);
+  const [cargandoAccion, setCargandoAccion] = useState(false);
+  const [nuevoTratamientoNombre, setNuevoTratamientoNombre] = useState('');
+  const [tratamientosPaciente, setTratamientosPaciente] = useState<any[]>([]);
+  const [tratamientoSeleccionadoId, setTratamientoSeleccionadoId] = useState<string | null>(null);
+
+  const [mostrarTicket, setMostrarTicket] = useState(false);
+  const [citaConfirmadaData, setCitaConfirmadaData] = useState<any>(null);
+  const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null);
+  const duracionesDisponibles = [15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300];
+
+  const [esOtroDocumento, setEsOtroDocumento] = useState(false);
+
+  // ESTADOS DEL MODAL DE CONFLICTOS
+  const [citasConflictivas, setCitasConflictivas] = useState<any[]>([])
+  const [mostrarModalConflictos, setMostrarModalConflictos] = useState(false)
+  const [citaEnEdicionConflicto, setCitaEnEdicionConflicto] = useState<string | null>(null)
+  const [semanaReagenda, setSemanaReagenda] = useState<Date>(getLunes(new Date()))
+  const [dispoSemana, setDispoSemana] = useState<any[]>([])
+  const [cargandoSlots, setCargandoSlots] = useState(false)
+  const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
+  const [guardandoConflicto, setGuardandoConflicto] = useState(false)
 
   const slotsOcupadosSet = useMemo(() => {
     const ocupados = new Set();
@@ -139,164 +143,55 @@ export default function DiarioGlobalPage() {
     return ocupados;
   }, [horasSeleccionadas]);
 
-  useEffect(() => { fetchDatos(); }, [semanaInicio]);
+  useEffect(() => { fetchDatos(); }, [semanaInicio, doctorId]);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => { if (data.session) setUsuarioLogueado(data.session.user.id); }); }, []);
-  useEffect(() => { if (modalAbierto && filtro.profesional_id) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [semanaAgendamiento, modalAbierto, filtro.profesional_id]);
+  useEffect(() => { if (modalAbierto) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [modalAbierto, semanaInicio]);
 
   // Efecto para el modal de conflictos
   useEffect(() => {
-    if (mostrarModalConflictos && citaEnEdicion) { calcularDisponibilidadSemanalConflicto() }
-  }, [semanaReagenda, citaEnEdicion, reagendaProps.especialistaId, reagendaProps.duracion])
+    if (mostrarModalConflictos && citaEnEdicionConflicto) { calcularDisponibilidadSemanalConflicto() }
+  }, [semanaReagenda, citaEnEdicionConflicto, reagendaProps.especialistaId, reagendaProps.duracion])
 
   async function fetchDatos() {
-  setCargando(true);
-  const dias = getDiasLunesSabado(semanaInicio);
-  const inicioSemana = dias[0].toISOString().split('T')[0];
-  const finSemana = dias[5].toISOString().split('T')[0];
-  
-  try {
-    // Obtenemos la sesión del usuario actual
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
-    
-    // Obtenemos el perfil para saber si es ADMIN/RECEPCIONISTA
-    const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', userId).maybeSingle();
-    const esAdmin = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
+    if (!doctorId) return;
+    setCargando(true);
+    try {
+      const dias = getDiasLunesSabado(semanaInicio);
+      const inicioSemana = getLocalDateISO(dias[0]);
+      const finSemana = getLocalDateISO(dias[5]);
 
-    let queryProfs = supabase.from('profesionales').select('id, nombre, apellido, user_id').eq('activo', true);
-    
-    // Si NO es admin, filtramos solo su profesional asociado
-    if (!esAdmin) {
-      queryProfs = queryProfs.eq('user_id', userId);
-    }
+      const { data: prof } = await supabase.from('profesionales').select('*, especialidades(nombre)').eq('user_id', doctorId).single();
+      setDoctor(prof);
 
-    const { data: profs, error: profsError } = await queryProfs;
-    if (profsError) throw profsError;
-
-    const dentistas = profs || [];
-    const idsDentistas = dentistas.map(p => p.user_id);
-
-    if (dentistas.length > 0) {
       const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
-        supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo')
-          .in('profesional_id', idsDentistas)
-          .gte('inicio', `${inicioSemana}T00:00:00`)
-          .lte('inicio', `${finSemana}T23:59:59`)
-          .neq('estado', 'cancelada'),
-        supabase.from('disponibilidad_profesional').select('*').in('profesional_id', idsDentistas),
-        supabase.from('bloqueos_agenda').select('*').in('profesional_id', idsDentistas).gte('fecha', inicioSemana).lte('fecha', finSemana)
+        supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo').eq('profesional_id', doctorId).gte('inicio', `${inicioSemana}T00:00:00`).lte('inicio', `${finSemana}T23:59:59`).neq('estado', 'cancelada'),
+        supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', doctorId),
+        supabase.from('bloqueos_agenda').select('*').eq('profesional_id', doctorId).gte('fecha', inicioSemana).lte('fecha', finSemana)
       ]);
-      
       setCitas(citasRes.data || []);
       setDisponibilidades(dispoRes.data || []);
       setBloqueos(bloqueosRes.data || []);
-      setProfesionales(dentistas);
-      
-      // Si solo hay un profesional (el doctor logueado), fijamos el filtro automáticamente
-      if (!esAdmin && dentistas.length > 0) {
-        setFiltroDoctor(dentistas[0].user_id);
-      }
-    }
-  } catch (error) {
-    console.error(error);
-    toast.error("Error al cargar la agenda");
-  } finally {
-    setCargando(false);
+    } catch (e) { toast.error("Error al cargar agenda del doctor"); } finally { setCargando(false); }
   }
-}
- 
-  const profesionalesFiltrados = useMemo(() => {
-    const profsConActividad = profesionales.filter(p => {
-        const tieneDispo = disponibilidades.some(d => d.profesional_id === p.user_id);
-        const tieneCitas = citas.some(c => c.profesional_id === p.user_id);
-        return tieneDispo || tieneCitas;
-    });
-
-    if (filtroDoctor === 'TODOS') return profsConActividad;
-    const doctorSeleccionado = profsConActividad.find(p => p.user_id === filtroDoctor);
-    return doctorSeleccionado ? [doctorSeleccionado] : [];
-  }, [filtroDoctor, profesionales, disponibilidades, citas]);
-
-  // 🔥 VALIDADOR DE SLOT LIBRE (sin choque con citas ni bloqueos)
-  const esSlotLibre = (profId: string, fecha: string, hora: string, duracionMin: number) => {
-    const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
-    const slotEnd = slotStart + duracionMin * 60000;
-
-    const chocaCita = citas.some(c => {
-      if (c.profesional_id !== profId) return false;
-      const cInicio = new Date(c.inicio.replace(' ', 'T')).getTime();
-      const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
-      return slotStart < cFin && slotEnd > cInicio;
-    });
-    if (chocaCita) return false;
-
-    const chocaBloqueo = bloqueos.some(b => {
-      if (b.profesional_id !== profId || b.fecha !== fecha) return false;
-      if (!b.hora_inicio || !b.hora_fin) return true;
-      const bStart = new Date(`${fecha}T${b.hora_inicio}`).getTime();
-      const bEnd = new Date(`${fecha}T${b.hora_fin}`).getTime();
-      return slotStart < bEnd && slotEnd > bStart;
-    });
-    if (chocaBloqueo) return false;
-
-    return true;
-  };
-
-  const resetEstados = () => {
-    setPaso(1); setHorasSeleccionadas([]); setPacienteSeleccionado(null); setBusquedaPac('');
-    setCitasOcupadas([]); setCitaEnReprogramacion(null); setSemanaAgendamiento(new Date(semanaInicio));
-    setNuevoTratamientoNombre(''); setBloqueosSemana([]); setEsOtroDocumento(false);
-    setModoNuevoPaciente(false); setTratamientosPaciente([]); setTratamientoSeleccionadoId(null);
-    setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); setCargandoAccion(false);
-  };
-
-  const agendarDesdeSlot = (profesional_id: string, hora: string, fecha: string) => {
-    // Validar que el slot con duración por defecto (15 min) esté libre
-    if (!esSlotLibre(profesional_id, fecha, hora, 15)) {
-      toast.error("El horario seleccionado se solapa con otra cita o con un bloqueo.");
-      return;
-    }
-    resetEstados();
-    setFiltro(prev => ({ ...prev, profesional_id, duracionDefault: 15 }));
-    setHorasSeleccionadas([{ fecha, hora, duracion: 15 }]);
-    setSemanaAgendamiento(new Date(fecha + 'T12:00:00'));
-    setModalAbierto(true);
-    setPaso(1);
-  };
-
-  const iniciarReprogramacion = (cita: any) => {
-    resetEstados(); setCitaEnReprogramacion(cita);
-    setFiltro({ ...filtro, profesional_id: cita.profesional_id || '' });
-    const tInicio = new Date(cita.inicio.replace(' ', 'T')).getTime();
-    const tFin = new Date(cita.fin.replace(' ', 'T')).getTime();
-    const duracionMinutos = Math.round((tFin - tInicio) / 60000);
-    const duracionFinal = duracionesDisponibles.includes(duracionMinutos) ? duracionMinutos : 15;
-
-    setFiltro(prev => ({ ...prev, duracionDefault: duracionFinal }));
-    seleccionarPacienteExistente(cita.pacientes);
-    setNuevoTratamientoNombre(cita.motivo || '');
-    setSemanaAgendamiento(new Date(cita.inicio.replace(' ', 'T')));
-    setModalAbierto(true); setPaso(1);
-  };
 
   async function fetchCitasOcupadas() {
-    const dias = getDiasLunesSabado(semanaAgendamiento);
-    const inicioSemana = new Date(dias[0].getFullYear(), dias[0].getMonth(), dias[0].getDate(), 0, 0, 0).toISOString();
-    const finSemana = new Date(dias[5].getFullYear(), dias[5].getMonth(), dias[5].getDate(), 23, 59, 59).toISOString();
-    const { data } = await supabase.from('citas').select('id, inicio, fin').eq('profesional_id', filtro.profesional_id).gte('inicio', inicioSemana).lte('inicio', finSemana).neq('estado', 'cancelada');
-    setCitasOcupadas(citaEnReprogramacion ? (data || []).filter(c => c.id !== citaEnReprogramacion.id) : (data || []));
+    const dias = getDiasLunesSabado(new Date(semanaInicio));
+    const inicioSemana = getLocalDateISO(dias[0]);
+    const finSemana = getLocalDateISO(dias[5]);
+    const { data } = await supabase.from('citas').select('id, inicio, fin').eq('profesional_id', doctorId).gte('inicio', `${inicioSemana}T00:00:00`).lte('inicio', `${finSemana}T23:59:59`).neq('estado', 'cancelada');
+    setCitasOcupadas(citaEnReprogramacion ? (data || []).filter((c:any) => c.id !== citaEnReprogramacion.id) : (data || []));
   }
 
   async function fetchHorariosDoctor() {
-    const { data } = await supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', filtro.profesional_id);
+    const { data } = await supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', doctorId);
     setHorariosConfigurados(data || []);
   }
 
   async function fetchBloqueosSemana() {
-    const dias = getDiasLunesSabado(semanaAgendamiento);
+    const dias = getDiasLunesSabado(new Date(semanaInicio));
     const inicioSemana = dias[0].toLocaleDateString('sv-SE');
     const finSemana = dias[5].toLocaleDateString('sv-SE');
-    const { data } = await supabase.from('bloqueos_agenda').select('*').eq('profesional_id', filtro.profesional_id).gte('fecha', inicioSemana).lte('fecha', finSemana);
+    const { data } = await supabase.from('bloqueos_agenda').select('*').eq('profesional_id', doctorId).gte('fecha', inicioSemana).lte('fecha', finSemana);
     setBloqueosSemana(data || []);
   }
 
@@ -339,14 +234,9 @@ export default function DiarioGlobalPage() {
   };
 
   const handleSlotClick = (fecha: string, hora: string) => {
-    // Evitar doble alerta en StrictMode
-    if (alertaRef.current) return;
-    alertaRef.current = true;
-    setTimeout(() => { alertaRef.current = false; }, 100);
-
     const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === hora);
     if (sel) {
-      toggleHora(fecha, hora);
+      toggleHora(fecha, hora); // Permitir deselección
       return;
     }
 
@@ -356,10 +246,10 @@ export default function DiarioGlobalPage() {
     const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.fecha === fecha && (!b.hora_inicio || !b.hora_fin));
 
     if (diaCompletamenteBloqueado) return toast.error("Este día está completamente bloqueado.");
-    if (!laboral) return toast.error("Fuera del horario laboral del especialista.");
-    if (ocupado) return toast.error("Horario ocupado por otra cita o bloqueo.");
-    if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra selección actual.");
-
+if (!laboral) return toast.error(`Con la duración de ${filtro.duracionDefault} mins, el bloque excede el horario de salida del especialista.`);
+if (ocupado) return toast.error(`Con la duración de ${filtro.duracionDefault} mins, el bloque topa con otra cita o bloqueo existente.`);
+if (estaOcupadoPorSeleccion) return toast.warning("El horario choca con otra selección actual.");
+    
     toggleHora(fecha, hora);
   };
 
@@ -429,8 +319,19 @@ export default function DiarioGlobalPage() {
 
   const anularCitaConflicto = async (citaId: string) => {
     if(!confirm("¿Estás seguro de anular la cita de este paciente?")) return;
-    try {
-      await supabase.from('citas').update({ estado: 'cancelada' }).eq('id', citaId);
+    try {      
+      await supabase.from('citas').update({ estado: 'cancelada', modificado_por: usuarioLogueado }).eq('id', citaId);
+      
+      const citaAnulada = citasConflictivas.find(c => c.id === citaId);
+      if (citaAnulada) {
+          const nombrePaciente = `${citaAnulada.pacientes?.nombre || ''} ${citaAnulada.pacientes?.apellido || ''}`.trim();
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'UPDATE / ANULACIÓN CITA',
+              tabla: 'citas',
+              detalles: `Anuló la cita de ${nombrePaciente} del día ${citaAnulada.inicio.split('T')[0]} (desde Agenda Doctor).`
+          }]);
+      }
       toast.success("Cita anulada correctamente");
       setCitasConflictivas(prev => prev.filter(c => c.id !== citaId));
     } catch(e) { toast.error("No se pudo anular la cita"); }
@@ -452,8 +353,19 @@ export default function DiarioGlobalPage() {
         estado: 'reprogramada'
       }).eq('id', citaId);
 
+      const citaConflicto = citasConflictivas.find(c => c.id === citaId);
+      if (citaConflicto) {
+          const nombrePaciente = `${citaConflicto.pacientes?.nombre || ''} ${citaConflicto.pacientes?.apellido || ''}`.trim();
+          await supabase.from('auditoria_clinica').insert([{
+              usuario_id: usuarioLogueado,
+              accion: 'UPDATE / REPROGRAMACIÓN CONFLICTO',
+              tabla: 'citas',
+              detalles: `Reprogramó cita en conflicto de ${nombrePaciente} para el ${reagendaProps.fecha} a las ${reagendaProps.hora} (desde Agenda Doctor).`
+          }]);
+      }
+
       toast.success("Cita reagendada con éxito");
-      setCitaEnEdicion(null);
+      setCitaEnEdicionConflicto(null);
       setCitasConflictivas(prev => prev.filter(c => c.id !== citaId));
     } catch(e) {
       toast.error("Error al reagendar");
@@ -461,6 +373,23 @@ export default function DiarioGlobalPage() {
       setGuardandoConflicto(false);
     }
   }
+
+  const iniciarReprogramacion = (cita: any) => {
+    resetEstados(); 
+    setCitaEnReprogramacion(cita);
+    setFiltro({ ...filtro, profesional_id: cita.profesional_id || '' });
+    const tInicio = new Date(cita.inicio.replace(' ', 'T')).getTime();
+    const tFin = new Date(cita.fin.replace(' ', 'T')).getTime();
+    const duracionMinutos = Math.round((tFin - tInicio) / 60000);
+    const duracionFinal = duracionesDisponibles.includes(duracionMinutos) ? duracionMinutos : 30;
+    
+    setFiltro(prev => ({ ...prev, duracionDefault: duracionFinal }));
+    seleccionarPacienteExistente(cita.pacientes); 
+    setNuevoTratamientoNombre(cita.motivo || '');
+    setSemanaInicio(new Date(cita.inicio.replace(' ', 'T')));
+    setModalAbierto(true); 
+    setPaso(1);
+  };
 
   const buscarPacientes = async (term: string) => {
     if (!term.trim()) { setPacientesEncontrados([]); return; }
@@ -495,7 +424,6 @@ export default function DiarioGlobalPage() {
     try {
       let pId = pacienteSeleccionado?.id;
       let pNombreFull = pacienteSeleccionado ? `${pacienteSeleccionado.nombre} ${pacienteSeleccionado.apellido}` : "";
-      let pTelefono = pacienteSeleccionado?.telefono;
       if (modoNuevoPaciente && !citaEnReprogramacion) {
         let rutFinal: string | null = nuevoPaciente.rut.toUpperCase().trim();
         if (esOtroDocumento) {
@@ -513,7 +441,7 @@ export default function DiarioGlobalPage() {
             sexo: nuevoPaciente.sexo || null, 
             activo: true 
         }]).select().single();
-        if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; pTelefono = nuevoPaciente.telefono; }
+        if (pNew) { pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; }
       }
       const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
         const finDate = new Date(new Date(`${fechaStr}T${horaStr}:00`).getTime() + duracionMin * 60000);
@@ -523,221 +451,206 @@ export default function DiarioGlobalPage() {
       };
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0]; const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
-        await supabase.from('citas').update({ inicio, fin, profesional_id: filtro.profesional_id, estado: 'reprogramada', motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo, modificado_por: usuarioLogueado }).eq('id', citaEnReprogramacion.id);
+        await supabase.from('citas').update({ 
+          inicio, fin, 
+          profesional_id: filtro.profesional_id, 
+          estado: 'reprogramada', 
+          motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo, 
+          modificado_por: usuarioLogueado 
+        }).eq('id', citaEnReprogramacion.id);
+
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado,
+            accion: 'UPDATE / REPROGRAMACIÓN',
+            tabla: 'citas',
+            detalles: `Reprogramó la cita de ${pNombreFull} para el ${s.fecha} a las ${s.hora} (desde Agenda Doctor).`
+        }]);
+
       } else {
         const nuevasCitas = horasSeleccionadas.map(s => {
           const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
           return { paciente_id: pId, profesional_id: filtro.profesional_id, presupuesto_id: (tratamientoSeleccionadoId && tratamientoSeleccionadoId !== 'MANUAL') ? tratamientoSeleccionadoId : null, inicio, fin, estado: 'programada', motivo: nuevoTratamientoNombre.toUpperCase() || 'CONSULTA', creado_por: usuarioLogueado };
         });
         await supabase.from('citas').insert(nuevasCitas);
+        
+        const detallesCitas = nuevasCitas.map(c => `Cita para ${pNombreFull} el ${c.inicio.split('T')[0]} a las ${c.inicio.split('T')[1].substring(0,5)}`).join('; ');
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado,
+            accion: 'INSERT / CITA',
+            tabla: 'citas',
+            detalles: `Agendó: ${detallesCitas} (desde Agenda Doctor).`
+        }]);
       }
-      setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas, telefono: pTelefono });
-      setMostrarTicket(true); await fetchDatos();
+      setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas });
+      setMostrarTicket(true); 
+      await fetchDatos();
     } catch (e) { 
       toast.error("Error al guardar"); 
       setCargandoAccion(false);
     }
   };
 
-  const navegarSemana = (sentido: 'atras' | 'adelante') => {
-    const nueva = new Date(semanaInicio); nueva.setDate(nueva.getDate() + (sentido === 'adelante' ? 7 : -7)); setSemanaInicio(nueva);
+  const resetEstados = () => {
+    setPaso(1); setHorasSeleccionadas([]); setPacienteSeleccionado(null); setBusquedaPac('');
+    setCitasOcupadas([]); setCitaEnReprogramacion(null); setSemanaInicio(new Date(semanaInicio));
+    setNuevoTratamientoNombre(''); setBloqueosSemana([]); setEsOtroDocumento(false);
+    setModoNuevoPaciente(false); setTratamientosPaciente([]); setTratamientoSeleccionadoId(null);
+    setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); setCargandoAccion(false);
   };
 
-  return (
-    <main className="min-h-screen bg-[#F8FAFC] font-sans p-2 md:p-4 pb-24 text-left">
-      <div className="max-w-[1600px] mx-auto space-y-4">
+  const navegarSemana = (sentido: 'atras' | 'adelante') => {
+    const nueva = new Date(semanaInicio);
+    nueva.setDate(nueva.getDate() + (sentido === 'adelante' ? 7 : -7));
+    setSemanaInicio(nueva);
+  };
 
-        {/* HEADER MODERNO */}
-        <header className="bg-white p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col xl:flex-row justify-between items-center gap-6 text-left">
-          <div className="flex items-center gap-6 text-left w-full xl:w-auto">
+  if (!doctorId) return <div className="p-10 text-center">No se especificó doctor</div>;
+  if (cargando) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
+
+  const dias = getDiasLunesSabado(semanaInicio);
+
+  return (
+    <main className="min-h-screen bg-[#F8FAFC] font-sans p-2 md:p-4 pb-24">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        {/* HEADER */}
+        <header className="bg-white p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col xl:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-6">
             <div className="p-5 bg-blue-600 rounded-[2rem] text-white shadow-xl shadow-blue-200 shrink-0">
-              <LayoutGrid size={32} />
+              <Stethoscope size={32} />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none text-left">Diario Global</h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2 text-left">Disponibilidad de Especialistas</p>
+              <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none">Dr. {doctor?.apellido}</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">{doctor?.especialidades?.nombre || 'Medicina General'}</p>
             </div>
           </div>
-
           <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
-            {/* Control de Fechas */}
             <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-2 flex items-center gap-4 shadow-inner">
-              <button onClick={() => navegarSemana('atras')} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
-                <ChevronLeft size={20} />
-              </button>
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-widest min-w-[200px] text-center">
-                Semana del {semanaInicio.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+              <button onClick={() => navegarSemana('atras')} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500"><ChevronLeft size={20} /></button>
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-widest min-w-[240px] text-center">
+                {dias[0].toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })} - {dias[5].toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
               </h2>
-              <button onClick={() => navegarSemana('adelante')} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
-                <ChevronRight size={20} />
-              </button>
+              <button onClick={() => navegarSemana('adelante')} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500"><ChevronRight size={20} /></button>
             </div>
-
-            <div className="relative w-full md:w-72 group">
-              <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
-              <select
-                className="w-full pl-12 pr-10 py-4 bg-white border border-slate-200 rounded-[2rem] text-xs font-bold uppercase outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all appearance-none cursor-pointer"
-                value={filtroDoctor}
-                onChange={(e) => setFiltroDoctor(e.target.value)}
-              >
-                <option value="TODOS">Ver todos los especialistas</option>
-                {profesionales.map(p => (
-                  <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-            </div>
-
-            <Link href="/agenda" className="bg-slate-900 text-white px-8 py-4 rounded-[2rem] text-xs font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all flex items-center gap-2 shrink-0">
-              <CalendarDays size={18} /> Volver a Agenda
+            <Link href="/semana" className="bg-slate-900 text-white px-8 py-4 rounded-[2rem] text-xs font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all flex items-center gap-2 shrink-0">
+              <CalendarDays size={18} /> Volver a Diario Global
             </Link>
           </div>
         </header>
 
-        {/* GRILLA PRINCIPAL */}
-        {cargando ? (
-          <div className="flex flex-col justify-center items-center py-32 gap-4">
-            <Loader2 className="animate-spin text-blue-600" size={48} />
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando disponibilidad...</p>
-          </div>
-        ) : (
-          <div className="space-y-12">
-            {profesionalesFiltrados.length === 0 ? (
-              <div className="p-10 font-bold text-slate-400 text-center w-full bg-white rounded-[3rem] shadow-sm border border-slate-100">Ningún especialista programado para esta semana.</div>
-            ) : profesionalesFiltrados.map(p => {
-                const citasDelProfesional = citas.filter(c => c.profesional_id === p.user_id);
-                const disponibilidadesDelProfesional = disponibilidades.filter(d => d.profesional_id === p.user_id);
-                const bloqueosDelProfesional = bloqueos.filter(b => b.profesional_id === p.user_id);
-                const getHoraLimpias = (fechaString: string) => fechaString.includes('T') ? fechaString.split('T')[1].substring(0, 5) : fechaString.split(' ')[1].substring(0, 5);
+        {/* GRILLA SEMANAL */}
+        <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="flex overflow-x-auto custom-scrollbar">
+            {dias.map(dia => {
+              const fStr = getLocalDateISO(dia);
+              const citasDelDia = citas.filter(c => c.inicio.startsWith(fStr));
+              const getHoraLimpias = (fechaString: string) => fechaString.includes('T') ? fechaString.split('T')[1].substring(0,5) : fechaString.split(' ')[1].substring(0,5);
+              const esBloqueoDiaCompleto = bloqueos.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin));
 
-                return (
-                  <div key={p.user_id} className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-6 text-sm font-black text-slate-700 uppercase border-b border-slate-100 sticky top-0 bg-white/80 backdrop-blur-md z-20 h-[90px] flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center shadow-sm">
-                          <User size={18} className="text-blue-600" />
-                        </div>
-                        <div className="text-left">
-                          <Link href={`/semana/doctorsemana?doctorId=${p.user_id}`} className="leading-tight hover:text-blue-600 transition-colors underline decoration-blue-300">
-                            Dr. {p.apellido}
-                          </Link>
-                          <p className="text-[9px] text-slate-400 tracking-widest mt-0.5">{p.nombre}</p>
-                        </div>
-                      </div>
+              // 🔥 Cálculos para la línea de tiempo en esta columna
+              const esHoy = fStr === getLocalDateISO(currentTime);
+              const minutosDesdeLas8 = (currentTime.getHours() * 60 + currentTime.getMinutes()) - (8 * 60);
+              const topLineaTiempo = (minutosDesdeLas8 / 15) * 3; // h-12 es 3rem
+              const mostrarLineaTiempo = esSemanaActual && minutosDesdeLas8 >= 0 && minutosDesdeLas8 <= ((21 - 8) * 60);
+              return (
+                <div key={fStr} className="flex-shrink-0 border-r border-slate-100" style={{ width: '280px' }}>
+                  <div className="p-6 text-sm font-black text-slate-700 uppercase border-b border-slate-100 sticky top-0 bg-white z-10 h-[105px] flex items-center justify-between text-center">
+                    <div>
+                      <p>{dia.toLocaleDateString('es-CL', { weekday: 'long' })}</p>
+                      <p className="text-3xl font-black text-blue-600">{dia.getDate()}</p>
+                      <p className="text-[9px] text-slate-400 tracking-widest">{dia.toLocaleDateString('es-CL', { month: 'long' })}</p>
                     </div>
-                    <div className="flex overflow-x-auto custom-scrollbar">
-                      {getDiasLunesSabado(semanaInicio).map(dia => {
-                        const fechaISOActual = getLocalDateISO(dia);
-                        const diaSemanaActual = dia.getDay();
-                        const citasDelDia = citasDelProfesional.filter(c => c.inicio.startsWith(fechaISOActual));
-                        const esBloqueoDiaCompleto = bloqueosDelProfesional.some(b => b.fecha === fechaISOActual && (!b.hora_inicio || !b.hora_fin));
-                        
-                        const esHoy = getLocalDateISO(dia) === getLocalDateISO(currentTime);
-                        const minutosDesdeLas8 = (currentTime.getHours() * 60 + currentTime.getMinutes()) - (8 * 60);
-                        const topLineaTiempo = (minutosDesdeLas8 / 15) * 2.5; 
-                        const mostrarLineaTiempo = esHoy && minutosDesdeLas8 >= 0 && minutosDesdeLas8 <= ((21 - 8) * 60);
-
-                        return (
-                          <div key={fechaISOActual} className="flex-shrink-0 border-r border-slate-100" style={{ width: '180px' }}>
-                            <div className="p-4 text-center border-b border-slate-100 h-[70px] flex flex-col justify-center">
-                              <p className="text-xs font-black uppercase text-slate-500">{dia.toLocaleDateString('es-CL', { weekday: 'long' })}</p>
-                              <p className="text-xl font-black text-slate-800">{dia.getDate()}</p>
-                            </div>
-                            <div className="relative min-h-[600px]">
-                              {mostrarLineaTiempo && (
-                                <div className="absolute left-0 w-full z-20 flex items-center pointer-events-none" style={{ top: `${topLineaTiempo}rem`, transform: 'translateY(-50%)' }}>
-                                  <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] z-10 -ml-1"></div>
-                                  <div className="flex-1 border-b-2 border-red-500 border-dashed opacity-60"></div>
-                                </div>
-                              )}
-                              {slotsHorarios.map(hora => {
-                            const slotInicioMins = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
-                                const esBloqueado = bloqueosDelProfesional.some(b => {
-                                  if (b.fecha !== fechaISOActual) return false;
-                              if (!b.hora_inicio || !b.hora_fin) return true;
-                              const bIni = parseInt(b.hora_inicio.split(':')[0]) * 60 + parseInt(b.hora_inicio.split(':')[1]);
-                              const bFin = parseInt(b.hora_fin.split(':')[0]) * 60 + parseInt(b.hora_fin.split(':')[1]);
-                              return slotInicioMins >= bIni && slotInicioMins < bFin;
-                            });
-                                const esDisponible = disponibilidadesDelProfesional.some(d => {
-                              const esDia = (d.fecha_especifica && d.fecha_especifica === fechaISOActual) || (!d.fecha_especifica && d.dia_semana === diaSemanaActual);
-                              if (esDia) {
-                                const dIni = parseInt(d.hora_inicio.split(':')[0]) * 60 + parseInt(d.hora_inicio.split(':')[1]);
-                                const dFin = parseInt(d.hora_fin.split(':')[0]) * 60 + parseInt(d.hora_fin.split(':')[1]);
-                                return slotInicioMins >= dIni && slotInicioMins < dFin;
-                              }
-                              return false;
-                                }) && esSlotLibre(p.user_id, fechaISOActual, hora, 15);
-
-                            return (
-                              <div key={hora} className="flex items-stretch h-10 border-b border-slate-100 group">
-                                <div className="w-16 text-center p-2 text-[9px] font-black border-r border-slate-100 flex items-center justify-center bg-slate-50/50 text-slate-400 group-hover:bg-slate-100">
-                                  {hora}
-                                </div>
-                                <div className="flex-1 relative p-1">
-                                  {esBloqueoDiaCompleto || esBloqueado ? (
-                                    <div className="h-full w-full rounded-xl bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado">
-                                      <Ban size={16} className="text-rose-300" />
-                                    </div>
-                                  ) : esDisponible ? (
-                                    <div onClick={() => agendarDesdeSlot(p.user_id, hora, fechaISOActual)} className="h-full w-full rounded-xl bg-emerald-100 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" title="Agendar nueva cita">
-                                      <Plus size={16} className="text-emerald-500" />
-                                    </div>
-                                  ) : <div className="h-full w-full rounded-xl bg-slate-50/40" />}
-                                </div>
-                              </div>
-                            );
-                          })}
-                              {citasDelDia.map(cita => {
-                            const ini = getHoraLimpias(cita.inicio);
-                            const fin = getHoraLimpias(cita.fin);
-                            const iniMins = parseInt(ini.split(':')[0]) * 60 + parseInt(ini.split(':')[1]);
-                            const finMins = parseInt(fin.split(':')[0]) * 60 + parseInt(fin.split(':')[1]);
-                            const duracionMins = finMins - iniMins;
-                            const top = (iniMins - (8 * 60)) / 15 * 2.5; // 2.5rem (h-10) per 15 mins
-                            const height = duracionMins / 15 * 2.5;
-                            const estadoStyle = ESTADOS_CITA[cita.estado] || ESTADOS_CITA.programada;
-                            const iniciales = getIniciales(cita.pacientes?.nombre, cita.pacientes?.apellido);
-
-                            return (
-                              <motion.div
-                                key={cita.id}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                onClick={() => iniciarReprogramacion(cita)}
-                                className={`absolute z-10 w-[calc(100%-8px)] left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-lg p-2 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden`}
-                                style={{ top: `${top}rem`, height: `${height}rem` }}
-                                title={`${cita.pacientes?.nombre} ${cita.pacientes?.apellido} (${ini} - ${fin})`}
-                              >
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-1.5 overflow-hidden">
-                                    <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[10px] font-black text-slate-700 shadow-sm border border-slate-100/50 shrink-0">
-                                      {iniciales}
-                                    </div>
-                                    <span className="text-[11px] font-black text-slate-800 truncate uppercase">
-                                      {cita.pacientes?.nombre?.split(' ')[0]} {cita.pacientes?.apellido?.split(' ')[0]}
-                                    </span>
-                                  </div>
-                                  <span className="text-[9px] font-black tracking-widest text-slate-500 opacity-80">{ini}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <span className={`w-2 h-2 rounded-full ${estadoStyle.dot}`}></span>
-                                  <span className={`text-[9px] font-bold uppercase tracking-widest ${estadoStyle.text}`}>{estadoStyle.label}</span>
-                                </div>
-                              </motion.div>
-                            );
-                          })}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    {esBloqueoDiaCompleto && (
+                        <button onClick={() => handleRevisarPendientes(doctorId, fStr)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all self-start" title="Gestionar citas afectadas">
+                          <Users size={16} />
+                        </button>
+                    )}
                   </div>
-                );
-              })}
-          </div>
-        )}
+                  <div className="relative">
+                    
+                    {/* 🔥 Renderizado de la línea de tiempo */}
+                    {mostrarLineaTiempo && (
+                      <div 
+                        className="absolute left-0 w-full z-20 flex items-center pointer-events-none"
+                        style={{ 
+                          top: `${topLineaTiempo}rem`, 
+                          transform: 'translateY(-50%)' 
+                        }}
+                      >
+                        <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] z-10 -ml-1"></div>
+                        <div className="flex-1 border-b-2 border-red-500 border-dashed opacity-60"></div>
+                      </div>
+                    )}
 
+                    {slotsHorarios.map(hora => {
+                      const slotInicioMins = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
+                      const esBloqueado = bloqueos.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin || (tToMins(b.hora_inicio) <= slotInicioMins && slotInicioMins < tToMins(b.hora_fin))));
+                      const esDisponible = disponibilidades.some(d => {
+                        const diaSem = new Date(fStr + 'T00:00:00').getDay();
+                        const esDia = (d.fecha_especifica && d.fecha_especifica === fStr) || (!d.fecha_especifica && d.dia_semana === diaSem);
+                        if (esDia) {
+                          const dIni = tToMins(d.hora_inicio);
+                          const dFin = tToMins(d.hora_fin);
+                          return slotInicioMins >= dIni && slotInicioMins < dFin;
+                        }
+                        return false;
+                      });
+
+                      return (
+                        <div key={hora} className="flex items-stretch h-12 border-b border-slate-100 group">
+                          <div className="w-20 text-center p-2 text-[10px] font-black border-r border-slate-100 flex items-center justify-center bg-slate-50/50 text-slate-400 group-hover:bg-slate-100">
+                            {hora}
+                          </div>
+                          <div className="flex-1 relative p-1">
+                            {esBloqueado ? (
+                              <div className="h-full w-full rounded-xl bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado"><Ban size={16} className="text-rose-300" /></div>
+                            ) : esDisponible ? (
+                              <div onClick={() => { resetEstados(); setFiltro({ ...filtro, profesional_id: doctorId }); setHorasSeleccionadas([{ fecha: fStr, hora, duracion: 30 }]); setModalAbierto(true); }} className="h-full w-full rounded-xl bg-emerald-100 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" title="Agendar nueva cita"><Plus size={16} className="text-emerald-500" /></div>
+                            ) : <div className="h-full w-full rounded-xl bg-slate-50/40" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {citasDelDia.map(cita => {
+                      const ini = getHoraLimpias(cita.inicio);
+                      const fin = getHoraLimpias(cita.fin);
+                      const iniMins = tToMins(ini);
+                      const finMins = tToMins(fin);
+                      const duracionMins = finMins - iniMins;
+                      const top = (iniMins - (8 * 60)) / 15 * 3;
+                      const height = duracionMins / 15 * 3;
+                      const estadoStyle = ESTADOS_CITA[cita.estado] || ESTADOS_CITA.programada;
+                      const iniciales = getIniciales(cita.pacientes?.nombre, cita.pacientes?.apellido);
+
+                      return (
+                        <motion.div
+                          key={cita.id}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          onClick={() => iniciarReprogramacion(cita)}
+                          className={`absolute z-10 w-[calc(100%-8px)] left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-2xl p-3 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden`}
+                          style={{ top: `${top}rem`, height: `${height}rem` }}
+                          title={`${cita.pacientes?.nombre} ${cita.pacientes?.apellido} (${ini} - ${fin})`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-xs font-black text-slate-700 shadow-sm border border-slate-100/50 shrink-0">{iniciales}</div>
+                              <span className="text-xs font-black text-slate-800 truncate uppercase">{cita.pacientes?.nombre?.split(' ')[0]} {cita.pacientes?.apellido?.split(' ')[0]}</span>
+                            </div>
+                            <span className="text-[10px] font-black tracking-widest text-slate-500 opacity-80">{ini}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className={`w-2 h-2 rounded-full ${estadoStyle.dot}`}></span>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest ${estadoStyle.text}`}>{estadoStyle.label}</span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* MODAL DE CONFLICTOS DE AGENDA Y REAGENDAMIENTO SEMANAL */}
@@ -777,7 +690,7 @@ export default function DiarioGlobalPage() {
                     {citasConflictivas.map((cita) => {
                       let horaFomateada = "Sin hora";
                       try { horaFomateada = new Date(cita.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); } catch (e) {}
-                      const isEditing = citaEnEdicion === cita.id;
+                      const isEditing = citaEnEdicionConflicto === cita.id;
                       let durationStr = "45 min";
                       try { const dMins = Math.round((new Date(cita.fin).getTime() - new Date(cita.inicio).getTime()) / 60000); if (dMins > 0) durationStr = `${dMins} min`; } catch (e) {}
 
@@ -803,8 +716,8 @@ export default function DiarioGlobalPage() {
                                 <button onClick={() => {
                                   const dInicio = new Date(cita.inicio); const dFin = new Date(cita.fin);
                                   const calcMins = Math.round((dFin.getTime() - dInicio.getTime()) / 60000);
-                                  setReagendaProps(prev => ({...prev, duracion: calcMins > 0 ? calcMins : 45, especialistaId: reagendaProps.especialistaId, fecha: '', hora: ''}));
-                                  setCitaEnEdicion(cita.id);
+                                  setReagendaProps(prev => ({...prev, duracion: calcMins > 0 ? calcMins : 45, especialistaId: doctorId, fecha: '', hora: ''}));
+                                  setCitaEnEdicionConflicto(cita.id);
                                 }} className="px-4 py-2 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white rounded-xl transition-all flex items-center gap-2" title="Reagendar">
                                   <CalendarClock size={14} /> Reagendar
                                 </button>
@@ -824,7 +737,7 @@ export default function DiarioGlobalPage() {
                                       <div className="space-y-2 flex-1">
                                         <label className="text-[9px] font-black text-blue-400 uppercase ml-2 flex items-center gap-1"><User size={12}/> Especialista</label>
                                         <select className="w-full p-4 bg-white border border-blue-200 rounded-xl font-bold text-xs outline-none text-slate-700" value={reagendaProps.especialistaId} onChange={(e) => setReagendaProps(prev => ({...prev, especialistaId: e.target.value}))}>
-                                          {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                                          <option value={doctorId}>Dr. {doctor.nombre} {doctor.apellido}</option>
                                         </select>
                                       </div>
                                     </div>
@@ -874,7 +787,7 @@ export default function DiarioGlobalPage() {
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-3 w-full md:w-auto">
-                                        <button onClick={() => setCitaEnEdicion(null)} className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase hover:text-slate-700 transition-all">Cancelar</button>
+                                        <button onClick={() => setCitaEnEdicionConflicto(null)} className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase hover:text-slate-700 transition-all">Cancelar</button>
                                         <button onClick={() => reagendarCitaConflicto(cita.id)} disabled={guardandoConflicto || !reagendaProps.hora} className={`flex-1 md:flex-none px-8 py-3 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-md flex items-center justify-center gap-2 transition-all ${reagendaProps.hora ? 'bg-emerald-500 hover:bg-emerald-600 active:scale-95' : 'bg-slate-300 cursor-not-allowed'}`}>
                                           {guardandoConflicto ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>} Confirmar
                                         </button>
@@ -902,7 +815,7 @@ export default function DiarioGlobalPage() {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE AGENDAMIENTO / REAGENDAMIENTO */}
+ {/* MODAL DE AGENDAMIENTO / REAGENDAMIENTO */}
       <AnimatePresence>
         {modalAbierto && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -912,6 +825,7 @@ export default function DiarioGlobalPage() {
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="bg-white w-full max-w-7xl h-[85vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden text-left"
             >
+              {/* Encabezado del modal */}
               <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white">
                 <div className="flex items-center gap-5">
                   <div className={`p-4 rounded-2xl shadow-sm ${citaEnReprogramacion ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -924,11 +838,15 @@ export default function DiarioGlobalPage() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Paso {paso} de 2</p>
                   </div>
                 </div>
-                <button onClick={() => { setModalAbierto(false); setCitaEnReprogramacion(null); }} className="p-3 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
+                <button
+                  onClick={() => { setModalAbierto(false); setCitaEnReprogramacion(null); }}
+                  className="p-3 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
+                >
                   <X size={24} />
                 </button>
               </div>
 
+              {/* Contenido dinámico */}
               <div className="flex flex-1 overflow-hidden">
                 {paso === 1 ? (
                   <>
@@ -942,28 +860,24 @@ export default function DiarioGlobalPage() {
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Especialista</label>
                           <select
                             className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:ring-4 focus:ring-blue-500/10 cursor-pointer shadow-sm transition-all"
-                            value={filtro.profesional_id || ""}
+                            value={doctorId}
                             onChange={(e) => { setFiltro({ ...filtro, profesional_id: e.target.value }); setHorasSeleccionadas([]); }}
                           >
-                            <option value="">Seleccionar...</option>
-                            {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                            <option value={doctorId}>Dr. {doctor.nombre} {doctor.apellido}</option>
                           </select>
                         </div>
                         <div className="space-y-3">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Duración base</label>
                           <div className="grid grid-cols-3 gap-3">
-                            {duracionesDisponibles.slice(0, 6).map(m => (
+                            {duracionesDisponibles.slice(0,6).map(m => (
                               <button
                                 key={m}
                                 onClick={() => {
                                   setFiltro({ ...filtro, duracionDefault: m });
-                                  setHorasSeleccionadas(prev => {
-                                    const validados = prev.filter(s => esHorarioLaboral(s.fecha, s.hora, m) && !esCitaOcupada(s.fecha, s.hora, m));
-                                    if (validados.length < prev.length) {
-                                      toast.error(`Algunas horas se deseleccionaron porque la nueva duración de ${m} mins topa con otra cita o fin de turno.`);
-                                    }
-                                    return validados.map(v => ({ ...v, duracion: m }));
-                                  });
+                                  setHorasSeleccionadas(prev =>
+                                    prev.filter(s => esHorarioLaboral(s.fecha, s.hora, m) && !esCitaOcupada(s.fecha, s.hora, m))
+                                      .map(v => ({ ...v, duracion: m }))
+                                  );
                                 }}
                                 className={`py-4 rounded-2xl text-[10px] font-black uppercase transition-all border ${filtro.duracionDefault === m ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 shadow-sm hover:scale-105'}`}
                               >
@@ -1039,13 +953,12 @@ export default function DiarioGlobalPage() {
                               value={s.duracion}
                               onChange={(e) => {
                                 const newDur = Number(e.target.value);
-                                if (!esHorarioLaboral(s.fecha, s.hora, newDur)) return toast.error(`La duración de ${newDur} mins excede el horario de salida del especialista.`);
-                                if (esCitaOcupada(s.fecha, s.hora, newDur)) return toast.error(`Al aumentar a ${newDur} mins, topa con otra cita ya agendada o bloqueada.`);
+                                if (!esHorarioLaboral(s.fecha, s.hora, newDur) || esCitaOcupada(s.fecha, s.hora, newDur)) return;
                                 const choca = horasSeleccionadas.some((otra, i) => i !== idx &&
                                   new Date(`${otra.fecha}T${otra.hora}:00`).getTime() < new Date(`${s.fecha}T${s.hora}:00`).getTime() + newDur * 60000 &&
                                   new Date(`${otra.fecha}T${otra.hora}:00`).getTime() + otra.duracion * 60000 > new Date(`${s.fecha}T${s.hora}:00`).getTime()
                                 );
-                                if (choca) return toast.error("Esta duración choca con otra cita seleccionada en tu lista actual.");
+                                if (choca) return toast.error("Choca con otra cita seleccionada");
                                 const nuevas = [...horasSeleccionadas]; nuevas[idx].duracion = newDur; setHorasSeleccionadas(nuevas);
                               }}
                             >
@@ -1079,7 +992,7 @@ export default function DiarioGlobalPage() {
                                 <div className="md:col-span-2 flex items-center gap-2 mt-2">
                                     <input 
                                         type="checkbox" 
-                                        id="otro_documento_semana" 
+                                        id="otro_documento_doctor" 
                                         className="w-4 h-4 accent-blue-600"
                                         checked={esOtroDocumento}
                                         onChange={(e) => {
@@ -1087,7 +1000,7 @@ export default function DiarioGlobalPage() {
                                             setNuevoPaciente(prev => ({...prev, rut: ''}));
                                         }}
                                     />
-                                    <label htmlFor="otro_documento_semana" className="text-xs font-bold text-slate-600 cursor-pointer">
+                                    <label htmlFor="otro_documento_doctor" className="text-xs font-bold text-slate-600 cursor-pointer">
                                         Paciente extranjero / Usar otro documento
                                     </label>
                                 </div>
@@ -1134,7 +1047,7 @@ export default function DiarioGlobalPage() {
                                   <input
                                     placeholder="Buscar por Nombre o RUT..."
                                     className="w-full pl-12 pr-5 py-4 bg-white border border-slate-200 rounded-[2rem] text-xs font-bold uppercase outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all placeholder:normal-case"
-                                    value={busquedaPac}
+                                    value={busquedaPac || ''}
                                     onChange={e => { setBusquedaPac(e.target.value); buscarPacientes(e.target.value); }}
                                   />
                                 </div>
@@ -1148,7 +1061,7 @@ export default function DiarioGlobalPage() {
                                       <p className="font-black text-sm uppercase text-slate-800 tracking-tighter">{p.nombre} {p.apellido}</p>
                                       <p className="text-[10px] font-bold text-slate-400 tracking-widest mt-1">{p.rut}</p>
                                     </div>
-                                    <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                    <ChevronRightIcon size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                                   </button>
                                 ))}
                                 {pacienteSeleccionado && pacientesEncontrados.length === 0 && (
@@ -1164,7 +1077,7 @@ export default function DiarioGlobalPage() {
                       </div>
                       {(pacienteSeleccionado || modoNuevoPaciente) && (
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none"><Briefcase size={80} /></div>
+                          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none"><Briefcase size={80}/></div>
                           <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-[0.2em] relative z-10">Motivo / Tratamiento</h4>
                           {!modoNuevoPaciente && tratamientosPaciente.length > 0 ? (
                             <div className="space-y-4 relative z-10">
@@ -1184,7 +1097,7 @@ export default function DiarioGlobalPage() {
                                 <input
                                   placeholder="Especifique motivo..."
                                   className="w-full p-4 bg-white/10 rounded-2xl text-xs font-bold uppercase outline-none border border-white/5 focus:border-blue-400 text-white mt-2 transition-all placeholder:normal-case placeholder:text-slate-500"
-                                  value={nuevoTratamientoNombre}
+                                  value={nuevoTratamientoNombre || ''}
                                   onChange={(e) => setNuevoTratamientoNombre(e.target.value)}
                                 />
                               )}
@@ -1193,7 +1106,7 @@ export default function DiarioGlobalPage() {
                             <input
                               placeholder="Ej: Evaluación General, Urgencia..."
                               className="w-full p-4 bg-white/10 rounded-2xl text-xs font-bold uppercase outline-none border border-white/5 focus:border-blue-400 text-white relative z-10 transition-all placeholder:normal-case placeholder:text-slate-500"
-                              value={nuevoTratamientoNombre}
+                              value={nuevoTratamientoNombre || ''}
                               onChange={(e) => setNuevoTratamientoNombre(e.target.value)}
                             />
                           )}
@@ -1208,7 +1121,7 @@ export default function DiarioGlobalPage() {
               <div className="px-10 py-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-700 font-black border border-slate-200 shadow-sm text-lg">{horasSeleccionadas.length}</div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Turnos<br />Seleccionados</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Turnos<br/>Seleccionados</p>
                 </div>
                 <div className="flex gap-4 items-center w-full sm:w-auto">
                   <button
@@ -1254,34 +1167,21 @@ export default function DiarioGlobalPage() {
                     <p className="font-black text-base text-slate-800 uppercase mt-1 leading-none">{citaConfirmadaData?.citas[0]?.fecha} • {citaConfirmadaData?.citas[0]?.hora} hrs</p>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => {
-                      if (!citaConfirmadaData) return;
-                      const { paciente, citas, telefono } = citaConfirmadaData;
-                      if (!telefono) {
-                          toast.error("El paciente no tiene un número de teléfono registrado.");
-                          return;
-                      }
-                      const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
-                      const hora = citas[0].hora;
-                      const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
-                      const numLimpio = telefono.replace(/\D/g, '');
-                      const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
-                      window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
-                      setMostrarTicket(false); setModalAbierto(false); resetEstados(); fetchDatos();
-                    }}
-                    className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
-                  >
-                    <MessageCircle size={14}/> Finalizar y Enviar WhatsApp
-                  </button>
-                  <button onClick={() => { setMostrarTicket(false); setModalAbierto(false); resetEstados(); fetchDatos(); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Finalizar</button>
-                </div>
+                <button
+                  onClick={() => { setMostrarTicket(false); setModalAbierto(false); resetEstados(); fetchDatos(); }}
+                  className="w-full py-5 bg-slate-900 hover:bg-black rounded-3xl text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all active:scale-95"
+                >
+                  Finalizar
+                </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      `}</style>
     </main>
   );
 }
