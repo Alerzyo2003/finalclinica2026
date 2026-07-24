@@ -189,7 +189,7 @@ export default function NuevoPaciente() {
                       checked={esOtroDocumento}
                       onChange={(e) => {
                           setEsOtroDocumento(e.target.checked);
-                          setForm(prev => ({...prev, rut: ''}));
+                          setForm((prev: any) => ({...prev, rut: ''}));
                       }}
                   />
                   <label htmlFor="otro_documento_main" className="text-[10px] font-black text-slate-600 cursor-pointer uppercase tracking-widest">
