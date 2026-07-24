@@ -15,6 +15,7 @@ export default function NuevoPaciente() {
   const [cargando, setCargando] = useState(false)
   const [exito, setExito] = useState(false)
   const [listaConvenios, setListaConvenios] = useState<string[]>([])
+  const [esOtroDocumento, setEsOtroDocumento] = useState(false)
   
   // Estado inicial robusto
   const [form, setForm] = useState<any>({
@@ -58,41 +59,48 @@ export default function NuevoPaciente() {
     
     if (cargando) return
     
-    if (!form.nombre || !form.apellido || !form.rut || !form.fecha_nacimiento) {
+    if (!form.nombre || !form.apellido || (!form.rut && !esOtroDocumento) || !form.fecha_nacimiento) {
         toast.error("Faltan campos obligatorios", {
-            description: "Por favor completa Nombre, Apellido, RUT y Fecha de Nacimiento."
+            description: "Por favor completa Nombre, Apellido, Documento y Fecha de Nacimiento."
         })
         return
     }
 
     setCargando(true)
 
-    // Normalización de RUT: Solo números y K
-    const rutLimpio = form.rut.replace(/[^0-9kK]/g, '').toUpperCase().trim()
+    let rutFinal = form.rut.toUpperCase().trim();
+    if (esOtroDocumento) {
+        if (!rutFinal) rutFinal = `OTRO-DOC-${Date.now()}`;
+    } else {
+        // Es un RUT, se limpia pero se mantiene el guión.
+        rutFinal = rutFinal.replace(/[^0-9kK-]/g, '');
+    }
 
     try {
-      // 1. VERIFICACIÓN MANUAL DE DUPLICADOS Y ESTADO
-      const { data: existente } = await supabase
-        .from('pacientes')
-        .select('nombre, apellido, activo, motivo_deshabilitado')
-        .eq('rut', rutLimpio)
-        .maybeSingle()
+      // 1. VERIFICACIÓN MANUAL DE DUPLICADOS (solo si se ingresó un documento)
+      if (rutFinal) {
+        const { data: existente } = await supabase
+          .from('pacientes')
+          .select('nombre, apellido, activo, motivo_deshabilitado')
+          .eq('rut', rutFinal)
+          .maybeSingle()
 
-      if (existente) {
-        if (existente.activo === false) {
-            toast.warning("PACIENTE RESTRINGIDO", {
-                description: `El RUT pertenece a ${existente.nombre} ${existente.apellido}, quien se encuentra deshabilitado. Motivo: ${existente.motivo_deshabilitado || 'No especificado'}.`,
-                duration: 8000,
-                icon: <AlertTriangle className="text-amber-500" />
-            })
-        } else {
-            toast.error(`El RUT ${form.rut} ya existe`, {
-                description: `Pertenece a ${existente.nombre} ${existente.apellido}`,
-                duration: 5000
-            })
+        if (existente) {
+          if (existente.activo === false) {
+              toast.warning("PACIENTE RESTRINGIDO", {
+                  description: `El documento pertenece a ${existente.nombre} ${existente.apellido}, quien se encuentra deshabilitado. Motivo: ${existente.motivo_deshabilitado || 'No especificado'}.`,
+                  duration: 8000,
+                  icon: <AlertTriangle className="text-amber-500" />
+              })
+          } else {
+              toast.error(`El documento ${form.rut} ya existe`, {
+                  description: `Pertenece a ${existente.nombre} ${existente.apellido}`,
+                  duration: 5000
+              })
+          }
+          setCargando(false)
+          return
         }
-        setCargando(false)
-        return
       }
 
       // 2. INSERCIÓN DE DATOS
@@ -100,7 +108,7 @@ export default function NuevoPaciente() {
         .from('pacientes')
         .insert([{ 
           ...form, 
-          rut: rutLimpio,
+          rut: rutFinal,
           nombre: form.nombre.toUpperCase().trim(),
           apellido: form.apellido.toUpperCase().trim(),
           activo: true 
@@ -172,7 +180,30 @@ export default function NuevoPaciente() {
             </div>
             <InputGroupSimple label="Nombre *" value={form.nombre} onChange={(v:any) => setForm({...form, nombre: v})} required />
             <InputGroupSimple label="Apellidos *" value={form.apellido} onChange={(v:any) => setForm({...form, apellido: v})} required />
-            <InputGroupSimple label="RUT *" placeholder="12.345.678-K" value={form.rut} onChange={(v:any) => setForm({...form, rut: v})} required />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 ml-4">
+                  <input 
+                      type="checkbox" 
+                      id="otro_documento_main" 
+                      className="w-4 h-4 accent-blue-600"
+                      checked={esOtroDocumento}
+                      onChange={(e) => {
+                          setEsOtroDocumento(e.target.checked);
+                          setForm(prev => ({...prev, rut: ''}));
+                      }}
+                  />
+                  <label htmlFor="otro_documento_main" className="text-[10px] font-black text-slate-600 cursor-pointer uppercase tracking-widest">
+                      Otro Documento
+                  </label>
+              </div>
+              <input 
+                required={!esOtroDocumento}
+                placeholder={esOtroDocumento ? "Pasaporte, DNI, etc. (Opcional)" : "12.345.678-K"}
+                className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none focus:ring-2 ring-blue-500/10 transition-all shadow-inner text-slate-900 border-none"
+                value={form.rut || ''} 
+                onChange={(e) => setForm({...form, rut: e.target.value})}
+              />
+           </div>
             <InputGroupSimple label="Fecha Nacimiento *" type="date" value={form.fecha_nacimiento} onChange={(v:any) => setForm({...form, fecha_nacimiento: v})} required />
           </div>
         </div>
