@@ -1859,11 +1859,10 @@ export default function AgendaPage() {
                 {paso === 1 ? (
                   <>
                     <aside className="hidden md:block md:w-[300px] border-r border-slate-200 p-8 bg-slate-50 space-y-6 overflow-y-auto text-left text-slate-900 custom-scrollbar">
-                      <div className={`p-6 rounded-2xl shadow-sm border text-left ${citaEnReprogramacion ? 'bg-white border-purple-200' : 'bg-white border-blue-200'}`}><p className="text-[10px] font-black uppercase mb-1 text-slate-400 tracking-widest text-left">Seleccionado</p><p className={`text-4xl font-black leading-none text-left ${citaEnReprogramacion ? 'text-purple-600' : 'text-blue-600'}`}>{horasSeleccionadas.length}</p>
-                        {horasSeleccionadas.length > 0 && paso === 2 && (
-                          <button onClick={() => setPaso(1)} className="mt-2 text-xs font-bold text-blue-600 underline">Volver a seleccionar</button>
-                        )}
-                      </div>
+  <div className={`p-6 rounded-2xl shadow-sm border text-left ${citaEnReprogramacion ? 'bg-white border-purple-200' : 'bg-white border-blue-200'}`}>
+    <p className="text-[10px] font-black uppercase mb-1 text-slate-400 tracking-widest text-left">Seleccionado</p>
+    <p className={`text-4xl font-black leading-none text-left ${citaEnReprogramacion ? 'text-purple-600' : 'text-blue-600'}`}>{horasSeleccionadas.length}</p>
+  </div>
                       <div className="space-y-6 text-left">
                         <div className="space-y-2 text-left text-slate-900">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Especialista</label>
