@@ -201,7 +201,7 @@ function PlantillasContenido() {
         // FIX: Si las secciones del pack están vacías pero los items sí tienen secciones,
         // las reconstruimos para asegurar que se muestren.
         if ((pack.secciones_presupuesto || []).length === 0 && items.length > 0) {
-          const seccionesDeItems = Array.from(new Set(items.map(it => it.seccion).filter(Boolean as (value: string | null) => value is string)));
+          const seccionesDeItems = Array.from(new Set(items.map(it => it?.seccion).filter((value): value is string => Boolean(value))));
           setSeccionesPack(seccionesDeItems);
           console.warn("ADVERTENCIA: El pack no tenía una lista de secciones guardada. Se reconstruyó a partir de los items:", seccionesDeItems);
         }
