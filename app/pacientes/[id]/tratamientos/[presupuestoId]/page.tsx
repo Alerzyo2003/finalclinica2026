@@ -303,7 +303,7 @@ export default function DetalleTratamientoPage() {
                 } catch (e) { /* Ignorar si no es un JSON válido */ }
             }
             if (seccionesGuardadas.length > 0) {
-                setListaSecciones(prev => Array.from(new Set([...prev, ...seccionesGuardadas])).sort());
+                setListaSecciones(prev => Array.from(new Set([...prev, ...seccionesGuardadas])));
             }
         }
 
@@ -354,7 +354,7 @@ export default function DetalleTratamientoPage() {
           }
       }
 
-      setListaSecciones(prev => Array.from(new Set([...prev, ...Array.from(new Set(itemsMapeados.map((i:any) => i.seccion_nombre)))])).sort((a:any, b:any) => a.localeCompare(b)));
+      setListaSecciones(prev => Array.from(new Set([...prev, ...Array.from(new Set(itemsMapeados.map((i:any) => i.seccion_nombre)))])));
       setAcciones(itemsMapeados);
       setDebug(esNuevo ? "Modo Local" : `Dentalink #${targetID}`);
 
@@ -512,6 +512,7 @@ export default function DetalleTratamientoPage() {
         acc[cat].push(curr);
         return acc;
       }, {});
+      
       Object.keys(agrupado).forEach(key => agrupado[key].sort((a:any, b:any) => a.display_nombre.localeCompare(b.display_nombre)));
       setSeccionesPrests(agrupado);
 
@@ -531,12 +532,15 @@ export default function DetalleTratamientoPage() {
       }));
     }
 
-    const { data: packsData } = await supabase.from('plantillas').select('*, plantilla_items(cantidad, prestacion_id)');
+    // 🔥 CARGA DE PLANTILLAS CON SECCIONES 🔥
+    const { data: packsData } = await supabase.from('plantillas').select('*, plantilla_items(cantidad, prestacion_id, seccion)');
+    
     if (packsData && allPrests.length > 0) {
       const packsMapeados = packsData.map(pack => ({
          ...pack,
          items: pack.plantilla_items.map((pi: any) => ({
              cantidad: pi.cantidad,
+             seccion: pi.seccion, 
              prestacion: allPrests.find(p => p.id === pi.prestacion_id)
          })).filter((pi: any) => pi.prestacion) 
       }));
@@ -553,7 +557,7 @@ export default function DetalleTratamientoPage() {
     if(!nuevaSeccionNombre.trim()) return toast.error("El nombre de la sección no puede estar vacío");
     const nombre = nuevaSeccionNombre.trim();
     
-    const nuevaLista = Array.from(new Set([...listaSecciones, nombre])).sort();
+    const nuevaLista = Array.from(new Set([...listaSecciones, nombre]));
 
     // Actualización optimista de la UI
     if(!listaSecciones.includes(nombre)) {
@@ -573,6 +577,20 @@ export default function DetalleTratamientoPage() {
       toast.success("Nueva fase clínica creada y guardada.");
     }
   }
+  
+const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
+    const nuevaLista = [...listaSecciones];
+    if (direccion === 'arriba' && index > 0) {
+      [nuevaLista[index - 1], nuevaLista[index]] = [nuevaLista[index], nuevaLista[index - 1]];
+    } else if (direccion === 'abajo' && index < nuevaLista.length - 1) {
+      [nuevaLista[index + 1], nuevaLista[index]] = [nuevaLista[index], nuevaLista[index + 1]];
+    } else {
+      return;
+    }
+    
+    setListaSecciones(nuevaLista);
+    await supabase.from('presupuestos').update({ secciones: JSON.stringify(nuevaLista) }).eq('id', idURL);
+  };
 
   const abrirPanelAgregar = (dientePreseleccionado: number | null = null, cara: string = '', zona: string = '') => {
     if (zona) { setDienteInput(''); setZonaInput(zona); setDientesSeleccionados([]); } 
@@ -887,7 +905,6 @@ export default function DetalleTratamientoPage() {
             lab_pagado_por_dr: false
         }));
         setAcciones(prev => [...prev, ...nuevosItems]);
-        
         toast.success(`Prestación agregada exitosamente ${inserts.length > 1 ? `(${inserts.length} piezas)` : ''}`);
     } else toast.error("Error al guardar en base de datos.");
   };
@@ -945,11 +962,20 @@ export default function DetalleTratamientoPage() {
     
     const { pack, configuraciones } = modalPack;
     
-    // 🔥 EL NOMBRE DE LA SECCIÓN AHORA ES EL NOMBRE DEL PACK 🔥
-    const seccionDelPack = pack.nombre.trim();
-    if(!listaSecciones.includes(seccionDelPack)) {
-        setListaSecciones(prev => [...prev, seccionDelPack].sort((a, b) => a.localeCompare(b)));
-    }
+    // 🔥 1. RECOPILAR TODAS LAS SECCIONES DEL PACK 🔥
+    const seccionesAInsertar = new Set<string>();
+    pack.items.forEach((pi: any) => {
+        const nombreFase = (pi.seccion && pi.seccion.trim() !== '') ? pi.seccion.trim() : pack.nombre.trim();
+        seccionesAInsertar.add(nombreFase);
+    });
+
+    // 🔥 2. ACTUALIZAR LA LISTA GLOBAL DE FASES CLÍNICAS 🔥
+    setListaSecciones(prev => {
+        const nuevaLista = Array.from(new Set([...prev, ...Array.from(seccionesAInsertar)]));
+        // Guardamos las fases nuevas en la BD silenciosamente
+        supabase.from('presupuestos').update({ secciones: JSON.stringify(nuevaLista) }).eq('id', idURL).then();
+        return nuevaLista;
+    });
 
     pack.items.forEach((pi: any) => {
         const prestacion = pi.prestacion;
@@ -959,9 +985,12 @@ export default function DetalleTratamientoPage() {
         const precioConDcto = precioBase * (1 - (config.descuento / 100));
 
         const iconoFinal = prestacion.icono_tipo || pack.icono_tipo;
+        
+        // 🔥 3. ASIGNAR LA FASE ESPECÍFICA DEL ÍTEM 🔥
+        const faseDelItem = (pi.seccion && pi.seccion.trim() !== '') ? pi.seccion.trim() : pack.nombre.trim();
 
         for(let i=0; i < config.cantidad; i++) {
-            const observacionFinal = `${prestacion.display_nombre} | Fase: ${seccionDelPack}` + 
+            const observacionFinal = `${prestacion.display_nombre} | Fase: ${faseDelItem}` + 
                 (caraInput ? ` | Cara: ${caraInput}` : '') + 
                 (zonaInput ? ` | Zona: ${zonaInput}` : '') + 
                 (iconoFinal ? ` | Icono: ${iconoFinal}` : '') +
@@ -996,8 +1025,14 @@ export default function DetalleTratamientoPage() {
         const nuevosItems = data.map((d:any) => {
             const pMatch = pack.items.find((pi:any) => pi.prestacion.id === d.prestacion_id)?.prestacion;
             const configDcto = configuraciones[d.prestacion_id]?.descuento || 0;
+            
+            // 🔥 4. EXTRAER LA FASE DESDE EL TEXTO PARA LA VISTA LOCAL 🔥
+            let faseExtraida = pack.nombre.trim();
+            const faseMatch = d.observacion.match(/\|\s*Fase:\s*([^|]+)/);
+            if (faseMatch) faseExtraida = faseMatch[1].trim();
+
             return {
-                ...d, seccion_nombre: seccionDelPack, cara: caraInput || null, zona: zonaInput || null,
+                ...d, seccion_nombre: faseExtraida, cara: caraInput || null, zona: zonaInput || null,
                 display_nombre: pMatch?.display_nombre || d.prestaciones?.["Nombre Accion"], 
                 icono_tipo: pMatch?.icono_tipo || d.prestaciones?.icono_tipo || pack.icono_tipo, 
                 precio_base: pMatch?.Precio, descuento: configDcto, avance: 0, tempId: d.id,
@@ -1010,7 +1045,7 @@ export default function DetalleTratamientoPage() {
         setAcciones(prev => [...prev, ...nuevosItems]);
         setModalPack({abierto: false, pack: null, configuraciones: {}});
         setPanelAgregarAbierto(false); setDientesSeleccionados([]); 
-        toast.success(`Pack "${pack.nombre}" agregado con éxito`);
+        toast.success(`Pack "${pack.nombre}" agregado respetando sus secciones`);
     } else {
         toast.error("Error al guardar el pack en el presupuesto.");
     }
@@ -1802,7 +1837,7 @@ export default function DetalleTratamientoPage() {
       {/* 🔥 MODAL DE AJUSTES CLÍNICOS (Descuento y Laboratorio) 🔥 */}
       <AnimatePresence>
         {modalEditarItem.abierto && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                 <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Ajustes Clínicos</h3>
@@ -1894,7 +1929,7 @@ export default function DetalleTratamientoPage() {
       {/* 🔥 MODAL PARA AJUSTES MÚLTIPLES 🔥 */}
       <AnimatePresence>
         {modalAjustesMulti && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                 <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Ajustes en Lote</h3>
@@ -1973,7 +2008,7 @@ export default function DetalleTratamientoPage() {
       {/* PANEL UNIVERSAL AGREGAR PRESTACIÓN Y PACKS */}
       <AnimatePresence>
         {panelAgregarAbierto && (
-          <motion.aside initial={{ x: -550, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -550, opacity: 0 }} className="fixed top-0 left-0 h-screen w-[500px] bg-white shadow-[20px_0_50px_rgba(0,0,0,0.1)] z-50 flex flex-col border-r border-slate-100 overflow-hidden text-left">
+          <motion.aside initial={{ x: -550, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -550, opacity: 0 }} className="fixed top-0 left-0 h-screen w-[500px] bg-white shadow-[20px_0_50px_rgba(0,0,0,0.1)] z-[1000] flex flex-col border-r border-slate-100 overflow-hidden text-left">
             
             <div className="flex justify-between items-center p-4 bg-slate-50 border-b border-slate-200 shrink-0">
                {zonaInput ? (
@@ -2154,7 +2189,7 @@ export default function DetalleTratamientoPage() {
       {/* MODAL PARA CONFIRMAR SECCIÓN DE PRESTACIÓN */}
       <AnimatePresence>
         {modalConfirmarPrestacion.abierto && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1010] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                 <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-3">
@@ -2197,7 +2232,7 @@ export default function DetalleTratamientoPage() {
       {/* 🔥 MODAL PARA APLICAR EL PACK (CON DESCUENTOS Y LAB INDIVIDUAL) 🔥 */}
       <AnimatePresence>
          {modalPack.abierto && modalPack.pack && (
-            <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[1010] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
                <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                   <div className="p-8 bg-emerald-600 text-white flex justify-between items-center shrink-0">
                      <div className="flex items-center gap-4">
@@ -2305,7 +2340,7 @@ export default function DetalleTratamientoPage() {
       {/* MODAL DE EVOLUCIÓN */}
       <AnimatePresence>
         {modalEvolucionAbierto && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                <div className="bg-slate-900 p-8 text-white flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-4">
@@ -2396,7 +2431,7 @@ export default function DetalleTratamientoPage() {
       {/* MODAL PARA CREAR NUEVA SECCIÓN/FASE */}
       <AnimatePresence>
         {modalNuevaSeccion && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1010] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                 <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-3">
@@ -2430,7 +2465,7 @@ export default function DetalleTratamientoPage() {
       {/* PANEL DE INFORMACIÓN DEL DIENTE/ZONA (MODAL LATERAL DERECHO) */}
       <AnimatePresence>
         {verInfoElemento && (
-          <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[380px] bg-white shadow-2xl z-50 border-l border-slate-100 flex flex-col overflow-hidden">
+          <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[380px] bg-white shadow-2xl z-[1000] border-l border-slate-100 flex flex-col overflow-hidden">
             <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
               <h3 className="font-black text-lg uppercase italic tracking-tighter">Detalles Pieza {verInfoElemento}</h3>
               <button onClick={() => setVerInfoElemento(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
@@ -2558,7 +2593,7 @@ export default function DetalleTratamientoPage() {
       {/* MODAL PARA CAMBIAR ICONO DE PRESTACIÓN */}
       <AnimatePresence>
         {modalIcono.abierto && (
-          <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 pt-32">
+          <div className="fixed inset-0 z-[1020] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 pt-32">
              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col max-h-[70vh]">
                 <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                   <h3 className="text-lg font-black uppercase italic tracking-tighter">Asignar Logo a Prestación</h3>
