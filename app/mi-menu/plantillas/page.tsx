@@ -220,6 +220,12 @@ function PlantillasContenido() {
   }
 
   const toggleItem = (prestacion: any) => {
+    // Check if the prestation is inactive
+    const esInactiva = ['no', 'false', 'falso', '', 'n'].includes(String(prestacion.Habilitado || '').trim().toLowerCase());
+    if (esInactiva) {
+      toast.error(`La prestación "${prestacion["Nombre Accion"]}" está inhabilitada y no puede ser agregada.`);
+      return;
+    }
     const ultimaSeccion = seccionesPack.length > 0 ? seccionesPack[seccionesPack.length - 1] : null;
     const newItem = {
       ...prestacion,
@@ -536,13 +542,14 @@ function PlantillasContenido() {
                         {busqueda && (
                           <div className="absolute z-30 top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
                             {prestacionesParaMostrar.length > 0 ? prestacionesParaMostrar.slice(0, 50).map(p => {
+                              const esInactiva = ['no', 'false', 'falso', '', 'n'].includes(String(p.Habilitado || '').trim().toLowerCase());
                               return (
-                                <div key={p.id} onClick={() => toggleItem(p)} className="p-3 border-b border-slate-50 transition-all flex items-center justify-between gap-3 hover:bg-emerald-50 cursor-pointer">
+                                <div key={p.id} onClick={() => toggleItem(p)} className={`p-3 border-b border-slate-50 transition-all flex items-center justify-between gap-3 ${esInactiva ? 'bg-red-50/70 text-slate-400 cursor-not-allowed' : 'hover:bg-emerald-50 cursor-pointer'}`}>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-[8px] font-black uppercase text-slate-400">{p["Nombre Categoria"]}</p>
-                                    <p className="text-xs font-bold uppercase leading-snug break-words">{p["Nombre Accion"]}</p>
+                                    <p className={`text-xs font-bold uppercase leading-snug break-words ${esInactiva ? 'line-through' : ''}`}>{p["Nombre Accion"]}</p>
                                   </div>
-                                  <button className="w-20 text-center text-[10px] font-bold py-1.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600">
+                                  <button onClick={(e) => { e.stopPropagation(); toggleItem(p); }} disabled={esInactiva} className={`w-20 text-center text-[10px] font-bold py-1.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 ${esInactiva ? 'opacity-50 cursor-not-allowed bg-slate-300 hover:bg-slate-300' : ''}`}>
                                     Agregar
                                   </button>
                                 </div>
@@ -578,10 +585,11 @@ function PlantillasContenido() {
                         {isPrestacionDropdownOpen && categoriaSeleccionada && (
                           <div className="absolute z-20 top-full right-0 mt-2 w-full md:w-96 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
                             {prestacionesDeCategoria.length > 0 ? prestacionesDeCategoria.map(p => {
+                              const esInactiva = ['no', 'false', 'falso', '', 'n'].includes(String(p.Habilitado || '').trim().toLowerCase());
                               return (
-                                <div key={p.id} onClick={() => toggleItem(p)} className="p-3 border-b border-slate-50 transition-all flex items-center justify-between gap-3 hover:bg-emerald-50 cursor-pointer">
-                                  <p className="text-xs font-bold uppercase leading-snug break-words flex-1 min-w-0">{p["Nombre Accion"]}</p>
-                                  <button className="w-20 text-center text-[10px] font-bold py-1.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600">
+                                <div key={p.id} onClick={() => toggleItem(p)} className={`p-3 border-b border-slate-50 transition-all flex items-center justify-between gap-3 ${esInactiva ? 'bg-red-50/70 text-slate-400 cursor-not-allowed' : 'hover:bg-emerald-50 cursor-pointer'}`}>
+                                  <p className={`text-xs font-bold uppercase leading-snug break-words flex-1 min-w-0 ${esInactiva ? 'line-through text-slate-400' : ''}`}>{p["Nombre Accion"]}</p>
+                                  <button onClick={(e) => { e.stopPropagation(); toggleItem(p); }} disabled={esInactiva} className={`w-20 text-center text-[10px] font-bold py-1.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 ${esInactiva ? 'opacity-50 cursor-not-allowed bg-slate-300 hover:bg-slate-300' : ''}`}>
                                     Agregar
                                   </button>
                                 </div>
