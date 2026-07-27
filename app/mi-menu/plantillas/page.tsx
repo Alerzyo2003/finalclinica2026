@@ -264,11 +264,11 @@ function PlantillasContenido() {
 
   const handleDrop = (targetSection: string | null) => {
     if (!draggedItemId) return;
-    handleSectionChange(draggedItemId, targetSection || null);
+    handleSectionChange(draggedItemId, targetSection ?? '');
     setDraggedItemId(null);
     setDragOverSection(null);
   }
-
+  
   const handleGuardarPlantilla = async () => {
     if (!nombrePlantilla.trim()) return toast.error("Falta el nombre del pack");
     if (itemsSeleccionados.length === 0) return toast.error("El pack está vacío");
