@@ -887,7 +887,7 @@ export default function DetalleTratamientoPage() {
             lab_pagado_por_dr: false
         }));
         setAcciones(prev => [...prev, ...nuevosItems]);
-        setPanelAgregarAbierto(false); setDientesSeleccionados([]); 
+        
         toast.success(`Prestación agregada exitosamente ${inserts.length > 1 ? `(${inserts.length} piezas)` : ''}`);
     } else toast.error("Error al guardar en base de datos.");
   };
