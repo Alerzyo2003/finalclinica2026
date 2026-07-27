@@ -32,6 +32,8 @@ export default function DetalleArancelPage() {
   const [items, setItems] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [actualizandoId, setActualizandoId] = useState<string | null>(null)
+  const [editandoPrecioId, setEditandoPrecioId] = useState<string | null>(null);
+  const [nuevoPrecio, setNuevoPrecio] = useState<string>('');
 
   // 🔥 NUEVO ESTADO PARA LAS PESTAÑAS 🔥
   const [tabActiva, setTabActiva] = useState<'habilitados' | 'deshabilitados'>('habilitados');
@@ -227,6 +229,46 @@ export default function DetalleArancelPage() {
     }
   }
 
+  async function handleActualizarPrecio(id: string) {
+    const itemOriginal = items.find(i => i.id === id);
+    if (!itemOriginal) return;
+
+    if (nuevoPrecio === '' || isNaN(Number(nuevoPrecio))) {
+      setEditandoPrecioId(null);
+      return;
+    }
+  
+    const precioFinal = Number(nuevoPrecio);
+  
+    if (precioFinal === Number(itemOriginal?.Precio || 0)) {
+      setEditandoPrecioId(null);
+      return; // No changes
+    }
+  
+    setActualizandoId(id);
+    setEditandoPrecioId(null);
+  
+    try {
+      const { error } = await supabase.from('prestaciones').update({ "Precio": precioFinal }).eq('id', id);
+      if (error) throw error;
+  
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user?.id,
+          accion: 'UPDATE / PRECIO PRESTACION',
+          tabla: 'prestaciones',
+          detalles: `Cambió el precio de "${itemOriginal?.['Nombre Accion'] || 'N/A'}" de $${Number(itemOriginal?.Precio || 0).toLocaleString('es-CL')} a $${precioFinal.toLocaleString('es-CL')}.`
+      }]);
+  
+      toast.success("Precio actualizado.");
+      setItems(items.map(item => item.id === id ? { ...item, Precio: precioFinal } : item));
+    } catch (err: any) {
+      toast.error("Error al actualizar el precio.");
+    } finally {
+      setActualizandoId(null);
+    }
+  }
+
   if (cargando) return (
     <div className="h-screen flex items-center justify-center bg-[#F8FAFC]">
       <Loader2 className="animate-spin text-blue-600" size={40}/>
@@ -352,8 +394,26 @@ export default function DetalleArancelPage() {
                         </button>
                       </td>
 
-                      <td className="p-10 text-center font-black text-slate-900 text-xl tracking-tighter">
-                        ${Number(item.Precio || 0).toLocaleString('es-CL')}
+                      <td className="p-10 text-center font-black text-slate-900 text-xl tracking-tighter relative">
+                        {editandoPrecioId === item.id ? (
+                          <input
+                            type="number"
+                            value={nuevoPrecio}
+                            onChange={(e) => setNuevoPrecio(e.target.value)}
+                            onBlur={() => handleActualizarPrecio(item.id)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                            autoFocus
+                            className="w-36 text-center bg-white border-2 border-blue-500 rounded-xl p-2 font-black text-slate-900 text-xl tracking-tighter outline-none shadow-lg"
+                          />
+                        ) : (
+                          <span 
+                            onClick={() => { setEditandoPrecioId(item.id); setNuevoPrecio(String(item.Precio || 0)); }}
+                            className="cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-all"
+                          >
+                            ${Number(item.Precio || 0).toLocaleString('es-CL')}
+                          </span>
+                        )}
+                        {actualizandoId === item.id && editandoPrecioId !== item.id && <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-blue-500" />}
                       </td>
 
                       <td className="p-10 text-center">
