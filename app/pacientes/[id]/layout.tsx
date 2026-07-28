@@ -262,7 +262,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
               <TabLink href={`/pacientes/${id}`} active={esFicha} icon={<ClipboardList size={14}/>} label="Ficha" />
               <TabLink href={`/pacientes/${id}/datos`} active={pathname.includes('/datos')} icon={<UserCircle size={14}/>} label="Perfil" />
               <TabLink href={`/pacientes/${id}/tratamientos`} active={pathname.includes('/tratamientos')} icon={<Wallet size={14}/>} label="Tratamientos" />
-              
+              <TabLink href={`/pacientes/${id}/periodontograma`} active={pathname.includes('/periodontograma')} icon={<Activity size={14}/>} label="Periodontograma" />
               {/* 🔥 OCULTAMOS LA PESTAÑA DE PAGOS AL ASISTENTE 🔥 */}
               {puedeVerFinanzas && (
                 <TabLink href={`/pacientes/${id}/pagos`} active={pathname.includes('/pagos')} icon={<Coins size={14}/>} label="Pagos" />
