@@ -2154,38 +2154,69 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
                 {/* VISTA PACKS Y PLANTILLAS */}
                 {tabPanel === 'packs' && (
-                   <div className="space-y-3">
-                      {plantillasDisponibles.filter(p => p.nombre.toUpperCase().includes(busqueda.toUpperCase()) || p.categoria.toUpperCase().includes(busqueda.toUpperCase())).map((pack) => (
-                         <div 
-                            key={pack.id} 
-                            onClick={() => abrirModalPack(pack)}
-                            className="bg-white p-5 rounded-2xl border-2 border-emerald-100 hover:border-emerald-400 hover:bg-emerald-50 transition-all cursor-pointer shadow-sm flex flex-col group"
-                         >
-                            <div className="flex items-center gap-3 mb-2">
-                               {pack.icono_tipo ? (
-                                  <div className="w-6 h-6 shrink-0">
-                                     <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                        <LogoRender iconoKey={pack.icono_tipo} hallazgo={pack.nombre} colorOverride="#10b981" />
-                                     </svg>
-                                  </div>
-                               ) : (
-                                  <Package size={16} className="text-emerald-500 shrink-0"/>
-                               )}
-                               <span className="text-[8px] font-black uppercase text-emerald-500">{pack.categoria || 'Sección General'}</span>
-                            </div>
+                   <div className="space-y-1">
+                      {Object.keys(packsAgrupados).sort((a,b)=>a.localeCompare(b)).map(cat => {
+                          const filtradas = packsAgrupados[cat].filter((p:any) => 
+                              (p.nombre || '').toUpperCase().includes(busqueda.toUpperCase()) || 
+                              cat.toUpperCase().includes(busqueda.toUpperCase())
+                          );
 
-                            <h4 className="text-sm font-black uppercase text-slate-800 group-hover:text-emerald-700 leading-tight">{pack.nombre}</h4>
-                            <div className="flex items-center justify-between mt-3 border-t border-emerald-100 pt-2">
-                               <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><Layers size={12}/> {pack.items?.length || 0} ítems</span>
-                               <span className="text-[11px] font-black text-emerald-600">${Number(pack.precio_total).toLocaleString('es-CL')}</span>
-                            </div>
-                         </div>
-                      ))}
+                          if (busqueda && filtradas.length === 0) return null;
+
+                          return (
+                              <div key={`pack-cat-${cat}`} className="mb-4">
+                                  <button 
+                                      onClick={() => setCategoriasAbiertas(prev => ({...prev, [`pack_${cat}`]: !prev[`pack_${cat}`]}))} 
+                                      className="w-full text-left px-5 py-4 rounded-xl font-black text-xs uppercase bg-white border border-slate-200 shadow-sm text-slate-800 flex justify-between items-center transition-all hover:bg-slate-100 hover:border-slate-300"
+                                  >
+                                      <div className="flex items-center gap-2">
+                                          <Package size={16} className="text-emerald-500"/>
+                                          {cat}
+                                          <span className="bg-emerald-100 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full ml-2">{filtradas.length}</span>
+                                      </div>
+                                      {categoriasAbiertas[`pack_${cat}`] ? <ChevronUp size={16} className="text-slate-500"/> : <ChevronDown size={16} className="text-slate-500"/>}
+                                  </button>
+                                  
+                                  <AnimatePresence>
+                                      {(categoriasAbiertas[`pack_${cat}`] || busqueda) && (
+                                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden space-y-3 mt-3">
+                                              {filtradas.map((pack: any) => (
+                                                  <div 
+                                                     key={pack.id} 
+                                                     onClick={() => abrirModalPack(pack)}
+                                                     className="bg-white p-5 rounded-2xl border-2 border-emerald-100 hover:border-emerald-400 hover:bg-emerald-50 transition-all cursor-pointer shadow-sm flex flex-col group mx-1"
+                                                  >
+                                                     <div className="flex items-center gap-3 mb-2">
+                                                        {pack.icono_tipo ? (
+                                                           <div className="w-6 h-6 shrink-0">
+                                                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                                                                 <LogoRender iconoKey={pack.icono_tipo} hallazgo={pack.nombre} colorOverride="#10b981" />
+                                                              </svg>
+                                                           </div>
+                                                        ) : (
+                                                           <Package size={16} className="text-emerald-500 shrink-0"/>
+                                                        )}
+                                                        <span className="text-[8px] font-black uppercase text-emerald-500">{pack.categoria || 'Sección General'}</span>
+                                                     </div>
+
+                                                     <h4 className="text-sm font-black uppercase text-slate-800 group-hover:text-emerald-700 leading-tight">{pack.nombre}</h4>
+                                                     <div className="flex items-center justify-between mt-3 border-t border-emerald-100 pt-2">
+                                                        <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><Layers size={12}/> {pack.items?.length || 0} ítems</span>
+                                                        <span className="text-[11px] font-black text-emerald-600">${Number(pack.precio_total).toLocaleString('es-CL')}</span>
+                                                     </div>
+                                                  </div>
+                                              ))}
+                                          </motion.div>
+                                      )}
+                                  </AnimatePresence>
+                              </div>
+                          )
+                      })}
                       {plantillasDisponibles.length === 0 && (
-                         <div className="text-center p-8">
-                            <Package className="mx-auto text-slate-300 mb-2" size={32}/>
-                            <p className="text-[10px] font-black text-slate-400 uppercase">No hay packs creados en el sistema.</p>
-                         </div>
+                          <div className="text-center p-8">
+                             <Package className="mx-auto text-slate-300 mb-2" size={32}/>
+                             <p className="text-[10px] font-black text-slate-400 uppercase">No hay packs creados en el sistema.</p>
+                          </div>
                       )}
                    </div>
                 )}
