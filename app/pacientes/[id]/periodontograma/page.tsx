@@ -659,7 +659,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
       >
         <colgroup>
           <col style={{ width: LABEL_COL_WIDTH }} />
-          {dientes.map((pieza, idx) => (
+          {dientes.map((pieza: number, idx: number) => (
             <React.Fragment key={`col-${pieza}`}>
               <col style={{ width: POINT_WIDTH }} />
               <col style={{ width: POINT_WIDTH }} />
