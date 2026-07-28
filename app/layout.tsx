@@ -85,19 +85,58 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [busqueda])
 
   async function ejecutarBusqueda(term: string) {
-    setBuscando(true)
-    setMostrarResultados(true)
-    const palabras = term.trim().split(/\s+/)
-    let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
-    palabras.forEach(palabra => {
-      const fuzzy = `%${palabra.split('').join('%')}%`
-      const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase()
-      if (palabraRut.length > 0) query = query.or(`nombre.ilike.${fuzzy},apellido.ilike.${fuzzy},rut.ilike.%${palabraRut}%`)
-      else query = query.or(`nombre.ilike.${fuzzy},apellido.ilike.${fuzzy}`)
-    })
-    const { data } = await query.limit(6)
-    setResultados(data || [])
-    setBuscando(false)
+    setBuscando(true);
+    setMostrarResultados(true);
+ 
+    // Intenta usar la función de búsqueda inteligente (RPC)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('buscar_pacientes', {
+        termino_busqueda: term.trim()
+    }).limit(6);
+ 
+    // Si la RPC falla (ej. código 404 Not Found), usa el método de respaldo
+    if (rpcError && rpcError.code === 'PGRST202') {
+        console.warn('Búsqueda RPC no encontrada, usando método de respaldo. Considere instalar la función SQL para mejorar la búsqueda.');
+        toast.warning('Búsqueda inteligente no disponible. Usando búsqueda básica.');
+ 
+        // --- MÉTODO DE RESPALDO (FALLBACK) ---
+        const palabras = term.trim().split(/\s+/).filter(p => p.length > 0);
+        let fallbackQuery = supabase.from('pacientes').select('id, nombre, apellido, rut');
+
+        if (palabras.length > 0) {
+          const andClauses = palabras.map(palabra => {
+              const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase();
+              const orConditions = [
+                  `nombre.ilike.%${palabra}%`,
+                  `apellido.ilike.%${palabra}%`
+              ];
+              if (palabraRut.length > 0) {
+                  orConditions.push(`rut.ilike.%${palabraRut}%`);
+              }
+              return `or(${orConditions.join(',')})`;
+          }).join(',');
+          fallbackQuery = fallbackQuery.and(andClauses);
+        }
+
+        const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(6);
+ 
+        if (fallbackError) {
+            console.error('Error en búsqueda de respaldo:', fallbackError);
+            toast.error('La búsqueda falló completamente.');
+            setResultados([]);
+        } else {
+            setResultados(fallbackData || []);
+        }
+    } else if (rpcError) {
+        // Otro tipo de error en la RPC
+        console.error('Error en búsqueda RPC:', rpcError);
+        toast.error('Ocurrió un error con la búsqueda.');
+        setResultados([]);
+    } else {
+        // La búsqueda RPC fue exitosa
+        setResultados(rpcData || []);
+    }
+ 
+    setBuscando(false);
   }
 
   useEffect(() => {
@@ -139,8 +178,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Toaster richColors position="top-right" />
         {!isAuthPage && session && (
           <div className="relative z-[100] flex flex-col print:hidden shadow-sm">
-            <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-4 md:px-8 border-b border-white/5">
-              <div className="flex items-center gap-4 md:gap-12 text-left">
+            <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-4 md:px-8 border-b border-white/5 gap-8">
+              <div className="flex items-center gap-8 text-left flex-1">
                 <Link href="/" className="flex items-center gap-3 group transition-all text-left">
                   <div className="relative shrink-0">
                     <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-white/10 shadow-lg group-hover:scale-105 transition-transform">
@@ -153,6 +192,39 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <span className="text-2xl font-black tracking-tighter uppercase italic leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 text-left">Dignidad</span>
                   </div>
                 </Link>
+                <div ref={searchRef} className="relative w-full max-w-xl hidden md:block">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        {buscando ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar paciente por nombre o RUT..."
+                        className="w-full bg-slate-800 border border-slate-700 h-10 pl-10 pr-4 rounded-full text-sm font-bold text-white shadow-sm outline-none focus:border-blue-500 placeholder:text-slate-500"
+                        value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)}
+                        onFocus={() => busqueda.length > 2 && setMostrarResultados(true)}
+                    />
+                    <AnimatePresence>
+                        {mostrarResultados && (
+                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden text-slate-900 z-50">
+                                {resultados.length > 0 ? (
+                                    resultados.map(p => (
+                                        <Link key={p.id} href={`/pacientes/${p.id}`} onClick={() => { setBusqueda(''); setMostrarResultados(false); }} className="flex items-center gap-4 p-4 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-b-0">
+                                            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-500 text-sm">{p.nombre[0]}{p.apellido[0]}</div>
+                                            <div>
+                                                <p className="font-bold text-sm text-slate-800">{p.nombre} {p.apellido}</p>
+                                                <p className="text-xs text-slate-500">{p.rut}</p>
+                                            </div>
+                                            <ChevronRight className="ml-auto text-slate-300" size={16} />
+                                        </Link>
+                                    ))
+                                ) : (
+                                    <div className="p-4 text-center text-sm text-slate-500">No se encontraron resultados.</div>
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
               </div>
               <div className="flex items-center gap-4 text-left">
                 <div className="flex items-center gap-3 bg-white/5 pl-4 pr-2 py-1.5 rounded-full border border-white/10 text-left">
