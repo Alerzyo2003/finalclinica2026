@@ -57,7 +57,7 @@ export default function LiquidacionesPage() {
         .from('pagos')
         .select(`
           id, monto, fecha_pago, profesional_id, item_id,
-          presupuesto_items ( profesional_id, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado )
+          presupuesto_items ( profesional_id, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto )
         `)
         .gte('fecha_pago', inicioRango)
         .lte('fecha_pago', finRango)
@@ -107,9 +107,23 @@ export default function LiquidacionesPage() {
             const montoPago = Number(pago.monto || 0);
             sumaAbonos += montoPago;
 
-            // 🔥 REGLA DE NEGOCIO: Solo se paga comisión si el tratamiento está 100% terminado.
             const itemEstado = pago.presupuesto_items?.estado?.toLowerCase() || '';
             const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
+
+            // 🔥 OBTENER EL TIPO DE REPARTO QUE TRAE LA BASE DE DATOS
+            const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
+            const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
+            const pctClinicaItem = 1 - pctDrItem;
+
+            // 🛑 LOG DE DEPURACIÓN EN CONSOLA (Abre la consola de tu navegador F12 para verlo)
+            console.log(`[LIQUIDACION DEBUG] Prestación ID: ${pago.item_id}`, {
+              montoPago,
+              tipoRepartoEnBD: pago.presupuesto_items?.tipo_reparto,
+              tipoRepartoDetectado: tipoReparto,
+              porcentajeContratoDr: porcentajeDr,
+              pctDrItemAplicado: pctDrItem,
+              itemTerminado: estaTerminado
+            });
 
             const costoLab = Number(pago.presupuesto_items?.costo_laboratorio || 0);
             const precioPactado = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
@@ -123,11 +137,11 @@ export default function LiquidacionesPage() {
             if (montoImponible < 0) montoImponible = 0;
 
             if (estaTerminado) {
-              const comision = montoImponible * porcentajeDr;
+              const comision = montoImponible * pctDrItem; 
               const reembolso = pagadoPorDr ? labADescontar : 0; 
               honorariosAbonos += comision;
               reembolsosDoctor += reembolso;
-              utilidadAbonos += (montoImponible * porcentajeClinica);
+              utilidadAbonos += (montoImponible * pctClinicaItem);
             } else {
               utilidadAbonos += montoImponible;
             }
