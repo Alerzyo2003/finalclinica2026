@@ -129,7 +129,7 @@ export default function DetalleTratamientoPage() {
   const [modalPack, setModalPack] = useState<{abierto: boolean, pack: any, configuraciones: Record<string, any>}>({abierto: false, pack: null, configuraciones: {}})
 
   const [busqueda, setBusqueda] = useState('')
-  const [categoriasPacksAbiertas, setCategoriasPacksAbiertas] = useState<Record<string, boolean>>({})
+  const [categoriasAbiertas, setCategoriasAbiertas] = useState<Record<string, boolean>>({})
   const [listaSecciones, setListaSecciones] = useState<string[]>(['Plan General'])
   const [modalNuevaSeccion, setModalNuevaSeccion] = useState(false)
   const [nuevaSeccionNombre, setNuevaSeccionNombre] = useState('')
