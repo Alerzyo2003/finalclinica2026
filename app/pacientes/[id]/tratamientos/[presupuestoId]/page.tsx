@@ -503,6 +503,12 @@ export default function DetalleTratamientoPage() {
         setLaboratoriosDB(map);
     }
     
+    const { data: catsData } = await supabase.from('categorias_prestaciones').select('nombre, tipo_reparto, profesional_id');
+    const mapCategorias: Record<string, any> = {};
+    catsData?.forEach(c => {
+        mapCategorias[c.nombre] = { tipo: c.tipo_reparto, prof_id: c.profesional_id };
+    });
+
     let allPrests: any[] = [];
     let fetchMore = true, from = 0;
     while (fetchMore) {
@@ -514,6 +520,12 @@ export default function DetalleTratamientoPage() {
     if (allPrests.length > 0) {
       const agrupado = allPrests.reduce((acc: any, curr: any) => {
         if (String(curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado || '').trim().toLowerCase() === 'no' || (curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado) === false) return acc; 
+        
+        // 🔥 ASIGNAR REGLA DE REPARTO Y DOCTOR DUEÑO A LA PRESTACIÓN 🔥
+        const catRegla = mapCategorias[curr["Nombre Categoria"]];
+        curr.tipo_reparto_resuelto = curr.tipo_reparto || (catRegla ? catRegla.tipo : 'general');
+        curr.prof_reparto_resuelto = catRegla ? catRegla.prof_id : null;
+
         const cat = (curr["Nombre Categoria"] || "OTROS").trim();
         if (!acc[cat]) acc[cat] = [];
         curr.display_nombre = curr["Nombre Accion"] || curr["Nombre"] || "Prestación sin nombre";
@@ -881,17 +893,23 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         toast.info("Costo de laboratorio asignado automáticamente.");
     }
 
+    const tipoRepartoFinal = prestacion.tipo_reparto_resuelto || 'general';
+    const docFinal = (tipoRepartoFinal === 'doctor' && prestacion.prof_reparto_resuelto) 
+      ? prestacion.prof_reparto_resuelto 
+      : profesionalSeleccionado;
+
     const baseItem = {
         presupuesto_id: idURL, 
         prestacion_id: prestacion.id, 
         precio_pactado: prestacion["Precio"], 
         abonado: 0, 
         estado: 'pendiente', 
-        profesional_id: profesionalSeleccionado, 
+        profesional_id: docFinal, // <- Se asigna al radiólogo/laboratorista si aplica
         nombre_prestacion: observacionFinal, 
         observacion: observacionFinal,
         cara: caraInput || null,
         zona: zonaInput || null,
+        tipo_reparto: tipoRepartoFinal, // <- Guardamos la regla para liquidaciones
         costo_laboratorio: costoLabAuto,
         lab_pagado_por_dr: false
     };
@@ -997,6 +1015,11 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         // 🔥 3. ASIGNAR LA FASE ESPECÍFICA DEL ÍTEM 🔥
         const faseDelItem = (pi.seccion && pi.seccion.trim() !== '') ? pi.seccion.trim() : pack.nombre.trim();
 
+        const tipoRepartoFinal = prestacion.tipo_reparto_resuelto || 'general';
+        const docFinal = (tipoRepartoFinal === 'doctor' && prestacion.prof_reparto_resuelto) 
+          ? prestacion.prof_reparto_resuelto 
+          : profesionalSeleccionado;
+
         for(let i=0; i < config.cantidad; i++) {
             const observacionFinal = `${prestacion.display_nombre} | Fase: ${faseDelItem}` + 
                 (caraInput ? ` | Cara: ${caraInput}` : '') + 
@@ -1010,11 +1033,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                 precio_pactado: precioConDcto, 
                 abonado: 0, 
                 estado: 'pendiente', 
-                profesional_id: profesionalSeleccionado, 
+                profesional_id: docFinal, // <- Asigna al dueño de la categoría si aplica
                 nombre_prestacion: observacionFinal, 
                 observacion: observacionFinal,
                 cara: caraInput || null,
                 zona: zonaInput || null,
+                tipo_reparto: tipoRepartoFinal, // <- Guardamos la regla para liquidaciones
                 costo_laboratorio: config.costoLab,
                 lab_pagado_por_dr: false
             };
@@ -1134,12 +1158,16 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         
         const nuevoEstado = avance === 100 ? 'realizado' : item.estado;
 
+        // 🔥 NUEVA REGLA: Si el ítem es 100% de un doctor (ej. Radiólogo), 
+        // el pago se protege y mantiene para ese doctor, no para el que evoluciona.
+        const doctorFinalParaPago = item.tipo_reparto === 'doctor' ? item.profesional_id : doctorId;
+
         if (item.presupuesto_id) {
           await supabase.from('presupuesto_items').update({ 
             observacion: nuevaObs,
             estado: nuevoEstado,
-            profesional_id: doctorId,
-            progreso: avance // 🔥 GUARDAMOS EN LA NUEVA COLUMNA
+            profesional_id: doctorFinalParaPago, // <--- Usamos el protegido
+            progreso: avance
           }).eq('id', itemId);
         } else if (item.id_dentalink) {
           // La tabla de importación no tiene profesional_id, solo se actualiza el estado.
@@ -1158,14 +1186,18 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
       setAcciones(prev => prev.map(a => {
         if (itemIds.includes(a.id)) {
           let nuevaObs = a.texto_db || a.display_nombre || '';
-          nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, ''); // Limpiamos el estado local también
+          nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, ''); 
+          
+          // Mantenemos la protección en la vista de la tabla
+          const doctorFinalParaPago = a.tipo_reparto === 'doctor' ? a.profesional_id : doctorId;
+
           return { 
             ...a, 
             estado: avance === 100 ? 'realizado' : a.estado, 
             avance: avance, 
             progreso: avance,
             texto_db: nuevaObs, 
-            profesional_id: doctorId // Actualiza el doctor en el estado local también
+            profesional_id: doctorFinalParaPago // Actualiza el dueño visualmente sin romper la regla
           };
         }
         return a;
