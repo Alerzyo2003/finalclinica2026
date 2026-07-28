@@ -103,18 +103,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         let fallbackQuery = supabase.from('pacientes').select('id, nombre, apellido, rut');
 
         if (palabras.length > 0) {
-          const andClauses = palabras.map(palabra => {
-              const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase();
-              const orConditions = [
-                  `nombre.ilike.%${palabra}%`,
-                  `apellido.ilike.%${palabra}%`
-              ];
-              if (palabraRut.length > 0) {
-                  orConditions.push(`rut.ilike.%${palabraRut}%`);
-              }
-              return `or(${orConditions.join(',')})`;
-          }).join(',');
-          fallbackQuery = fallbackQuery.and(andClauses);
+          palabras.forEach(palabra => {
+            const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase();
+            let orQuery = `nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%`;
+            if (palabraRut.length > 0) {
+              orQuery += `,rut.ilike.%${palabraRut}%`;
+            }
+            fallbackQuery = fallbackQuery.or(orQuery);
+          });
         }
 
         const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(6);
