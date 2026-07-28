@@ -129,8 +129,7 @@ export default function DetalleTratamientoPage() {
   const [modalPack, setModalPack] = useState<{abierto: boolean, pack: any, configuraciones: Record<string, any>}>({abierto: false, pack: null, configuraciones: {}})
 
   const [busqueda, setBusqueda] = useState('')
-  const [categoriasAbiertas, setCategoriasAbiertas] = useState<Record<string, boolean>>({})
-
+  const [categoriasPacksAbiertas, setCategoriasPacksAbiertas] = useState<Record<string, boolean>>({})
   const [listaSecciones, setListaSecciones] = useState<string[]>(['Plan General'])
   const [modalNuevaSeccion, setModalNuevaSeccion] = useState(false)
   const [nuevaSeccionNombre, setNuevaSeccionNombre] = useState('')
@@ -162,7 +161,16 @@ export default function DetalleTratamientoPage() {
   const [usuarioLogueado, setUsuarioLogueado] = useState<any>(null);
   const [perfil, setPerfil] = useState<any>(null);
   const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
-
+  
+  const packsAgrupados = useMemo(() => {
+  return plantillasDisponibles.reduce((acc: any, pack: any) => {
+    const cat = (pack.categoria || 'Otros').trim();
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(pack);
+    return acc;
+  }, {});
+}, [plantillasDisponibles]);
+  
   const todasLasAccionesBoca = useMemo(() => {
     const historicasFiltradas = historialPaciente.filter(h => 
       h.estado === 'realizado' && 
@@ -177,7 +185,7 @@ export default function DetalleTratamientoPage() {
 
     return [...historicasFiltradas, ...accionesParaOdontograma];
   }, [acciones, historialPaciente, presupuestoData]);
-
+  
   const obtenerItemsDelDiente = (id: number) => {
     return todasLasAccionesBoca.filter(a => 
         String(a.diente_id) === String(id) || 
