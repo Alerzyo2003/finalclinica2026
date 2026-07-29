@@ -68,10 +68,11 @@ export default function DetalleLiquidacionPage() {
         .select(`
           id, monto, fecha_pago, profesional_id,
           pacientes ( nombre, apellido ),
-          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado )
+          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto )
         `)
         // .gte('fecha_pago', inicioMes) // Se quita para traer el histórico completo y pagar comisiones de tratamientos terminados este mes pero pagados en meses anteriores.
-        .lte('fecha_pago', finMes);
+        .lte('fecha_pago', finMes)
+        .not('estado', 'eq', 'Anulado');
 
       if (errPagos) throw errPagos;
 
@@ -111,8 +112,11 @@ export default function DetalleLiquidacionPage() {
         let montoImponible = montoPago - labAplicado;
         if (montoImponible < 0) montoImponible = 0;
 
+        const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
+        const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
+
         // Si no está terminado, el honorario es CERO para el doctor.
-        const comision = estaTerminado ? (montoImponible * porcentajeDr) : 0;
+        const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
         const totalAlDoctor = comision + reembolso;
 
