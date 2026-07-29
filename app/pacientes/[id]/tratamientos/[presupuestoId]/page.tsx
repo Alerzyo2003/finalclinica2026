@@ -4,7 +4,7 @@ import { useParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   Loader2, Database, Plus, X, Search, Trash2, CheckCircle2, ChevronLeft, ChevronRight, 
-  ChevronUp, ChevronDown, Info, Settings, Layers, FileSignature, Stethoscope, Check, 
+  ChevronUp, ChevronDown, Info, Settings, Layers, FileSignature, Stethoscope, Check, Ban,
   RefreshCcw, Undo2, HelpCircle, Printer, Download, User, Baby, Activity, Wallet, CalendarClock, Building, FileText, EyeOff, Package, Tag, Minus, Save
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -153,6 +153,7 @@ export default function DetalleTratamientoPage() {
   const [labPorDoctorMulti, setLabPorDoctorMulti] = useState(false);
   const [guardandoMulti, setGuardandoMulti] = useState(false);
   const [modalConfirmarPrestacion, setModalConfirmarPrestacion] = useState<{abierto: boolean, prestacion: any}>({abierto: false, prestacion: null});
+  const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
   const [modalIcono, setModalIcono] = useState<{abierto: boolean, prestacion: any, autoAdd?: boolean}>({
     abierto: false, prestacion: null, autoAdd: false
@@ -735,6 +736,51 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     }
   }
 
+  const handleCancelarPrestacion = async (item: any) => {
+    if (!item || !item.id) return;
+
+    const abonado = Number(item.abonado || 0);
+    const confirmMessage = `¿Estás seguro de ANULAR la prestación "${item.display_nombre}"?\n\n` +
+        `Esta acción marcará el tratamiento como "Cancelado" y no se podrá revertir.\n\n` +
+        (abonado > 0 ? `Se han detectado $${abonado.toLocaleString('es-CL')} en pagos. Este monto se transferirá a la Billetera Virtual (Saldo a Favor) del paciente.` : 'No se han detectado pagos asociados a esta prestación.') +
+        `\n\n¿Deseas continuar?`;
+
+    if (!window.confirm(confirmMessage)) {
+        return;
+    }
+
+    setProcesandoId(item.id);
+    try {
+        // 1. Marcar la prestación como 'cancelada'
+        const { error: updateError } = await supabase
+            .from('presupuesto_items')
+            .update({ estado: 'cancelada' })
+            .eq('id', item.id);
+        if (updateError) throw updateError;
+
+        // 2. Si hay dinero abonado, buscar los pagos y anularlos, moviendo el dinero a saldo a favor.
+        if (abonado > 0) {
+            await supabase.from('pagos').update({ estado: 'Anulado', anulado_por: usuarioLogueado?.id, fecha_anulacion: new Date().toISOString() }).eq('item_id', item.id).not('estado', 'eq', 'Anulado');
+            const { data: pacienteActual } = await supabase.from('pacientes').select('saldo_a_favor').eq('id', pacienteId).single();
+            const saldoActual = Number(pacienteActual?.saldo_a_favor || 0);
+            const nuevoSaldo = saldoActual + abonado;
+            await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacienteId);
+        }
+
+        // 3. Registrar en auditoría
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado?.id,
+            accion: 'CANCEL / PRESTACIÓN',
+            tabla: 'presupuesto_items, pagos, pacientes',
+            detalles: `Canceló la prestación "${item.display_nombre}" (ID: ${item.id}). ${abonado > 0 ? `Se movieron $${abonado.toLocaleString('es-CL')} a saldo a favor.` : ''}`
+        }]);
+
+        setAcciones(prev => prev.map(a => a.id === item.id ? { ...a, estado: 'cancelada' } : a));
+        toast.success("Prestación anulada correctamente.");
+
+    } catch (err: any) { toast.error("Error al anular la prestación: " + err.message); } finally { setProcesandoId(null); }
+  }
+
   const eliminarHallazgoEspecifico = async (diente: number, hallazgoNombre: string) => {
     guardarHistorial();
     const dId = diente.toString();
@@ -1089,9 +1135,14 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
   const abrirModalEvolucion = (itemIds: string[], avanceInicial: number) => {
     if (itemIds.length === 0) return;
 
-    const itemCompleto = acciones.find(a => itemIds.includes(a.id) && a.avance === 100);
-    if (itemCompleto && avanceInicial > 0) {
-        return toast.info(`El tratamiento "${itemCompleto.display_nombre}" ya está finalizado.`);
+    const item = acciones.find(a => itemIds.includes(a.id));
+    if (!item) return;
+
+    // 🔥 REGLA MEJORADA: Si se intenta revertir un tratamiento finalizado, pedir confirmación.
+    if (item.avance === 100 && avanceInicial < 100) {
+        if (!window.confirm(`⚠️ Atención: Estás a punto de revertir un tratamiento que ya estaba finalizado. Esto puede afectar las liquidaciones ya pagadas. ¿Deseas continuar?`)) {
+            return;
+        }
     }
 
     if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'DENTISTA') {
@@ -1812,7 +1863,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                   return (
                                     <button
                                       key={p}
-                                      disabled={item.avance === 100}
                                       onClick={() => abrirModalEvolucion([item.id], p)}
                                       className={`w-4 h-4 rounded-full border-2 transition-all ${isDone ? 'bg-blue-500 border-blue-600' : 'bg-slate-200 border-slate-300'} ${isNext && 'animate-pulse'}`}
                                       title={`Evolucionar a ${p}%`}
@@ -1830,36 +1880,38 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                             )}
 
                             <td className="px-6 py-5 text-center">
-                              <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase border ${item.estado === 'realizado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-                                {item.estado || 'Pendiente'}
-                              </span>
+                              {item.estado === 'cancelada' ? (
+                                <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase border bg-red-100 text-red-600 border-red-200">
+                                    Cancelado
+                                </span>
+                              ) : (
+                                <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase border ${item.estado === 'realizado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                  {item.estado || 'Pendiente'}
+                                </span>
+                              )}
                             </td>
-                            <td className="px-6 py-5 text-center flex items-center justify-center gap-1" data-html2canvas-ignore="true">
-                              {item.estado !== 'realizado' && item.avance === 0 ? (
-                                <>
-                                  {puedeVerFinanzas && (
-                                      <button 
-                                          onClick={() => { 
-                                              setModalEditarItem({abierto: true, item}); 
-                                              setDctoInput(item.descuento || 0); 
-                                              setCostoLabInput(item.costo_laboratorio || 0); 
-                                              setLabPorDoctorInput(item.lab_pagado_por_dr || false); 
-                                          }} 
-                                          className="text-slate-400 hover:text-blue-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" 
-                                          title="Ajustes Clínicos (Descuento/Lab)"
-                                      >
+                            <td className="px-6 py-5 text-center" data-html2canvas-ignore="true">
+                              <div className="flex items-center justify-center gap-1">
+                                {procesandoId === item.id ? (
+                                  <Loader2 size={16} className="animate-spin text-slate-400" />
+                                ) : (
+                                  <>
+                                    {item.estado !== 'cancelada' && item.estado !== 'realizado' && puedeVerFinanzas && (
+                                      <button onClick={() => { setModalEditarItem({abierto: true, item}); setDctoInput(item.descuento || 0); setCostoLabInput(item.costo_laboratorio || 0); setLabPorDoctorInput(item.lab_pagado_por_dr || false); }} className="text-slate-400 hover:text-blue-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" title="Ajustes Clínicos (Descuento/Lab)">
                                         <Settings size={14}/>
                                       </button>
-                                  )}
-                                  <button onClick={() => eliminarPrestacionLocal(item.id, item.tempId)} className="text-red-400 hover:text-red-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" title="Eliminar Prestación">
+                                    )}
+                                    {item.estado !== 'cancelada' && (
+                                      <button onClick={() => handleCancelarPrestacion(item)} className="text-slate-400 hover:text-red-500 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" title="Anular Prestación (Mueve pagos a Saldo a Favor)">
+                                        <Ban size={14}/>
+                                      </button>
+                                    )}
+                                    <button onClick={() => eliminarPrestacionLocal(item.id, item.tempId)} disabled={item.avance > 0} className="text-red-400 hover:text-red-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm disabled:text-slate-300 disabled:cursor-not-allowed disabled:hover:bg-white" title={item.avance > 0 ? "No se puede eliminar un tratamiento iniciado" : "Eliminar Prestación"}>
                                     <Trash2 size={14}/>
                                   </button>
-                                </>
-                              ) : item.estado === 'realizado' ? (
-                                <span className="px-4 py-1.5 rounded-full text-[8px] font-black uppercase border bg-emerald-50 text-emerald-600 border-emerald-100">Realizado</span>
-                              ) : (
-                                <span className="px-4 py-1.5 rounded-full text-[8px] font-black uppercase border bg-yellow-50 text-yellow-600 border-yellow-100">En Proceso</span>
-                              )}
+                                  </>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
