@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   ArrowLeft, Loader2, CheckCircle2, 
-  XCircle, RefreshCw, Plus, X, Save, Trash2
+  XCircle, RefreshCw, Plus, X, Save, Trash2, Search
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -34,6 +34,7 @@ export default function DetalleArancelPage() {
   const [actualizandoId, setActualizandoId] = useState<string | null>(null)
   const [editandoPrecioId, setEditandoPrecioId] = useState<string | null>(null);
   const [nuevoPrecio, setNuevoPrecio] = useState<string>('');
+  const [busqueda, setBusqueda] = useState('')
 
   // 🔥 NUEVO ESTADO PARA LAS PESTAÑAS 🔥
   const [tabActiva, setTabActiva] = useState<'habilitados' | 'deshabilitados'>('habilitados');
@@ -286,7 +287,16 @@ export default function DetalleArancelPage() {
     return valor !== 'si' && valor !== 'sí';
   });
 
-  const itemsMostrados = tabActiva === 'habilitados' ? itemsHabilitados : itemsDeshabilitados;
+  let itemsMostrados = tabActiva === 'habilitados' ? itemsHabilitados : itemsDeshabilitados;
+
+  // 🔥 NUEVO FILTRADO POR BÚSQUEDA 🔥
+  if (busqueda) {
+    const busquedaLower = busqueda.toLowerCase();
+    itemsMostrados = itemsMostrados.filter(item => 
+      (item["Nombre Accion"] || '').toLowerCase().includes(busquedaLower) ||
+      (item["Codigo Accion"] || '').toLowerCase().includes(busquedaLower)
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] p-8 pb-20">
@@ -317,6 +327,18 @@ export default function DetalleArancelPage() {
            </button>
         </header>
 
+        {/* BUSCADOR */}
+        <div className="relative group">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+          <input 
+            type="text"
+            placeholder="Buscar por nombre o código..."
+            className="w-full max-w-md bg-white p-4 pl-12 rounded-2xl border border-slate-100 shadow-sm outline-none focus:ring-2 ring-blue-500/20 font-bold text-xs transition-all"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+        </div>
+
         {/* TABLA DE ACCIONES */}
         <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-100 overflow-hidden">
           
@@ -343,7 +365,14 @@ export default function DetalleArancelPage() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {itemsMostrados.length === 0 && (
-                  <tr><td colSpan={5} className="text-center p-20 text-slate-400 font-bold text-sm">No hay prestaciones en esta sección.</td></tr>
+                  <tr>
+                    <td colSpan={5} className="text-center p-20 text-slate-400 font-bold text-sm">
+                      {busqueda 
+                        ? 'No se encontraron prestaciones con ese criterio.' 
+                        : 'No hay prestaciones en esta sección.'
+                      }
+                    </td>
+                  </tr>
                 )}
                 {itemsMostrados.map((item) => {
                   const valorNormalizado = (item.Habilitado || "").trim().toLowerCase();
