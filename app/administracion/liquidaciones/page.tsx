@@ -133,7 +133,7 @@ export default function LiquidacionesPage() {
             if (fraccionPago > 1) fraccionPago = 1;
 
             const labADescontar = costoLab * fraccionPago;
-            let montoImponible = montoPago - labADescontar;
+            let montoImponible = montoPago; // NUNCA descontar el laboratorio del imponible para la comisión.
             if (montoImponible < 0) montoImponible = 0;
 
             if (estaTerminado) {
