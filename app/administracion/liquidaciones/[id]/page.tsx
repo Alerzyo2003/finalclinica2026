@@ -49,17 +49,19 @@ export default function DetalleLiquidacionPage() {
         .from('liquidaciones')
         .select('*')
         .eq('profesional_id', prof.id)
+        .gte('periodo_desde', fechaCortaInicio)
         .lte('periodo_hasta', fechaCortaFin)
         .eq('estado', 'Finalizada')
-        .order('fecha_pago', { ascending: true }); // Orden cronológico para repartir el dinero
+        .order('fecha_pago', { ascending: true });
 
       const liqsCerradas = liqsData || [];
 
-      // 3. Obtener Atenciones
+      // 3. Obtener Atenciones (solo del mes actual)
       const { data: atenciones } = await supabase
         .from('atenciones_realizadas')
         .select(`id, fecha, monto_cobrado, profesional_id, pacientes(nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
         .eq('profesional_id', prof.user_id)
+        .gte('fecha', inicioMes)
         .lte('fecha', finMes);
 
       // 4. Obtener Pagos
@@ -70,7 +72,7 @@ export default function DetalleLiquidacionPage() {
           pacientes ( nombre, apellido ),
           presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto )
         `)
-        // .gte('fecha_pago', inicioMes) // Se quita para traer el histórico completo y pagar comisiones de tratamientos terminados este mes pero pagados en meses anteriores.
+        .gte('fecha_pago', inicioMes)
         .lte('fecha_pago', finMes)
         .not('estado', 'eq', 'Anulado');
 
@@ -109,7 +111,7 @@ export default function DetalleLiquidacionPage() {
         if (fraccionPago > 1) fraccionPago = 1;
 
         const labAplicado = costoLab * fraccionPago;
-        let montoImponible = montoPago - labAplicado;
+        let montoImponible = montoPago; // NUNCA descontar el laboratorio del imponible para la comisión.
         if (montoImponible < 0) montoImponible = 0;
 
         const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
