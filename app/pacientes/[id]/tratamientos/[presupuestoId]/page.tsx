@@ -87,7 +87,7 @@ export default function DetalleTratamientoPage() {
   const [pacienteId, setPacienteId] = useState<string>('')
   const [presupuestoData, setPresupuestoData] = useState<any>(null)
   const [citasRelacionadas, setCitasRelacionadas] = useState<any[]>([])
-  
+  const [fechaEmisionPresupuesto, setFechaEmisionPresupuesto] = useState('')
   const [acciones, setAcciones] = useState<any[]>([]) 
   const [historialPaciente, setHistorialPaciente] = useState<any[]>([]) 
   
@@ -217,6 +217,11 @@ export default function DetalleTratamientoPage() {
         return nuevoHistorial.slice(-10);
     });
   }
+
+  const imprimirPresupuesto = () => {
+  setFechaEmisionPresupuesto(new Date().toLocaleDateString('es-CL'))
+  setTimeout(() => window.print(), 100)
+}
 
   const handleDeshacer = async () => {
     if (historialOdontograma.length === 0) return toast.info("No hay acciones para deshacer");
@@ -421,13 +426,7 @@ export default function DetalleTratamientoPage() {
 
       const nombreLower = nombreDisplay.toLowerCase();
       const esGeneral = [
-          "ortodoncia", "control", "evolución", "evolucion", "limpieza", "destartraje", 
-          "profilaxis", "rx", "radiografía", "radiografia", "panorámica", "scanner", 
-          "hialurónico", "blanqueamiento", "peeling", "evaluación", "evaluacion", 
-          "consulta", "modelo", "fotografía", "fotografia", "férula", "plano", 
-          "placa", "bótox", "botox", "presupuesto", "certificado", "receta", "insumos",
-          "contención", "contencion", "retenedor", "instalación", "instalacion", 
-          "retiro", "aparato", "estudio", "alta", "brackets", "frenillos"
+          
       ].some(palabra => nombreLower.includes(palabra));
 
       if (esGeneral) {
@@ -881,9 +880,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     const updatePayload = {
         observacion: nuevaObs, 
         nombre_prestacion: nuevaObs, 
-        precio_pactado: nuevoPactado,
-        costo_laboratorio: costoLabInput,
-        lab_pagado_por_dr: labPorDoctorInput
+        precio_pactado: nuevoPactado
     };
 
     if (id) {
@@ -908,9 +905,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         texto_db: nuevaObs, 
         precio_pactado: nuevoPactado, 
         display_pactado: nuevoPactado, 
-        display_saldo: nuevoPactado - a.display_abonado,
-        costo_laboratorio: costoLabInput,
-        lab_pagado_por_dr: labPorDoctorInput
+        display_saldo: nuevoPactado - a.display_abonado
     } : a));
     
     setModalEditarItem({abierto: false, item: null});
@@ -1145,8 +1140,8 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         }
     }
 
-    if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'DENTISTA') {
-        return toast.error("No tienes permisos para evolucionar tratamientos.");
+    if (!['ADMIN', 'DENTISTA', 'RECEPCIONISTA'].includes(perfil?.rol)) {
+      return toast.error("No tienes permisos para evolucionar tratamientos.");
     }
 
     // 🔥 ALERTA SI SE EVOLUCIONA TRABAJO DE OTRO DOCTOR 🔥
@@ -1169,7 +1164,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     setAvanceEvolucion(avanceInicial);
     // Si el usuario es admin, se resetea para que deba elegir.
     // Si es dentista, se mantiene el ID del usuario logueado que se cargó al inicio.
-    if (perfil?.rol === 'ADMIN') setProfesionalSeleccionado('');
+    if (['ADMIN', 'RECEPCIONISTA'].includes(perfil?.rol)) setProfesionalSeleccionado('');
     setModalEvolucionAbierto(true);
   }
 
@@ -1430,7 +1425,8 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
   if (cargando) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans" id="odontograma-container" onClick={() => setMenuContextual(null)}>
+    <>
+    <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans print:hidden" id="odontograma-container" onClick={() => setMenuContextual(null)}>
       
       {/* ======================================================= */}
       {/* PANEL LATERAL FINANCIERO (CLARO Y MODERNO) */}
@@ -1559,7 +1555,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
           </div>
             
             <div className="flex gap-2">
-                <button onClick={() => setModalExportar({abierto: true, tipo: 'imprimir'})} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
+                <button onClick={imprimirPresupuesto} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
                     <Printer size={16}/> Imprimir
                 </button>
             </div>
@@ -1980,34 +1976,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                    </div>
 
                    {/* SECCIÓN LABORATORIO E INSUMOS */}
-                   <div className="space-y-4 p-5 bg-purple-50 border border-purple-100 rounded-2xl">
-                      <div>
-                          <label className="text-[10px] font-black uppercase text-purple-600">Costo de Insumo / Laboratorio ($)</label>
-                          <p className="text-[9px] text-purple-400 font-bold mb-2">Se ha autocompletado si hay un laboratorio registrado.</p>
-                          <input 
-                              type="number" 
-                              placeholder="Ej: 35000"
-                              value={costoLabInput || ''}
-                              onChange={(e) => setCostoLabInput(Number(e.target.value))}
-                              className="w-full p-4 rounded-xl bg-white font-black text-sm text-slate-800 border border-purple-200 outline-none focus:border-purple-500 transition-all shadow-sm"
-                          />
-                      </div>
-                      
-                      {costoLabInput > 0 && (
-                          <div className="flex items-center justify-between pt-2">
-                              <span className="text-[10px] font-black uppercase text-slate-600">¿Material aportado por el Doctor?</span>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" className="sr-only peer" checked={labPorDoctorInput} onChange={(e) => setLabPorDoctorInput(e.target.checked)} />
-                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                              </label>
-                          </div>
-                      )}
-                      {costoLabInput > 0 && labPorDoctorInput && (
-                          <p className="text-[9px] font-bold text-purple-600 bg-purple-100 p-2 rounded-lg italic">
-                              💰 Estos ${costoLabInput.toLocaleString('es-CL')} se le reembolsarán al doctor en su liquidación.
-                          </p>
-                      )}
-                   </div>
+                   
 
                    <button onClick={handleGuardarAjustes} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-slate-800 transition-all">
                      Guardar Ajustes
@@ -2509,15 +2478,15 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                   <div className="space-y-6">
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-2">2. Registro Clínico Legal</h4>
                     <div className="space-y-4">
-                      {perfil?.rol === 'ADMIN' && (
-                        <div className="space-y-2 text-left">
+                      {['ADMIN', 'RECEPCIONISTA'].includes(perfil?.rol) && (
+                      <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Profesional Actuante</label>
-                          <select className="w-full p-4 rounded-xl bg-slate-50 font-bold text-xs uppercase border border-slate-200 text-slate-900 outline-none focus:border-blue-500 transition-all cursor-pointer" value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)}>
-                              <option value="">Seleccione su nombre...</option>
-                              {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-                          </select>
-                        </div>
-                      )}
+                      <select className="..." value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)}>
+                      <option value="">Seleccione su nombre...</option>
+                        {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                            </select>
+                          </div>
+                        )}
                       <div className="space-y-2 text-left">
                         <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Porcentaje de Avance</label>
                         <div className="flex items-center justify-center gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
@@ -2783,9 +2752,85 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
           </motion.div>
         )}
       </AnimatePresence>
-      </div> // <--- AGREGA ESTO
-  ) // <--- AGREGA ESTO
-} // <--- AGREGA ESTO
+      </div>
+
+      {/* VISTA DE IMPRESIÓN DEL PRESUPUESTO (solo visible al imprimir) */}
+      <div className="hidden print:block bg-white text-black p-6 font-sans text-[11px] leading-tight max-w-[800px] mx-auto">
+        <div className="text-center mb-6">
+          <h1 className="font-bold text-lg mb-1">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
+          <p className="text-[10px]">Plan de Tratamiento y Presupuesto</p>
+        </div>
+
+        <div className="mb-4 flex justify-between">
+          <div>
+            <p className="font-bold">Paciente:</p>
+            <p>{pacienteInfo?.nombre} {pacienteInfo?.apellido} · RUT: {pacienteInfo?.rut || 'Sin registrar'}</p>
+          </div>
+          <div className="text-right">
+            <p><span className="font-bold">Fecha emisión:</span> {fechaEmisionPresupuesto}</p>
+            <p><span className="font-bold">Plan N°:</span> {idURL.substring(0,8).toUpperCase()}</p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <p><span className="font-bold">Profesional responsable:</span> Dr(a). {presupuestoData?.profesionales ? `${presupuestoData.profesionales.nombre} ${presupuestoData.profesionales.apellido}` : 'Sin asignar'}</p>
+          <p><span className="font-bold">Tratamiento:</span> {presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}</p>
+        </div>
+
+        {seccionesVisibles.map((seccion) => {
+          const itemsSeccion = acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto)
+          if (itemsSeccion.length === 0) return null
+          return (
+            <div key={seccion} className="mb-6">
+              <p className="font-bold underline mb-2">{seccion}</p>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-black">
+                    <th className="py-1 pr-2 w-20">Pieza/Zona</th>
+                    <th className="py-1 pr-2">Prestación</th>
+                    <th className="py-1 pr-2 text-center w-16">Estado</th>
+                    <th className="py-1 text-right w-24">Pactado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemsSeccion.map((item: any, idx: number) => (
+                    <tr key={idx} className="border-b border-slate-200">
+                      <td className="py-1 pr-2">{item.zona || item.diente_id || 'General'}{item.cara ? ` (${item.cara})` : ''}</td>
+                      <td className="py-1 pr-2 uppercase">{item.display_nombre}</td>
+                      <td className="py-1 pr-2 text-center capitalize">{item.estado}</td>
+                      <td className="py-1 text-right">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        })}
+
+        <div className="mt-8 border-t border-black pt-4">
+          <div className="flex justify-between font-bold">
+            <span>Total del Plan:</span>
+            <span>${totalPlan.toLocaleString('es-CL')}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Total Abonado:</span>
+            <span>${abonadoPlan.toLocaleString('es-CL')}</span>
+          </div>
+          <div className="flex justify-between font-bold">
+            <span>Saldo Pendiente:</span>
+            <span>${(totalPlan - abonadoPlan).toLocaleString('es-CL')}</span>
+          </div>
+        </div>
+
+        <div className="mt-16 text-center border-t border-black pt-4 text-[10px]">
+          <p className="font-bold uppercase">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</p>
+          <p>Venancia Leiva 1871, Región Metropolitana, La Pintana | +56966467641 / +56994464662</p>
+        </div>
+      </div>
+      </>
+  )
+}
+
     function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFaceClick, invert }: any) {
       const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
       const faceLeft = screenLeft ? 'D' : 'M';
