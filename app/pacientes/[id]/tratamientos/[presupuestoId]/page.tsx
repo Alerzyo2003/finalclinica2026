@@ -1568,7 +1568,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                   <Undo2 size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Deshacer</span>
               </button>
               <button onClick={() => setMostrarLeyenda(true)} className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all shadow-sm flex items-center gap-2">
-                  <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Leyenda</span>
+                  <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Simbología</span>
               </button>
           </div>
           <div className="w-full overflow-x-auto pb-4">
@@ -2750,6 +2750,240 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                   <X size={20}/>
               </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+      {/* 🔥 MODAL DE LEYENDA DEL ODONTOGRAMA 🔥 */}
+      <AnimatePresence>
+        {mostrarLeyenda && (
+          <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <HelpCircle size={20} className="text-emerald-400" />
+                  <h3 className="text-lg font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
+                </div>
+                <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8 custom-scrollbar text-slate-800">
+                 
+                 {/* Colores Base */}
+                 <div>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Colores Base</h4>
+                   <div className="space-y-4">
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-blue-500 shadow-sm"></div>
+                        <span className="text-xs font-bold uppercase text-slate-600">Realizado / Preexistencia</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-red-500 shadow-sm"></div>
+                        <span className="text-xs font-bold uppercase text-slate-600">Pendiente (A tratar)</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-slate-900 shadow-sm"></div>
+                        <span className="text-xs font-bold uppercase text-slate-600">Lesión (Caries, Fractura)</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-sm"></div>
+                        <span className="text-xs font-bold uppercase text-slate-600">Sano / Alta</span>
+                     </div>
+                   </div>
+                 </div>
+                 
+                 {/* Iconos de Tratamientos/Hallazgos */}
+                 <div>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Símbolos Frecuentes</h4>
+                   <div className="grid grid-cols-2 gap-4">
+                     {ICONOS_DISPONIBLES.slice(0, 10).map(ico => (
+                       <div key={ico.id} className="flex items-center gap-2">
+                         <div className="w-7 h-7 shrink-0">
+                            <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                               <LogoRender iconoKey={ico.id} hallazgo={ico.label} colorOverride="#64748b" />
+                            </svg>
+                         </div>
+                         <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{ico.label}</span>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+                 
+              </div>
+              
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                 <button onClick={() => setMostrarLeyenda(false)} className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 transition-all rounded-xl text-xs font-black uppercase shadow-lg">
+                   Cerrar Simbología
+                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {mostrarLeyenda && (
+          <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <HelpCircle size={20} className="text-emerald-400" />
+                  <h3 className="text-lg font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
+                </div>
+                <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto flex flex-col gap-8 custom-scrollbar text-slate-800">
+                 
+                 {/* Colores Base */}
+                 <div>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Simbología de Colores</h4>
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-blue-500 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Preexistencia / Realizado</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-red-500 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Pendiente (A tratar)</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-slate-900 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Lesión / Mal estado</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Sano / Alta</span>
+                     </div>
+                   </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   {/* Preexistencias */}
+                   <div>
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Preexistencias (Azul)</h4>
+                     <div className="grid grid-cols-2 gap-4">
+                       {PREEXISTENCIAS_LISTA.map(pre => (
+                         <div key={pre} className="flex items-center gap-2">
+                           <div className="w-7 h-7 shrink-0">
+                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                                 <LogoRender hallazgo={pre} colorOverride="#3b82f6" />
+                              </svg>
+                           </div>
+                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{pre}</span>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+
+                   {/* Lesiones */}
+                   <div>
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Lesiones (Oscuro)</h4>
+                     <div className="grid grid-cols-2 gap-4">
+                       {LESIONES_LISTA.map(les => (
+                         <div key={les} className="flex items-center gap-2">
+                           <div className="w-7 h-7 shrink-0">
+                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                                 <LogoRender hallazgo={les} colorOverride="#0f172a" />
+                              </svg>
+                           </div>
+                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{les}</span>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 </div>
+                 
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                 <button onClick={() => setMostrarLeyenda(false)} className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 transition-all rounded-xl text-xs font-black uppercase shadow-lg">
+                   Cerrar Simbología
+                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {mostrarLeyenda && (
+          <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <HelpCircle size={20} className="text-emerald-400" />
+                  <h3 className="text-lg font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
+                </div>
+                <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto flex flex-col gap-8 custom-scrollbar text-slate-800">
+                 
+                 {/* Colores Base */}
+                 <div>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Simbología de Colores</h4>
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-blue-500 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Preexistencia / Realizado</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-red-500 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Pendiente (A tratar)</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-slate-900 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Lesión / Mal estado</span>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-sm shrink-0"></div>
+                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Sano / Alta</span>
+                     </div>
+                   </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   {/* Preexistencias */}
+                   <div>
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Preexistencias (Azul)</h4>
+                     <div className="grid grid-cols-2 gap-4">
+                       {PREEXISTENCIAS_LISTA.map(pre => (
+                         <div key={pre} className="flex items-center gap-2">
+                           <div className="w-7 h-7 shrink-0">
+                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                                 <LogoRender hallazgo={pre} colorOverride="#3b82f6" />
+                              </svg>
+                           </div>
+                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{pre}</span>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+
+                   {/* Lesiones */}
+                   <div>
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Lesiones (Oscuro)</h4>
+                     <div className="grid grid-cols-2 gap-4">
+                       {LESIONES_LISTA.map(les => (
+                         <div key={les} className="flex items-center gap-2">
+                           <div className="w-7 h-7 shrink-0">
+                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                                 <LogoRender hallazgo={les} colorOverride="#0f172a" />
+                              </svg>
+                           </div>
+                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{les}</span>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 </div>
+                 
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                 <button onClick={() => setMostrarLeyenda(false)} className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 transition-all rounded-xl text-xs font-black uppercase shadow-lg">
+                   Cerrar Simbología
+                 </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
       </div>
