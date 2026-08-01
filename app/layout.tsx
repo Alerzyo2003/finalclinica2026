@@ -85,55 +85,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [busqueda])
 
   async function ejecutarBusqueda(term: string) {
-    setBuscando(true);
-    setMostrarResultados(true);
- 
-    // Intenta usar la función de búsqueda inteligente (RPC)
-    const { data: rpcData, error: rpcError } = await supabase.rpc('buscar_pacientes', {
-        termino_busqueda: term.trim()
-    }).limit(6);
- 
-    // Si la RPC falla (ej. código 404 Not Found), usa el método de respaldo
-    if (rpcError && rpcError.code === 'PGRST202') {
-        console.warn('Búsqueda RPC no encontrada, usando método de respaldo. Considere instalar la función SQL para mejorar la búsqueda.');
-        toast.warning('Búsqueda inteligente no disponible. Usando búsqueda básica.');
- 
-        // --- MÉTODO DE RESPALDO (FALLBACK) ---
-        const palabras = term.trim().split(/\s+/).filter(p => p.length > 0);
-        let fallbackQuery = supabase.from('pacientes').select('id, nombre, apellido, rut');
+  setBuscando(true)
+  setMostrarResultados(true)
 
-        if (palabras.length > 0) {
-          palabras.forEach(palabra => {
-            const palabraRut = palabra.replace(/[^0-9kK]/gi, '').toUpperCase();
-            let orQuery = `nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%`;
-            if (palabraRut.length > 0) {
-              orQuery += `,rut.ilike.%${palabraRut}%`;
-            }
-            fallbackQuery = fallbackQuery.or(orQuery);
-          });
-        }
+  const palabras = term.trim().split(/\s+/).filter(p => p.length > 0)
+  let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
 
-        const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(6);
- 
-        if (fallbackError) {
-            console.error('Error en búsqueda de respaldo:', fallbackError);
-            toast.error('La búsqueda falló completamente.');
-            setResultados([]);
-        } else {
-            setResultados(fallbackData || []);
-        }
-    } else if (rpcError) {
-        // Otro tipo de error en la RPC
-        console.error('Error en búsqueda RPC:', rpcError);
-        toast.error('Ocurrió un error con la búsqueda.');
-        setResultados([]);
-    } else {
-        // La búsqueda RPC fue exitosa
-        setResultados(rpcData || []);
-    }
- 
-    setBuscando(false);
+  palabras.forEach((palabra) => {
+    query = query.or(`nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%,rut.ilike.%${palabra}%`)
+  })
+
+  const { data, error } = await query.limit(6)
+
+  if (error) {
+    console.error('Error en búsqueda de pacientes:', error)
+    toast.error('Ocurrió un error al buscar pacientes.')
+    setResultados([])
+  } else {
+    setResultados(data || [])
   }
+
+  setBuscando(false)
+}
 
   useEffect(() => {
     const getUserData = async () => {
@@ -252,9 +225,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                             <motion.div 
                               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} 
                               className="fixed md:absolute top-[140px] md:top-[100%] left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0 bg-white shadow-2xl rounded-3xl md:rounded-b-[2rem] md:rounded-tl-none border border-slate-100 p-4 z-[110] w-full max-w-xs md:w-[260px] text-left"
-                              onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); setShowMiMenu(false); }}
                             >
                               <MenuOption href="/mi-menu/plantillas" label="Plantillas" icon={<Package size={14}/>} onClick={() => setShowMiMenu(false)} />
+                                <MenuOption href="/mi-menu/liquidacion" label="Liquidaciones" icon={<Calculator size={14}/>} onClick={() => setShowMiMenu(false)} />
                             </motion.div>
                           </>
                         )}
