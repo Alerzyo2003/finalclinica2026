@@ -1,8 +1,19 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { LogIn, Loader2, UserCircle, Lock } from 'lucide-react'
+import { UserCircle, Lock, Eye, EyeOff, Shield, TrendingUp, Check, ArrowRight, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+// ── Paleta de marca AureoDent ──────────────────────────────
+const NAVY_DEEP = '#060B12'
+const NAVY = '#0A1420'
+const NAVY_LIGHT = '#0D1A2B'
+const GOLD = '#D4A34E'
+const GOLD_LIGHT = '#F3D9A0'
+const GOLD_DEEP = '#9C7A34'
+const CREAM = '#F5F1E7'
+const MUTED = '#7C8699'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -10,21 +21,23 @@ export default function LoginPage() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
+  // Estado puramente visual — no altera la lógica de autenticación
+  const [showPassword, setShowPassword] = useState(false)
+  const [recordarme, setRecordarme] = useState(true)
+
   // URL de Supabase proporcionada
   const LOGO_URL = "https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/logos/logo.jpeg";
-  // Color dorado elegante
-  const GOLD_COLOR = "#D4AF37";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (cargando) return
-    
+
     setCargando(true)
     setError('')
 
     try {
       const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9.]/g, "");
-      
+
       if (!cleanUsername) {
         setError('Ingrese un nombre de usuario válido')
         setCargando(false)
@@ -33,9 +46,9 @@ export default function LoginPage() {
 
       const virtualEmail = `${cleanUsername}@dentapro.com`;
 
-      const { data, error: authError } = await supabase.auth.signInWithPassword({ 
-        email: virtualEmail, 
-        password 
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: virtualEmail,
+        password
       })
 
       if (authError) {
@@ -54,125 +67,441 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FDFDFD] flex items-center justify-center p-6 font-sans relative overflow-hidden text-left">
-      {/* Luces de fondo decorativas */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#F9F6EE] rounded-full blur-[120px] opacity-60" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-slate-100 rounded-full blur-[120px] opacity-60" />
+    <main className="min-h-screen w-full flex font-body" style={{ backgroundColor: NAVY }}>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+      />
+      <style>{`
+        .font-display { font-family: 'Fraunces', ui-serif, Georgia, serif; }
+        .font-body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+        @media (prefers-reduced-motion: reduce) {
+          * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+        }
+      `}</style>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="bg-white w-full max-w-md rounded-[3.5rem] p-12 shadow-[0_32px_64px_-15px_rgba(0,0,0,0.08)] border border-slate-50 relative z-10 text-left"
+      {/* ── PANEL IZQUIERDO — identidad de marca ── */}
+      <div
+        className="hidden lg:flex lg:w-1/2 relative flex-col justify-between px-16 py-14 overflow-hidden"
+        style={{ background: `linear-gradient(160deg, ${NAVY} 0%, ${NAVY_DEEP} 100%)` }}
       >
-        
-        {/* ENCABEZADO CON LOGO DE SUPABASE */}
-        <div className="flex flex-col items-center mb-10 text-center">
-          <motion.div 
-            whileHover={{ scale: 1.05 }}
-            className="mb-6 overflow-hidden rounded-[2.2rem] shadow-xl border border-slate-50 w-[120px] h-[120px] bg-white flex items-center justify-center"
-          >
-            <img 
-              src={LOGO_URL} 
-              alt="Logo AureoDent" 
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                console.error("❌ Error cargando imagen desde Supabase");
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          </motion.div>
-          
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none">
-            Aureo<span style={{ color: GOLD_COLOR }}>Dent</span>
-          </h1>
-          <div className="flex items-center gap-3 mt-4">
-            <div className="h-[1px] w-8 bg-slate-200" />
-            <p className="text-slate-400 font-black uppercase text-[8px] tracking-[0.5em]">Gestión Clínica Exclusiva</p>
-            <div className="h-[1px] w-8 bg-slate-200" />
+        <OrbitField />
+        <ClassicalBust />
+
+        {/* Emblema circular */}
+        <motion.div
+          initial={{ opacity: 0, y: -16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="relative z-10 flex justify-center pt-6"
+        >
+          <div className="relative">
+            <div
+              className="w-24 h-24 rounded-full flex items-center justify-center"
+              style={{ border: `1.5px solid ${GOLD}`, boxShadow: `0 0 0 1px rgba(212,163,78,0.15), 0 0 40px rgba(212,163,78,0.08)` }}
+            >
+              <span className="font-display italic text-5xl" style={{ color: GOLD_LIGHT }}>A</span>
+            </div>
+            <Spark className="absolute -top-1 -right-1 w-4 h-4" delay={0.6} />
           </div>
+        </motion.div>
+
+        {/* Wordmark */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="relative z-10 text-center mt-6"
+        >
+          <h1 className="font-display font-bold text-[2.6rem] tracking-[0.12em]" style={{ color: CREAM }}>
+            AUREO<span style={{ color: GOLD_LIGHT }}>DENT</span>
+          </h1>
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.45em]" style={{ color: GOLD }}>
+            Panel clínico
+          </p>
+
+          <div className="flex items-center justify-center gap-3 mt-6">
+            <span className="w-1 h-1 rotate-45" style={{ backgroundColor: GOLD }} />
+          </div>
+
+          <p className="mt-6 text-[15px] leading-relaxed max-w-[320px] mx-auto" style={{ color: '#B9C2D0' }}>
+            El estándar <span style={{ color: GOLD_LIGHT }}>dorado</span> en gestión de clínicas dentales.
+          </p>
+        </motion.div>
+
+        {/* Swoosh dorado */}
+        <div className="relative z-10 -mb-2">
+          <BottomSwoosh />
         </div>
 
-        {/* Formulario */}
-        <form onSubmit={handleLogin} className="space-y-7 text-left">
-          <div className="space-y-5 text-left">
-            
-            {/* Campo: Identificador */}
-            <div className="space-y-2.5 text-left">
-              <label htmlFor="username" className="text-[10px] font-black text-slate-400 ml-5 uppercase tracking-widest flex items-center gap-2 text-left">
-                <UserCircle size={14} style={{ color: GOLD_COLOR }} /> Usuario del Sistema
-              </label>
-              <input 
-                id="username"
-                type="text" 
-                placeholder="ej: dr.vargas" 
-                className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#D4AF37]/30 focus:bg-white outline-none text-slate-900 font-bold transition-all placeholder:text-slate-300 text-left"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required 
+        {/* Features */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="relative z-10 grid grid-cols-3 gap-6"
+        >
+          <Feature icon={<Shield size={18} style={{ color: GOLD }} />} title="Seguro" desc="Protegemos tu información" />
+          <Feature icon={<TrendingUp size={18} style={{ color: GOLD }} />} title="Eficiente" desc="Todo tu negocio en un solo lugar" />
+          <Feature icon={<ToothIcon size={18} style={{ color: GOLD }} />} title="Especializado" desc="Diseñado para clínicas dentales" />
+        </motion.div>
+      </div>
+
+      {/* ── PANEL DERECHO — formulario ── */}
+      <div
+        className="flex-1 flex items-center justify-center p-6 sm:p-12 relative"
+        style={{ background: `linear-gradient(160deg, ${NAVY_LIGHT} 0%, ${NAVY} 100%)` }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+          className="w-full max-w-[380px]"
+        >
+          {/* Encabezado móvil */}
+          <div className="flex lg:hidden justify-center mb-8">
+            <div
+              className="w-16 h-16 rounded-full overflow-hidden"
+              style={{ border: `1.5px solid ${GOLD}` }}
+            >
+              <img
+                src={LOGO_URL}
+                alt="Logo AureoDent"
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
+            </div>
+          </div>
+
+          {/* Ícono + halo */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.15 }}
+            className="flex flex-col items-center mb-8"
+          >
+            <div className="relative w-24 mb-3">
+              <TopHalo />
+              <div className="absolute inset-x-0 -bottom-1 flex justify-center">
+                <div
+                  className="w-11 h-11 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(212,163,78,0.08)', border: `1px solid rgba(212,163,78,0.35)` }}
+                >
+                  <ToothIcon size={20} style={{ color: GOLD_LIGHT }} />
+                </div>
+              </div>
+              <Spark className="absolute top-0 right-1 w-3 h-3" delay={0.9} />
+            </div>
+
+            <p className="text-[11px] font-semibold uppercase tracking-[0.35em]" style={{ color: GOLD }}>
+              Bienvenido de nuevo
+            </p>
+            <h2 className="font-display text-[2rem] leading-tight mt-2 text-center" style={{ color: CREAM }}>
+              Ingresa <span className="italic" style={{ color: GOLD_LIGHT }}>a tu</span> clínica
+            </h2>
+            <div className="w-10 h-px mt-4" style={{ backgroundColor: GOLD_DEEP }} />
+          </motion.div>
+
+          <motion.form
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            onSubmit={handleLogin}
+            className="space-y-5 text-left"
+          >
+            {/* Campo: Identificador */}
+            <div className="space-y-2">
+              <label htmlFor="username" className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2" style={{ color: GOLD }}>
+                <UserCircle size={13} /> Usuario del sistema
+              </label>
+              <div className="relative">
+                <input
+                  id="username"
+                  type="text"
+                  placeholder="ej: dr.vargas"
+                  className="w-full pl-5 pr-12 py-4 rounded-2xl outline-none font-medium transition-all"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    border: '1.5px solid rgba(212,163,78,0.18)',
+                    color: CREAM,
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)' }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(212,163,78,0.18)'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)' }}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+                <UserCircle size={17} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: GOLD_DEEP }} />
+              </div>
             </div>
 
             {/* Campo: Contraseña */}
-            <div className="space-y-2.5 text-left">
-              <label htmlFor="password" className="text-[10px] font-black text-slate-400 ml-5 uppercase tracking-widest flex items-center gap-2 text-left">
-                <Lock size={14} style={{ color: GOLD_COLOR }} /> Clave de Acceso
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2" style={{ color: GOLD }}>
+                <Lock size={13} /> Clave de acceso
               </label>
-              <input 
-                id="password"
-                type="password" 
-                placeholder="••••••••" 
-                className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#D4AF37]/30 focus:bg-white outline-none text-slate-900 font-bold transition-all placeholder:text-slate-300 text-left"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required 
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="w-full pl-5 pr-12 py-4 rounded-2xl outline-none font-medium transition-all"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    border: '1.5px solid rgba(212,163,78,0.18)',
+                    color: CREAM,
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)' }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(212,163,78,0.18)'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)' }}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2"
+                  style={{ color: GOLD_DEEP }}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
             </div>
-          </div>
-          
-          <AnimatePresence>
-            {error && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95 }} 
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="text-red-500 text-[10px] font-black uppercase text-center bg-red-50/50 p-4 rounded-2xl border border-red-100/50 backdrop-blur-sm"
-              >
-                {error}
-              </motion.div>
-            )}
-          </AnimatePresence>
 
-          <div className="pt-4 text-left">
-            <button 
+            {/* Recordarme + olvidaste clave */}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setRecordarme((v) => !v)}
+                className="flex items-center gap-2.5 group"
+              >
+                <span
+                  className="w-4 h-4 rounded flex items-center justify-center transition-colors"
+                  style={{
+                    backgroundColor: recordarme ? GOLD : 'transparent',
+                    border: `1.5px solid ${recordarme ? GOLD : 'rgba(212,163,78,0.4)'}`,
+                  }}
+                >
+                  <AnimatePresence>
+                    {recordarme && (
+                      <motion.span
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ duration: 0.15 }}
+                      >
+                        <Check size={11} strokeWidth={3} color={NAVY_DEEP} />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </span>
+                <span className="text-[13px]" style={{ color: '#B9C2D0' }}>Recordarme</span>
+              </button>
+
+              <Link href="/recuperar-clave" className="text-[13px] hover:underline" style={{ color: GOLD_LIGHT }}>
+                ¿Olvidaste tu clave?
+              </Link>
+            </div>
+
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  className="text-[11px] font-semibold text-center px-4 py-3 rounded-xl"
+                  style={{ color: '#E9A79C', backgroundColor: 'rgba(179,66,58,0.15)', border: '1px solid rgba(179,66,58,0.3)' }}
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.button
               type="submit"
               disabled={cargando}
-              style={{ backgroundColor: '#1a1a1a' }}
-              className="w-full text-white py-6 rounded-[2.2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:opacity-90 transition-all active:scale-[0.98] flex justify-center items-center gap-3 disabled:bg-slate-100 disabled:text-slate-400 group"
+              whileHover={{ scale: cargando ? 1 : 1.01 }}
+              whileTap={{ scale: cargando ? 1 : 0.98 }}
+              className="w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] flex justify-center items-center gap-3 disabled:opacity-50"
+              style={{
+                background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 55%, ${GOLD_DEEP} 100%)`,
+                color: NAVY_DEEP,
+                boxShadow: '0 12px 28px -8px rgba(212,163,78,0.45)',
+              }}
             >
               {cargando ? (
                 <>
-                  <Loader2 className="animate-spin" size={20} />
+                  <Loader2 className="animate-spin" size={18} />
                   <span>Verificando...</span>
                 </>
               ) : (
                 <>
-                  <LogIn size={18} className="group-hover:translate-x-1 transition-transform" />
-                  <span>Entrar al Sistema</span>
+                  <ArrowRight size={16} />
+                  <span>Entrar al sistema</span>
                 </>
               )}
-            </button>
-          </div>
-        </form>
+            </motion.button>
+          </motion.form>
 
-        {/* Decoración final */}
-        <div className="mt-14 flex flex-col items-center gap-5">
-          <div className="flex gap-1">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: GOLD_COLOR }} />
-            <div className="w-8 h-1.5 bg-slate-100 rounded-full" />
-          </div>
-        </div>
-      </motion.div>
+          {/* Protección */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+            className="mt-8"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1" style={{ backgroundColor: 'rgba(212,163,78,0.18)' }} />
+              <Shield size={14} style={{ color: GOLD_DEEP }} />
+              <div className="h-px flex-1" style={{ backgroundColor: 'rgba(212,163,78,0.18)' }} />
+            </div>
+            <p className="text-center text-[12px] mt-4" style={{ color: MUTED }}>
+              Tu información está protegida
+            </p>
+          </motion.div>
+
+          <p className="text-center text-[11px] mt-10" style={{ color: '#4E586B' }}>
+            © {new Date().getFullYear()} <span className="font-semibold" style={{ color: GOLD_DEEP }}>AUREODENT</span> • Todos los derechos reservados
+          </p>
+        </motion.div>
+      </div>
     </main>
+  )
+}
+
+// ── Subcomponentes decorativos ─────────────────────────────
+
+function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center"
+        style={{ border: '1px solid rgba(212,163,78,0.3)', backgroundColor: 'rgba(212,163,78,0.05)' }}
+      >
+        {icon}
+      </div>
+      <p className="text-[12px] font-semibold" style={{ color: CREAM }}>{title}</p>
+      <p className="text-[11px] leading-snug" style={{ color: MUTED }}>{desc}</p>
+    </div>
+  )
+}
+
+function Spark({ className = '', delay = 0 }: { className?: string; delay?: number }) {
+  return (
+    <motion.svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill={GOLD_LIGHT}
+      initial={{ opacity: 0.3, scale: 0.8 }}
+      animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
+      transition={{ duration: 2.4, repeat: Infinity, delay, ease: 'easeInOut' }}
+    >
+      <path d="M12 0 L14 10 L24 12 L14 14 L12 24 L10 14 L0 12 L10 10 Z" />
+    </motion.svg>
+  )
+}
+
+function ToothIcon({ size = 18, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={style}>
+      <path
+        d="M12 3.2c-2.6 0-4.7 1.7-4.7 4.4 0 1.3.4 2.1.7 3.4.3 1.3.3 2.6.1 3.9-.1.9-.4 1.9-.6 2.8-.1.6.1 1.3.7 1.5.6.2 1.2-.2 1.4-1 .3-1 .4-2.2 1-2.2s.7 1.2 1 2.2c.2.8.8 1.2 1.4 1 .6-.2.8-.9.7-1.5-.2-.9-.5-1.9-.6-2.8-.2-1.3-.2-2.6.1-3.9.3-1.3.7-2.1.7-3.4 0-2.7-2.1-4.4-4.6-4.4Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function OrbitField() {
+  return (
+    <svg className="absolute -top-16 -right-24 w-[420px] h-[420px] opacity-40 pointer-events-none" viewBox="0 0 420 420" fill="none">
+      <circle cx="210" cy="210" r="120" stroke="rgba(212,163,78,0.35)" strokeWidth="1" />
+      <circle cx="210" cy="210" r="170" stroke="rgba(212,163,78,0.18)" strokeWidth="1" />
+      <circle cx="160" cy="150" r="60" stroke="rgba(212,163,78,0.25)" strokeWidth="1" />
+    </svg>
+  )
+}
+
+function BottomSwoosh() {
+  return (
+    <svg viewBox="0 0 600 120" className="w-full h-16" fill="none" preserveAspectRatio="none">
+      <motion.path
+        d="M-20,90 C150,10 400,140 640,40"
+        stroke="url(#swooshGrad)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={{ duration: 1.8, ease: 'easeInOut', delay: 0.4 }}
+      />
+      <defs>
+        <linearGradient id="swooshGrad" x1="0" y1="0" x2="600" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor={GOLD_LIGHT} />
+          <stop offset="1" stopColor={GOLD} stopOpacity="0.2" />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
+function TopHalo() {
+  return (
+    <svg viewBox="0 0 200 80" className="w-full" fill="none">
+      <motion.path
+        d="M20,70 Q100,-10 180,70"
+        stroke={GOLD}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 0.8 }}
+        transition={{ duration: 1.2, ease: 'easeInOut' }}
+      />
+    </svg>
+  )
+}
+
+// Busto clásico estilizado (ilustración vectorial original, no una reproducción fotográfica)
+function ClassicalBust() {
+  return (
+    <svg
+      className="absolute -left-16 bottom-0 h-[92%] w-auto opacity-[0.9] pointer-events-none"
+      viewBox="0 0 340 600"
+      fill="none"
+      preserveAspectRatio="xMinYMax meet"
+    >
+      <defs>
+        <linearGradient id="bustGrad" x1="0" y1="0" x2="340" y2="600" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#2A3547" />
+          <stop offset="1" stopColor="#131B27" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M40,600 L40,420 C40,360 55,300 90,260 C75,240 68,215 70,190
+           C58,182 50,168 52,150 C54,132 68,120 84,120
+           C90,95 108,72 132,58 C120,44 118,26 132,14
+           C146,2 168,4 178,18 C186,10 198,8 208,14
+           C222,22 224,40 214,52 C236,64 252,86 258,112
+           C274,114 286,128 286,146 C286,164 274,180 258,184
+           C258,208 250,230 236,248 C264,286 280,336 280,392
+           L280,600 Z"
+        fill="url(#bustGrad)"
+      />
+      <path
+        d="M40,600 L40,420 C40,360 55,300 90,260 C75,240 68,215 70,190
+           C58,182 50,168 52,150 C54,132 68,120 84,120
+           C90,95 108,72 132,58 C120,44 118,26 132,14
+           C146,2 168,4 178,18 C186,10 198,8 208,14
+           C222,22 224,40 214,52 C236,64 252,86 258,112
+           C274,114 286,128 286,146 C286,164 274,180 258,184
+           C258,208 250,230 236,248 C264,286 280,336 280,392
+           L280,600"
+        stroke="rgba(212,163,78,0.25)"
+        strokeWidth="1.5"
+      />
+    </svg>
   )
 }
