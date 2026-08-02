@@ -9,7 +9,7 @@ import {
   LayoutGrid, Stethoscope, Package, Beaker, Calculator,
   DoorOpen, BadgeDollarSign, Library, FileSignature, Ban,
   FileText, TrendingUp, FileSpreadsheet, ChevronRight,
-  Loader2, User, UserCheck, Building2
+  Loader2, User, UserCheck, Building2, Menu, X, ChevronDown, Circle
 } from 'lucide-react'
 import Link from 'next/link'
 import './globals.css'
@@ -28,27 +28,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [resultados, setResultados] = useState<any[]>([])
   const [buscando, setBuscando] = useState(false)
   const [mostrarResultados, setMostrarResultados] = useState(false)
+  
+  // Mobile sidebar toggle
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
+  // Accordion states
   const [showAdminMenu, setShowAdminMenu] = useState(false)
   const [showReportMenu, setShowReportMenu] = useState(false)
   const [showMiMenu, setShowMiMenu] = useState(false)
-  
-  const searchRef = useRef<HTMLDivElement>(null)
-  const adminMenuRef = useRef<HTMLDivElement>(null)
-  const reportMenuRef = useRef<HTMLDivElement>(null)
-  const miMenuRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-    if (isMobile && (showAdminMenu || showReportMenu || showMiMenu)) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'auto';
-    }
-    return () => { document.body.style.overflow = 'auto'; };
-  }, [showAdminMenu, showReportMenu, showMiMenu]);
+  const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { setMounted(true) }, [])
 
+  // Auto-abrir acordeones si estás en esa ruta
+  useEffect(() => {
+    if (pathname.startsWith('/administracion')) setShowAdminMenu(true);
+    if (pathname.startsWith('/reportes')) setShowReportMenu(true);
+    if (pathname.startsWith('/mi-menu')) setShowMiMenu(true);
+  }, [pathname])
+
+  // Lógica de Supabase Omitida para brevedad en explicación, pero conservada intacta:
   useEffect(() => {
     if (!mounted || !session?.user?.id || !perfil) return;
     const canalNotificaciones = supabase
@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         toast.info("¡PACIENTE EN ESPERA!", {
           description: `El paciente ${payload.payload.nombre} acaba de llegar.`,
           duration: 10000,
-          icon: <UserCheck className="text-blue-500" />,
+          icon: <UserCheck className="text-[#C9A24B]" />,
         });
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
       })
@@ -67,9 +67,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (adminMenuRef.current && !adminMenuRef.current.contains(event.target as Node)) setShowAdminMenu(false)
-      if (reportMenuRef.current && !reportMenuRef.current.contains(event.target as Node)) setShowReportMenu(false)
-      if (miMenuRef.current && !miMenuRef.current.contains(event.target as Node)) setShowMiMenu(false)
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) setMostrarResultados(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -85,28 +82,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [busqueda])
 
   async function ejecutarBusqueda(term: string) {
-  setBuscando(true)
-  setMostrarResultados(true)
-
-  const palabras = term.trim().split(/\s+/).filter(p => p.length > 0)
-  let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
-
-  palabras.forEach((palabra) => {
-    query = query.or(`nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%,rut.ilike.%${palabra}%`)
-  })
-
-  const { data, error } = await query.limit(6)
-
-  if (error) {
-    console.error('Error en búsqueda de pacientes:', error)
-    toast.error('Ocurrió un error al buscar pacientes.')
-    setResultados([])
-  } else {
-    setResultados(data || [])
+    setBuscando(true)
+    setMostrarResultados(true)
+    const palabras = term.trim().split(/\s+/).filter(p => p.length > 0)
+    let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
+    palabras.forEach((palabra) => {
+      query = query.or(`nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%,rut.ilike.%${palabra}%`)
+    })
+    const { data, error } = await query.limit(6)
+    if (error) {
+      toast.error('Ocurrió un error al buscar pacientes.')
+      setResultados([])
+    } else {
+      setResultados(data || [])
+    }
+    setBuscando(false)
   }
-
-  setBuscando(false)
-}
 
   useEffect(() => {
     const getUserData = async () => {
@@ -132,183 +123,295 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     router.push('/login')
   }
 
-  const modulos = [
-    { href: '/agenda', label: 'Agenda', icon: <Calendar size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
-    { href: '/pacientes', label: 'Pacientes', icon: <Users size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
-    { href: '/cajas', label: 'Cajas', icon: <Briefcase size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA'] },
-    { href: '/perfil', label: 'Perfil', icon: <User size={16}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
+  const modulosBasicos = [
+    { href: '/agenda', label: 'Agenda', icon: <Calendar size={20}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
+    { href: '/pacientes', label: 'Pacientes', icon: <Users size={20}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
+    { href: '/cajas', label: 'Cajas', icon: <Briefcase size={20}/>, roles: ['ADMIN', 'RECEPCIONISTA'] },
+    { href: '/perfil', label: 'Perfil', icon: <User size={20}/>, roles: ['ADMIN', 'RECEPCIONISTA', 'DENTISTA', 'ASISTENTE'] },
   ]
 
   if (!mounted) return <html lang="es"><body></body></html>
 
   return (
     <html lang="es">
-      <body className="bg-slate-50 min-h-screen font-sans antialiased text-slate-800 text-left print:block print:h-auto">
+      <body className="bg-[#FBF8F2] h-screen w-screen font-sans antialiased text-slate-800 overflow-hidden flex">
         <Toaster richColors position="top-right" />
+        
         {!isAuthPage && session && (
-          <div className="relative z-[100] flex flex-col print:hidden shadow-sm">
-            <header className="w-full h-20 bg-slate-950 text-white flex items-center justify-between px-4 md:px-8 border-b border-white/5 gap-8">
-              <div className="flex items-center gap-8 text-left flex-1">
-                <Link href="/" className="flex items-center gap-3 group transition-all text-left">
-                  <div className="relative shrink-0">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-white/10 shadow-lg group-hover:scale-105 transition-transform">
-                      <img src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" alt="Logo" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+          <>
+            {/* --- SIDEBAR OSCURO --- */}
+            <aside 
+              className={`fixed md:relative inset-y-0 left-0 z-40 w-[280px] min-w-[280px] bg-[#0A111F] flex flex-col justify-between shrink-0 h-full transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none border-r border-white/5 ${
+                mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+              }`}
+            >
+              <div className="flex flex-col h-full overflow-y-auto custom-scrollbar">
+                
+                {/* Logo Area */}
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="px-6 py-8 flex items-center justify-between md:justify-start gap-4 text-white shrink-0">
+                  <Link href="/" className="flex items-center gap-4 group transition-all" onClick={() => setMobileMenuOpen(false)}>
+                    <div className="relative shrink-0 w-11 h-11 rounded-2xl overflow-hidden border border-white/10 shadow-lg group-hover:scale-105 transition-transform duration-300">
+                      <img 
+                        src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" 
+                        alt="Logo" 
+                        referrerPolicy="no-referrer" 
+                        className="w-full h-full object-cover" 
+                      />
                     </div>
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-950 rounded-full"></div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-[#8A96A8] uppercase tracking-[0.2em] leading-none mb-1">Centro Médico</span>
+                      <span className="text-2xl font-black tracking-tight uppercase leading-none text-white group-hover:text-[#C9A24B] transition-colors">Dignidad</span>
+                    </div>
+                  </Link>
+                  <button className="md:hidden text-white/60 hover:text-white transition-colors p-1" onClick={() => setMobileMenuOpen(false)}><X size={24}/></button>
+                </motion.div>
+
+                {/* Enlaces y Acordeones */}
+                <nav className="flex-1 px-4 space-y-1.5 pb-10">
+                  
+                  {/* Enlaces Principales */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+                    {modulosBasicos.filter(m => m.roles.includes(perfil?.rol)).map((m) => {
+                      const isActive = pathname.startsWith(m.href);
+                      return (
+                        <Link 
+                            key={m.href} 
+                            href={m.href} 
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all relative group ${
+                              isActive 
+                                ? 'bg-white/10 text-white shadow-inner' 
+                                : 'text-[#8A96A8] hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                          <div className={`transition-transform duration-300 ${isActive ? 'text-[#C9A24B]' : 'group-hover:text-[#C9A24B] group-hover:scale-110'}`}>
+                              {m.icon}
+                          </div>
+                          <span className={`text-[14px] tracking-wide ${isActive ? 'font-bold' : 'font-semibold'}`}>{m.label}</span>
+                          
+                          {/* Indicador lateral derecho */}
+                          {isActive && <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-[#C9A24B] shadow-[0_0_8px_#C9A24B]" />}
+                        </Link>
+                      )
+                    })}
+                  </motion.div>
+
+                  <div className="h-4 border-b border-white/5 mx-2 my-2"></div>
+
+                  {/* Acordeón: Mi Menú */}
+                  {['ADMIN', 'RECEPCIONISTA', 'DENTISTA'].includes(perfil?.rol) && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex flex-col">
+                      <button onClick={() => setShowMiMenu(!showMiMenu)} className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all group ${showMiMenu ? 'text-white bg-white/5' : 'text-[#8A96A8] hover:text-white hover:bg-white/5'}`}>
+                        <div className="flex items-center gap-3.5">
+                          <span className={`transition-transform duration-300 ${showMiMenu ? 'text-[#C9A24B]' : 'group-hover:text-[#C9A24B] group-hover:scale-110'}`}><Stethoscope size={20}/></span>
+                          <span className={`text-[14px] tracking-wide ${showMiMenu ? 'font-bold' : 'font-semibold'}`}>Mi menú</span>
+                        </div>
+                        <ChevronDown size={16} className={`transition-transform duration-300 ${showMiMenu ? 'rotate-180 text-[#C9A24B]' : ''}`} />
+                      </button>
+                      <AnimatePresence>
+                        {showMiMenu && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                            <div className="flex flex-col border-l border-white/10 ml-[26px] mt-1 mb-2 space-y-1">
+                              <SidebarSubLink href="/mi-menu/plantillas" label="Plantillas" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/mi-menu/liquidacion" label="Liquidaciones" onClick={() => setMobileMenuOpen(false)} />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+
+                  {/* Acordeón: Reportes */}
+                  {perfil?.rol === 'ADMIN' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="flex flex-col">
+                      <button onClick={() => setShowReportMenu(!showReportMenu)} className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all group ${showReportMenu ? 'text-white bg-white/5' : 'text-[#8A96A8] hover:text-white hover:bg-white/5'}`}>
+                        <div className="flex items-center gap-3.5">
+                          <span className={`transition-transform duration-300 ${showReportMenu ? 'text-[#C9A24B]' : 'group-hover:text-[#C9A24B] group-hover:scale-110'}`}><BarChart3 size={20}/></span>
+                          <span className={`text-[14px] tracking-wide ${showReportMenu ? 'font-bold' : 'font-semibold'}`}>Reportes</span>
+                        </div>
+                        <ChevronDown size={16} className={`transition-transform duration-300 ${showReportMenu ? 'rotate-180 text-[#C9A24B]' : ''}`} />
+                      </button>
+                      <AnimatePresence>
+                        {showReportMenu && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                            <div className="flex flex-col border-l border-white/10 ml-[26px] mt-1 mb-2 space-y-1">
+                              <SidebarSubLink href="/reportes/desempeno" label="Desempeño" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/reportes/excel" label="Exportar Excel" onClick={() => setMobileMenuOpen(false)} />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+
+                  {/* Acordeón: Administración */}
+                  {perfil?.rol === 'ADMIN' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="flex flex-col">
+                      <button onClick={() => setShowAdminMenu(!showAdminMenu)} className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all group ${showAdminMenu ? 'text-white bg-white/5' : 'text-[#8A96A8] hover:text-white hover:bg-white/5'}`}>
+                        <div className="flex items-center gap-3.5">
+                          <span className={`transition-transform duration-300 ${showAdminMenu ? 'text-[#C9A24B]' : 'group-hover:text-[#C9A24B] group-hover:scale-110'}`}><LayoutGrid size={20}/></span>
+                          <span className={`text-[14px] tracking-wide ${showAdminMenu ? 'font-bold' : 'font-semibold'}`}>Administración</span>
+                        </div>
+                        <ChevronDown size={16} className={`transition-transform duration-300 ${showAdminMenu ? 'rotate-180 text-[#C9A24B]' : ''}`} />
+                      </button>
+                      <AnimatePresence>
+                        {showAdminMenu && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                            <div className="flex flex-col border-l border-white/10 ml-[26px] mt-2 mb-2 pb-2">
+                              
+                              <GroupTitle title="Clínica" />
+                              <SidebarSubLink href="/administracion/profesionales" label="Personal" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/especialidades" label="Especialidades" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/convenios" label="Convenios" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/box" label="Gestión de Box" onClick={() => setMobileMenuOpen(false)} />
+
+                              <GroupTitle title="Operaciones" />
+                              <SidebarSubLink href="/administracion/laboratorios" label="Laboratorios" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/liquidaciones" label="Liquidaciones" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/pagos-pendientes" label="Pagos Pendientes" onClick={() => setMobileMenuOpen(false)} />
+
+                              <GroupTitle title="Configuración" />
+                              <SidebarSubLink href="/administracion/configuracion/aranceles" label="Aranceles Precios" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/bancos" label="Bancos" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/documentos" label="Docs Clínicos" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/consentimientos" label="Consentimientos" onClick={() => setMobileMenuOpen(false)} />
+
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+                </nav>
+
+                {/* Footer Sidebar */}
+                <div className="p-8 shrink-0 relative overflow-hidden mt-auto">
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#101A2C] to-transparent pointer-events-none rounded-t-[3rem]"></div>
+                  <div className="relative z-10 flex flex-col items-center text-center opacity-80">
+                     <div className="text-[#C9A24B] mb-4">
+                        <svg width="24" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 20.5C12 20.5 15 19 16 16C17.3333 12 18 8 16 5C15 3 13 3 12 5C11 3 9 3 8 5C6 8 6.66667 12 8 16C9 19 12 20.5 12 20.5Z"/></svg>
+                     </div>
+                     <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.15em] leading-relaxed max-w-[160px]">Cuidamos tu salud, cuidamos tu sonrisa.</p>
                   </div>
-                  <div className="flex flex-col text-left">
-                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] leading-none mb-1.5 opacity-80 text-left">Centro Médico</span>
-                    <span className="text-2xl font-black tracking-tighter uppercase italic leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 text-left">Dignidad</span>
-                  </div>
-                </Link>
-                <div ref={searchRef} className="relative w-full max-w-xl hidden md:block">
+                </div>
+              </div>
+            </aside>
+            
+            {/* Backdrop Móvil */}
+            <AnimatePresence>
+              {mobileMenuOpen && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-[#0A111F]/80 backdrop-blur-sm z-30 md:hidden" onClick={() => setMobileMenuOpen(false)} />
+              )}
+            </AnimatePresence>
+            
+            {/* --- CONTENEDOR PRINCIPAL --- */}
+            <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[#FBF8F2] relative z-10">
+              
+              {/* TOPBAR */}
+              <motion.header initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5 }} className="h-[88px] min-h-[88px] bg-white flex items-center justify-between px-6 md:px-10 shrink-0 border-b border-slate-200 relative z-20 shadow-sm">
+                <div className="flex items-center gap-4 w-full">
+                  <button className="md:hidden text-slate-500 hover:text-slate-900 transition-colors bg-slate-100 p-2 rounded-xl" onClick={() => setMobileMenuOpen(true)}>
+                    <Menu size={20}/>
+                  </button>
+                  
+                  {/* Buscador Superior */}
+                  <div ref={searchRef} className="relative w-full max-w-[450px] hidden md:block">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                        {buscando ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                        {buscando ? <Loader2 size={16} className="animate-spin text-[#C9A24B]" /> : <Search size={16} className="transition-colors group-focus-within:text-[#C9A24B]" />}
                     </div>
                     <input
                         type="text"
                         placeholder="Buscar paciente por nombre o RUT..."
-                        className="w-full bg-slate-800 border border-slate-700 h-10 pl-10 pr-4 rounded-full text-sm font-bold text-white shadow-sm outline-none focus:border-blue-500 placeholder:text-slate-500"
+                        className="w-full bg-slate-50 border border-slate-200 h-[44px] pl-11 pr-4 rounded-full text-sm text-slate-800 outline-none focus:border-[#C9A24B]/50 focus:bg-white placeholder:text-slate-400 transition-all shadow-inner group"
                         value={busqueda}
                         onChange={(e) => setBusqueda(e.target.value)}
                         onFocus={() => busqueda.length > 2 && setMostrarResultados(true)}
                     />
                     <AnimatePresence>
                         {mostrarResultados && (
-                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden text-slate-900 z-50">
+                            <motion.div initial={{ opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="absolute top-full mt-3 w-full bg-white rounded-3xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 overflow-hidden text-slate-900 z-50">
                                 {resultados.length > 0 ? (
                                     resultados.map(p => (
-                                        <Link key={p.id} href={`/pacientes/${p.id}`} onClick={() => { setBusqueda(''); setMostrarResultados(false); }} className="flex items-center gap-4 p-4 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-b-0">
-                                            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-500 text-sm">{p.nombre[0]}{p.apellido[0]}</div>
+                                        <Link key={p.id} href={`/pacientes/${p.id}`} onClick={() => { setBusqueda(''); setMostrarResultados(false); }} className="flex items-center gap-4 p-4 hover:bg-[#FBF8F2] transition-colors border-b border-slate-50 last:border-b-0 group">
+                                            <div className="w-10 h-10 bg-[#C9A24B]/10 text-[#C9A24B] group-hover:bg-[#C9A24B] group-hover:text-white transition-colors rounded-full flex items-center justify-center font-black text-sm">{p.nombre[0]}{p.apellido[0]}</div>
                                             <div>
-                                                <p className="font-bold text-sm text-slate-800">{p.nombre} {p.apellido}</p>
-                                                <p className="text-xs text-slate-500">{p.rut}</p>
+                                                <p className="font-bold text-[15px] text-slate-800 leading-tight group-hover:text-[#8A6D2F] transition-colors">{p.nombre} {p.apellido}</p>
+                                                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{p.rut}</p>
                                             </div>
-                                            <ChevronRight className="ml-auto text-slate-300" size={16} />
+                                            <ChevronRight className="ml-auto text-slate-300 group-hover:text-[#C9A24B] transition-colors group-hover:translate-x-1" size={16} />
                                         </Link>
                                     ))
                                 ) : (
-                                    <div className="p-4 text-center text-sm text-slate-500">No se encontraron resultados.</div>
+                                    <div className="p-6 text-center text-sm text-slate-500 font-medium">No se encontraron resultados.</div>
                                 )}
                             </motion.div>
                         )}
                     </AnimatePresence>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-left">
-                <div className="flex items-center gap-3 bg-white/5 pl-4 pr-2 py-1.5 rounded-full border border-white/10 text-left">
-                  <div className="flex flex-col items-end text-right">
-                    <span className="text-[11px] font-black text-slate-100 uppercase tracking-tight">{perfil?.nombre_completo || 'Usuario'}</span>
-                    <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">{perfil?.rol || 'Dignidad'}</span>
                   </div>
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-white">{perfil?.nombre_completo?.[0] || 'U'}</div>
-                  <button onClick={handleSignOut} className="p-2 text-slate-500 hover:text-red-400 transition-all"><LogOut size={18} /></button>
                 </div>
-              </div>
-            </header>
 
-            <nav className="w-full h-14 bg-slate-50 border-b border-slate-200 flex items-center justify-between px-4 md:px-8">
-              <div className="flex-1 flex items-center justify-start gap-6 overflow-x-auto md:overflow-visible no-scrollbar h-full min-w-0">
-                <div className="flex items-center gap-6 h-full shrink-0">
-                  {modulos.filter(m => m.roles.includes(perfil?.rol)).map((m) => (
-                    <ModuleLink key={m.href} href={m.href} label={m.label} icon={m.icon} active={pathname.startsWith(m.href)} />
-                  ))}
-                  {['ADMIN', 'RECEPCIONISTA', 'DENTISTA'].includes(perfil?.rol) && (
-                    <div className="relative h-full" ref={miMenuRef}>
-                      <button onClick={() => setShowMiMenu(!showMiMenu)} className={`flex items-center gap-2.5 px-3 h-full border-b-2 transition-all ${showMiMenu ? 'bg-white border-white text-blue-600 font-black rounded-t-lg mb-[-2px]' : 'border-transparent text-slate-400'}`}>
-                        <Stethoscope size={18} /> <span className="text-[11px] font-black uppercase tracking-wider">Mi Menú</span>
-                      </button>
-                      <AnimatePresence>
-                        {showMiMenu && (
-                          <>
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 top-[136px] bg-black/50 z-[105] md:hidden" onClick={() => setShowMiMenu(false)} />
-                            <motion.div 
-                              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} 
-                              className="fixed md:absolute top-[140px] md:top-[100%] left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0 bg-white shadow-2xl rounded-3xl md:rounded-b-[2rem] md:rounded-tl-none border border-slate-100 p-4 z-[110] w-full max-w-xs md:w-[260px] text-left"
-                                onClick={(e) => { e.stopPropagation(); setShowMiMenu(false); }}
-                            >
-                              <MenuOption href="/mi-menu/plantillas" label="Plantillas" icon={<Package size={14}/>} onClick={() => setShowMiMenu(false)} />
-                                <MenuOption href="/mi-menu/liquidacion" label="Liquidaciones" icon={<Calculator size={14}/>} onClick={() => setShowMiMenu(false)} />
-                            </motion.div>
-                          </>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                  {perfil?.rol === 'ADMIN' && (
-                    <>
-                      {/* Menú Reportes */}
-                      <div className="relative h-full" ref={reportMenuRef}>
-                        <button onClick={() => setShowReportMenu(!showReportMenu)} className={`flex items-center gap-2.5 px-3 h-full border-b-2 transition-all ${showReportMenu || pathname.startsWith('/reportes') ? 'bg-white border-white text-blue-600 font-black rounded-t-lg mb-[-2px]' : 'border-transparent text-slate-400'}`}>
-                          <BarChart3 size={18} /> <span className="text-[11px] font-black uppercase tracking-wider">Reportes</span>
-                        </button>
-                        <AnimatePresence>
-                          {showReportMenu && (
-                            <>
-                              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 top-[136px] bg-black/50 z-[105] md:hidden" onClick={() => setShowReportMenu(false)} />
-                              <motion.div 
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} 
-                                className="fixed md:absolute top-[140px] md:top-[100%] left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0 bg-white shadow-2xl rounded-3xl md:rounded-b-[2rem] md:rounded-tl-none border border-slate-100 p-4 z-[110] w-full max-w-xs md:w-[260px] text-left"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MenuOption href="/reportes/desempeno" label="Desempeño" icon={<TrendingUp size={14}/>} onClick={() => setShowReportMenu(false)} />
-                                <MenuOption href="/reportes/excel" label="Excel" icon={<FileSpreadsheet size={14}/>} onClick={() => setShowReportMenu(false)} />
-                              </motion.div>
-                            </>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      {/* Menú Administración */}
-                      <div className="relative h-full" ref={adminMenuRef}>
-                        <button onClick={() => setShowAdminMenu(!showAdminMenu)} className={`flex items-center gap-2.5 px-3 h-full border-b-2 transition-all ${showAdminMenu || pathname.startsWith('/administracion') ? 'bg-white border-white text-blue-600 font-black rounded-t-lg mb-[-2px]' : 'border-transparent text-slate-400'}`}>
-                          <LayoutGrid size={18} /> <span className="text-[11px] font-black uppercase tracking-wider">Administración</span>
-                        </button>
-                        <AnimatePresence>
-                          {showAdminMenu && (
-                            <>
-                              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 top-[136px] bg-black/50 z-[105] md:hidden" onClick={() => setShowAdminMenu(false)} />
-                              <motion.div 
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} 
-                                className="fixed md:absolute top-[140px] md:top-[100%] left-1/2 -translate-x-1/2 md:left-auto md:right-0 md:translate-x-0 bg-white shadow-2xl rounded-3xl md:rounded-b-[2.5rem] md:rounded-tr-none border border-slate-100 p-6 md:p-8 z-[110] w-[calc(100vw-2rem)] max-w-lg md:max-w-none md:w-[850px] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8 text-left max-h-[70vh] md:max-h-none overflow-y-auto"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="space-y-2 text-left"><p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-4 pl-2">Gestión Clínica</p><MenuOption href="/administracion/profesionales" label="Personal" icon={<Users size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/especialidades" label="Especialidades" icon={<Stethoscope size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/convenios" label="Convenios" icon={<Building2 size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/box" label="Gestión de Box" icon={<DoorOpen size={12}/>} onClick={() => setShowAdminMenu(false)} /></div>
-                                <div className="space-y-2 text-left"><p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-4 pl-2">Operaciones</p><MenuOption href="/administracion/laboratorios" label="Laboratorios" icon={<Beaker size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/liquidaciones" label="Liquidaciones" icon={<Calculator size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/configuracion/pagos-pendientes" label="Pagos Pendientes" icon={<Ban size={12}/>} onClick={() => setShowAdminMenu(false)} /></div>
-                                <div className="space-y-2 text-left"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 pl-2">Configuración Maestro</p><MenuOption href="/administracion/configuracion/aranceles" label="Aranceles Precios" icon={<BadgeDollarSign size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/configuracion/bancos" label="Bancos / Entidades" icon={<Library size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/configuracion/documentos" label="Docs Clínicos" icon={<FileText size={12}/>} onClick={() => setShowAdminMenu(false)} /><MenuOption href="/administracion/configuracion/consentimientos" label="Consentimientos" icon={<FileSignature size={12}/>} onClick={() => setShowAdminMenu(false)} /></div>
-                              </motion.div>
-                            </>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </>
-                  )}
+                {/* Perfil (Fondo Claro) */}
+                <div className="flex items-center gap-4 cursor-pointer group shrink-0" onClick={handleSignOut} title="Cerrar Sesión">
+                  <div className="flex flex-col items-end text-right hidden sm:flex">
+                    <span className="text-[13px] font-bold text-slate-800 tracking-wide group-hover:text-[#C9A24B] transition-colors">{perfil?.nombre_completo || 'Usuario'}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{perfil?.rol || 'ADMIN'}</span>
+                  </div>
+                  <div className="w-11 h-11 rounded-full bg-[#C9A24B] flex items-center justify-center font-black text-[#0A111F] shadow-md group-hover:scale-105 transition-transform text-lg border-[3px] border-white relative">
+                    {perfil?.nombre_completo?.[0] || 'U'}
+                    <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-3.5 h-3.5 rounded-full border-2 border-white" />
+                  </div>
                 </div>
-              </div>
-            </nav>
-          </div>
+              </motion.header>
+
+              {/* CONTENIDO PRINCIPAL DE LAS PÁGINAS */}
+              <motion.main initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden relative bg-[#FBF8F2] custom-scrollbar block">
+                {children}
+              </motion.main>
+
+            </div>
+          </>
         )}
-        <main className="flex-1 w-full bg-slate-50 relative print:bg-white print:overflow-visible">
-          {children}
-        </main>
+
+        {isAuthPage && <main className="flex-1 w-full bg-[#FBF8F2]">{children}</main>}
+        
         {!isAuthPage && session && <ChatGlobal session={session} />}
       </body>
     </html>
   )
 }
 
-function MenuOption({ href, label, icon, onClick }: any) {
+// -------------------------------------------------------------
+// UI COMPONENTS PARA EL SIDEBAR
+// -------------------------------------------------------------
+
+function SidebarSubLink({ href, label, onClick }: { href: string, label: string, onClick: () => void }) {
+  const pathname = usePathname();
+  const isActive = pathname === href;
+  
   return (
-    <Link href={href} onClick={onClick} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-all group text-left border border-transparent hover:border-slate-100">
-      <div className="p-2.5 bg-slate-100 rounded-xl text-slate-400 group-hover:bg-blue-600 group-hover:text-white shrink-0 shadow-sm transition-all">{icon}</div>
-      <span className="text-[10px] font-black uppercase text-slate-600 group-hover:text-slate-900 transition-colors leading-tight">{label}</span>
+    <Link 
+      href={href} 
+      onClick={onClick}
+      className={`relative flex items-center gap-3 px-4 py-2 text-[13px] font-medium transition-all rounded-r-xl ${
+        isActive 
+          ? 'text-[#C9A24B] bg-gradient-to-r from-white/5 to-transparent' 
+          : 'text-[#8A96A8] hover:text-white hover:bg-white/5'
+      }`}
+    >
+      {/* Indicador de activo a la izquierda (como un dot) */}
+      <div className={`absolute -left-[5px] w-2 h-2 rounded-full border-2 border-[#0A111F] transition-colors ${isActive ? 'bg-[#C9A24B]' : 'bg-transparent border-transparent'}`} />
+      
+      {!isActive && <Circle size={4} className="text-white/20 ml-1" />}
+      <span className={isActive ? 'font-bold ml-1' : ''}>{label}</span>
     </Link>
   )
 }
 
-function ModuleLink({ href, label, icon, active }: any) {
+function GroupTitle({ title }: { title: string }) {
   return (
-    <Link href={href} className={`flex items-center gap-2.5 px-1 h-full border-b-2 transition-all shrink-0 ${active ? 'border-blue-600 text-blue-600 font-black' : 'border-transparent text-slate-400 hover:text-slate-700'}`}>
-      {icon} <span className="text-[11px] font-black uppercase tracking-wider">{label}</span>
-    </Link>
+    <div className="mt-4 mb-1.5 px-4 flex items-center gap-2">
+      <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.15em]">{title}</span>
+      <div className="flex-1 border-t border-white/5"></div>
+    </div>
   )
 }
