@@ -67,7 +67,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen w-full flex font-body" style={{ backgroundColor: NAVY }}>
+    <main className="min-h-screen w-full flex flex-col lg:flex-row font-body" style={{ backgroundColor: NAVY }}>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link
         href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&display=swap"
@@ -82,12 +82,24 @@ export default function LoginPage() {
       `}</style>
 
       {/* ── PANEL IZQUIERDO — identidad de marca ── */}
-      <div
-        className="hidden lg:flex lg:w-1/2 relative flex-col justify-between px-16 py-14 overflow-hidden"
-        style={{ background: `linear-gradient(160deg, ${NAVY} 0%, ${NAVY_DEEP} 100%)` }}
-      >
-        <OrbitField />
-        <ClassicalBust />
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between px-16 py-14 overflow-hidden">
+  {/* Imagen de fondo */}
+ <img
+  src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/fondo-login.png"
+  alt=""
+  className="absolute inset-0 w-full h-full object-cover"
+  style={{ objectPosition: '20% center' }}
+  onLoad={() => console.log('✅ fondo-login.png (Supabase) cargó correctamente')}
+  onError={(e) => console.error('❌ No se pudo cargar la imagen de fondo desde Supabase', e)}
+/>
+  {/* Overlay oscuro para legibilidad */}
+  <div
+    className="absolute inset-0"
+    style={{
+      background: `linear-gradient(160deg, rgba(6,11,18,0.55) 0%, rgba(6,11,18,0.85) 100%)`,
+    }}
+  />
+  <OrbitField />
 
         {/* Emblema circular */}
         <motion.div
