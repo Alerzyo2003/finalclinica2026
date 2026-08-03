@@ -89,8 +89,6 @@ export default function LoginPage() {
   alt=""
   className="absolute inset-0 w-full h-full object-cover"
   style={{ objectPosition: '20% center' }}
-  onLoad={() => console.log('✅ fondo-login.png (Supabase) cargó correctamente')}
-  onError={(e) => console.error('❌ No se pudo cargar la imagen de fondo desde Supabase', e)}
 />
   {/* Overlay oscuro para legibilidad */}
   <div
