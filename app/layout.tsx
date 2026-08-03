@@ -134,6 +134,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="es">
+      <head>
+        <title>AureoDent</title>
+        {/* Reemplaza el href con la URL que me vas a mandar */}
+        <link 
+          rel="icon" 
+          href="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/logo-barra.jpg" 
+        />
+      </head>
       <body className="bg-[#FBF8F2] h-screen w-screen font-sans antialiased text-slate-800 overflow-hidden flex">
         <Toaster richColors position="top-right" />
         
