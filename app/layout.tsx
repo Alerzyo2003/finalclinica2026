@@ -48,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (pathname.startsWith('/mi-menu')) setShowMiMenu(true);
   }, [pathname])
 
-  // Lógica de Supabase Omitida para brevedad en explicación, pero conservada intacta:
+  // Notificaciones Supabase
   useEffect(() => {
     if (!mounted || !session?.user?.id || !perfil) return;
     const canalNotificaciones = supabase
@@ -136,11 +136,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <head>
         <title>AureoDent</title>
-        {/* Reemplaza el href con la URL que me vas a mandar */}
-        <link 
-          rel="icon" 
-          href="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/logo-barra.jpg" 
-        />
+        {/* Next.js detectará automáticamente el archivo app/icon.png, no necesitas la etiqueta link */}
       </head>
       <body className="bg-[#FBF8F2] h-screen w-screen font-sans antialiased text-slate-800 overflow-hidden flex">
         <Toaster richColors position="top-right" />
