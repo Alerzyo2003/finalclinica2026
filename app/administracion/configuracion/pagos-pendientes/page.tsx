@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { 
   DollarSign, Search, User, ArrowRight, Loader2, 
-  CheckCircle2, CreditCard, Hash
+  CheckCircle2, CreditCard, Hash, Wallet
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
@@ -113,7 +113,7 @@ export default function PagosPendientesPage() {
           const deuda_total = Math.max(0, totalPactado - totalAbonado);
           return { paciente_id, deuda_exigible, deuda_total };
         })
-        .filter(p => p.deuda_exigible > 0); // Se mantiene el filtro: solo aparecen si deben algo ya realizado.
+        .filter(p => p.deuda_exigible > 0);
 
       if (pacientesConDeudaExigible.length === 0) {
         setPacientesDeudores([]);
@@ -130,7 +130,7 @@ export default function PagosPendientesPage() {
 
       const resultadoFinal = (pacientesData || []).map(paciente => {
         const deudas = pacientesConDeudaExigible.find(p => p.paciente_id === paciente.id);
-        return { ...paciente, saldo_pendiente: deudas?.deuda_total || 0 }; // 🔥 Se muestra la deuda TOTAL, no solo la exigible.
+        return { ...paciente, saldo_pendiente: deudas?.deuda_total || 0 };
       }).sort((a, b) => b.saldo_pendiente - a.saldo_pendiente);
 
       setPacientesDeudores(resultadoFinal);
@@ -150,84 +150,96 @@ export default function PagosPendientesPage() {
   )
 
   if (cargando) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-[#F8FAFC]">
-      <Loader2 className="animate-spin text-blue-600 mb-4" size={30} />
+    <div className="h-screen flex flex-col items-center justify-center bg-[#FBF8F2]">
+      <Loader2 className="animate-spin text-[#C9A24B] mb-4" size={40} />
       <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Sincronizando deudas...</p>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-10 font-sans text-left">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
+      
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
+      ></div>
+
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10 text-left">
         
         {/* HEADER */}
-        <header className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-5 w-full">
-            <div className="bg-red-500 p-4 rounded-2xl text-white shadow-xl shadow-red-100">
-              <DollarSign size={28} />
+        <header className="bg-white/90 backdrop-blur-md p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
+          <div className="flex items-center gap-5 text-left w-full md:w-auto">
+            <div className="bg-[#0A111F] w-16 h-16 rounded-full flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
+              <Wallet size={28} />
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-black text-slate-800 uppercase italic leading-none tracking-tighter">Cuentas por Cobrar</h1>
-              <p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.2em] mt-2">Sincronizado con el Directorio General</p>
+              <h1 className="text-2xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">
+                CUENTAS POR COBRAR
+              </h1>
+              <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase tracking-widest mt-1.5 text-left">
+                Sincronizado con el Directorio General
+              </p>
             </div>
           </div>
           
-          <div className="bg-slate-900 px-8 py-4 rounded-[1.8rem] text-right shadow-2xl min-w-[220px]">
-            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Deuda Total Cartera</p>
-            <p className="text-xl font-black text-emerald-400 italic">
+          <div className="bg-[#0A111F] px-8 py-4 rounded-3xl text-right shadow-md min-w-[240px] text-left">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Deuda Total Cartera</p>
+            <p className="text-2xl font-black text-[#C9A24B] italic tracking-tight text-left">
               {formatearMoneda(filtrados.reduce((acc, curr) => acc + Number(curr.saldo_pendiente), 0))}
             </p>
           </div>
         </header>
 
         {/* BUSCADOR */}
-        <div className="relative group max-w-sm">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
+        <div className="relative group max-w-md text-left">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#C9A24B] transition-colors" size={18} />
           <input 
             type="text"
-            placeholder="BUSCAR DEUDOR..."
-            className="w-full bg-white p-4 pl-12 rounded-2xl border border-slate-100 shadow-sm outline-none focus:ring-4 ring-blue-50 transition-all font-bold text-[10px] uppercase"
+            placeholder="BUSCAR DEUDOR POR NOMBRE O RUT..."
+            className="w-full bg-white/95 backdrop-blur-sm p-4 pl-12 pr-6 rounded-full border border-slate-200 shadow-sm outline-none focus:border-[#C9A24B] transition-all font-bold text-xs uppercase text-slate-900 placeholder:text-slate-400"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
 
         {/* GRILLA DE DEUDORES */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
           <AnimatePresence mode='popLayout'>
             {filtrados.map((p) => (
               <motion.div 
                 key={p.id}
                 layout
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:border-red-200 transition-all group relative overflow-hidden text-left"
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white/95 backdrop-blur-sm p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden text-left flex flex-col justify-between"
               >
-                <div className="flex items-center gap-4 mb-5 text-left">
-                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:bg-red-500 group-hover:text-white transition-all shadow-inner shrink-0">
-                    <User size={24} />
+                <div>
+                  <div className="flex items-center gap-4 mb-6 text-left">
+                    <div className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-all shadow-inner shrink-0">
+                      <User size={22} />
+                    </div>
+                    <div className="overflow-hidden text-left flex-1">
+                      <p className="text-sm font-black text-[#0A111F] uppercase italic truncate leading-tight">
+                        {p.nombre} {p.apellido}
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 flex items-center gap-1.5">
+                        <Hash size={12} className="text-[#C9A24B]" /> {p.rut}
+                      </p>
+                    </div>
                   </div>
-                  <div className="overflow-hidden text-left flex-1">
-                    <p className="text-[13px] font-black text-slate-800 uppercase italic truncate leading-tight">
-                      {p.nombre} {p.apellido}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 flex items-center gap-1">
-                      <Hash size={10} /> {p.rut}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="bg-red-50/50 p-5 rounded-[1.5rem] border border-red-100/50 mb-5 text-left">
-                  <p className="text-[10px] font-black text-red-400 uppercase italic tracking-tighter mb-1">Monto Pendiente:</p>
-                  <p className="text-2xl font-black text-red-600 italic tracking-tighter">
-                    {formatearMoneda(p.saldo_pendiente)}
-                  </p>
+                  <div className="bg-red-50/50 p-5 rounded-2xl border border-red-100/60 mb-6 text-left shadow-inner">
+                    <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Monto Pendiente:</p>
+                    <p className="text-2xl font-black text-red-600 italic tracking-tight">
+                      {formatearMoneda(p.saldo_pendiente)}
+                    </p>
+                  </div>
                 </div>
 
                 <Link 
                   href={`/pacientes/${p.id}/pagos`}
-                  className="flex items-center justify-center gap-2 w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase hover:bg-blue-600 transition-all active:scale-95 shadow-lg"
+                  className="flex items-center justify-center gap-2 w-full py-4 bg-[#0A111F] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#1a2538] transition-all active:scale-95 shadow-md"
                 >
                   Gestionar Cobro <ArrowRight size={14}/>
                 </Link>
@@ -237,12 +249,12 @@ export default function PagosPendientesPage() {
         </div>
 
         {filtrados.length === 0 && !cargando && (
-          <div className="py-32 text-center flex flex-col items-center gap-5 bg-white rounded-[4rem] border-2 border-dashed border-slate-100">
-            <CheckCircle2 size={40} className="text-emerald-400" />
-            <p className="text-slate-400 font-black text-xs uppercase italic tracking-widest">No hay saldos pendientes en el sistema</p>
+          <div className="py-24 text-center flex flex-col items-center gap-4 bg-white/95 backdrop-blur-sm rounded-[2.5rem] border border-slate-100 shadow-sm">
+            <CheckCircle2 size={48} className="text-emerald-500 opacity-80" />
+            <p className="text-slate-700 font-black text-xs uppercase tracking-widest">No hay saldos pendientes en el sistema</p>
           </div>
         )}
       </div>
-    </div>
+    </main>
   )
 }
