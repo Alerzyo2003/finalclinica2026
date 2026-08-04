@@ -1,11 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+// 1. IMPORTAMOS CREATEPORTAL
+import { createPortal } from 'react-dom'
 import {
   Save, Loader2, Clock, Calendar, Trash2,
   LayoutGrid, Sparkles, CalendarDays, AlertCircle, XCircle,
   MessageCircle, Phone, X, CalendarClock, Ban, CheckCircle2, UserCircle,
-  ChevronLeft, ChevronRight, Users
+  ChevronLeft, ChevronRight, Users, Stethoscope
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -71,6 +73,9 @@ export default function BoxConfigPage() {
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
 
+  // ESTADO PARA LOS PORTALS (Asegurar que carga en el cliente)
+  const [isMounted, setIsMounted] = useState(false)
+
   const [nuevoBloque, setNuevoBloque] = useState({
     dia_semana: 1,
     hora_inicio: '09:00',
@@ -79,7 +84,10 @@ export default function BoxConfigPage() {
     fecha_especifica: ''
   })
 
-  useEffect(() => { fetchInicial() }, [])
+  useEffect(() => { 
+    setIsMounted(true)
+    fetchInicial() 
+  }, [])
   
   useEffect(() => {
     if (profesionalId) {
@@ -398,7 +406,7 @@ export default function BoxConfigPage() {
 
   if (cargando) return (
     <div className="h-screen flex flex-col items-center justify-center bg-white">
-      <Loader2 className="animate-spin text-[#D4AF37]" size={40} />
+      <Loader2 className="animate-spin text-[#C9A24B]" size={40} />
     </div>
   )
 
@@ -416,413 +424,472 @@ export default function BoxConfigPage() {
     .sort((a, b) => a.fecha.localeCompare(b.fecha)); // Los más próximos primero
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] p-6 md:p-12 font-sans text-slate-900 text-left relative">
-      <div className="max-w-7xl mx-auto space-y-12">
+    <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
+      
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
+      ></div>
+
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10 text-left">
         
-        {/* HEADER */}
-        <header className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-8">
-            <div className="bg-slate-900 p-6 rounded-[2.2rem] text-[#D4AF37] shadow-2xl">
-              <LayoutGrid size={35} />
+        {/* HEADER TIPO TARJETA BLANCA */}
+        <header className="bg-white/90 backdrop-blur-md p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
+          <div className="flex items-center gap-5 text-left w-full md:w-auto">
+            <div className="bg-[#0A111F] w-16 h-16 rounded-full flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
+              <LayoutGrid size={28} />
             </div>
-            <div>
-              <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Boxes & Horarios</h1>
-              <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.4em] mt-4 flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse"></span>
-                AureoDent Clinical System
+            <div className="text-left">
+              <h1 className="text-2xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">
+                BOXES & HORARIOS
+              </h1>
+              <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase tracking-widest mt-1.5 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#C9A24B] animate-pulse"></span> Gestión de Agenda
               </p>
             </div>
           </div>
 
-          <div className="bg-slate-50 p-3 rounded-[2.5rem] border border-slate-100 flex items-center pr-8 gap-5 min-w-[320px]">
-            <div className="w-14 h-14 rounded-full bg-slate-900 border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37] font-black text-xl">
+          <div className="bg-slate-50 p-2.5 rounded-[2rem] border border-slate-100 flex items-center pr-6 gap-4 min-w-[280px]">
+            <div className="w-12 h-12 rounded-full bg-[#0A111F] flex items-center justify-center text-[#C9A24B] font-black text-lg shadow-inner shrink-0">
               {profesionalSeleccionado?.nombre?.[0]}
             </div>
             <div className="flex flex-col text-left flex-1">
-              <span className="text-[8px] font-black text-[#D4AF37] uppercase tracking-widest mb-1">Especialista</span>
-              <select className="bg-transparent font-black text-sm text-slate-800 uppercase outline-none cursor-pointer" value={profesionalId} onChange={(e) => setProfesionalId(e.target.value)}>
+              <span className="text-[9px] font-black text-[#C9A24B] uppercase tracking-widest mb-0.5">Especialista</span>
+              <select className="bg-transparent font-black text-sm text-slate-800 uppercase outline-none cursor-pointer w-full" value={profesionalId} onChange={(e) => setProfesionalId(e.target.value)}>
                 {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
               </select>
             </div>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* FORMULARIOS */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* COLUMNA IZQUIERDA: FORMULARIOS */}
           <div className="lg:col-span-4 space-y-8">
             
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-10 rounded-[3.5rem] shadow-xl border border-slate-50 space-y-8">
-              <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1">
-                <button onClick={() => setModo('semanal')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${modo === 'semanal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            {/* AGREGAR HORARIO */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-8">
+              
+              <div className="flex bg-slate-50 p-1.5 rounded-2xl gap-1 border border-slate-100">
+                <button onClick={() => setModo('semanal')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider ${modo === 'semanal' ? 'bg-white text-[#0A111F] shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
                   Semanal
                 </button>
-                <button onClick={() => setModo('extraordinario')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${modo === 'extraordinario' ? 'bg-slate-900 text-[#D4AF37] shadow-lg' : 'text-slate-400'}`}>
+                <button onClick={() => setModo('extraordinario')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider ${modo === 'extraordinario' ? 'bg-[#0A111F] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
                   Especial
                 </button>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-6 text-left">
                 {modo === 'semanal' ? (
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Día de Repetición</label>
-                    <select className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs" value={nuevoBloque.dia_semana} onChange={(e) => setNuevoBloque({...nuevoBloque, dia_semana: Number(e.target.value)})}>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                      <CalendarDays size={12} className="text-[#C9A24B]"/> Día de Repetición
+                    </label>
+                    <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs border border-slate-200 shadow-sm outline-none focus:border-[#C9A24B] text-slate-900 transition-colors" value={nuevoBloque.dia_semana} onChange={(e) => setNuevoBloque({...nuevoBloque, dia_semana: Number(e.target.value)})}>
                       {DIAS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
                     </select>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Fecha Única</label>
-                    <input type="date" className="w-full p-5 bg-amber-50/30 border-amber-100 border rounded-2xl font-bold text-xs" value={nuevoBloque.fecha_especifica} onChange={(e) => setNuevoBloque({...nuevoBloque, fecha_especifica: e.target.value})} />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                      <Calendar size={12} className="text-[#C9A24B]"/> Fecha Única
+                    </label>
+                    <input type="date" className="w-full p-4 bg-[#C9A24B]/5 border-[#C9A24B]/30 border rounded-2xl font-bold text-xs text-slate-900 outline-none focus:border-[#C9A24B] transition-colors shadow-sm" value={nuevoBloque.fecha_especifica} onChange={(e) => setNuevoBloque({...nuevoBloque, fecha_especifica: e.target.value})} />
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="time" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs" value={nuevoBloque.hora_inicio} onChange={(e) => setNuevoBloque({...nuevoBloque, hora_inicio: e.target.value})} />
-                  <input type="time" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs" value={nuevoBloque.hora_fin} onChange={(e) => setNuevoBloque({...nuevoBloque, hora_fin: e.target.value})} />
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Desde</label>
+                    <input type="time" className="w-full p-4 bg-slate-50 border border-slate-200 shadow-sm rounded-2xl font-bold text-xs text-slate-900 outline-none focus:border-[#C9A24B] transition-colors" value={nuevoBloque.hora_inicio} onChange={(e) => setNuevoBloque({...nuevoBloque, hora_inicio: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Hasta</label>
+                    <input type="time" className="w-full p-4 bg-slate-50 border border-slate-200 shadow-sm rounded-2xl font-bold text-xs text-slate-900 outline-none focus:border-[#C9A24B] transition-colors" value={nuevoBloque.hora_fin} onChange={(e) => setNuevoBloque({...nuevoBloque, hora_fin: e.target.value})} />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  {[1, 2, 3].map(n => (
-                    <button key={n} onClick={() => setNuevoBloque({...nuevoBloque, box_id: n})} className={`py-4 rounded-2xl text-xs font-black transition-all border-2 ${nuevoBloque.box_id === n ? 'bg-slate-900 text-[#D4AF37] border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>BOX {n}</button>
-                  ))}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Asignar Box</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 3].map(n => (
+                      <button key={n} onClick={() => setNuevoBloque({...nuevoBloque, box_id: n})} className={`py-3.5 rounded-2xl text-[11px] font-black tracking-widest transition-all border ${nuevoBloque.box_id === n ? 'bg-[#0A111F] text-[#C9A24B] border-[#0A111F] shadow-md' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-white hover:text-slate-600'}`}>BOX {n}</button>
+                    ))}
+                  </div>
                 </div>
 
-                <button onClick={agregarBloque} disabled={guardando} className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3">
-                  {guardando ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
+                <button onClick={agregarBloque} disabled={guardando} className="w-full py-5 bg-[#0A111F] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 mt-4 disabled:bg-slate-300">
+                  {guardando ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar Horario
                 </button>
               </div>
             </motion.div>
 
             {/* SEGURIDAD INASISTENCIA */}
-            <div className="bg-red-50 p-10 rounded-[3.5rem] border border-red-100 space-y-8">
+            <div className="bg-red-50/50 p-8 md:p-10 rounded-[2.5rem] border border-red-100 shadow-sm space-y-8">
               <div className="flex items-center gap-4 text-left">
-                <div className="bg-red-500 p-4 rounded-2xl text-white shadow-lg"><XCircle size={24} /></div>
+                <div className="bg-red-500 p-4 rounded-2xl text-white shadow-md shadow-red-500/30 shrink-0"><XCircle size={24} /></div>
                 <div className="text-left">
-                  <h2 className="text-lg font-black text-red-900 uppercase italic leading-none">Inasistencia</h2>
-                  <p className="text-red-400 text-[8px] font-black uppercase tracking-widest mt-2">Cierre de Jornada</p>
+                  <h2 className="text-xl font-black text-red-900 uppercase italic leading-none tracking-tight">Inasistencia</h2>
+                  <p className="text-red-400 text-[9px] font-black uppercase tracking-widest mt-1.5">Bloqueo de Jornada Completa</p>
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-5 text-left">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-red-300 uppercase ml-4">Día a Cancelar</label>
-                  <input type="date" className="w-full p-5 bg-white border-2 border-red-100 rounded-2xl font-bold text-xs text-red-900 outline-none" value={fechaInasistencia} onChange={(e) => setFechaInasistencia(e.target.value)} />
+                  <label className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-2">Día a Cancelar</label>
+                  <input type="date" className="w-full p-4 bg-white border border-red-200 shadow-sm rounded-2xl font-bold text-xs text-red-900 outline-none focus:border-red-400 transition-colors" value={fechaInasistencia} onChange={(e) => setFechaInasistencia(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-red-300 uppercase ml-4">Motivo</label>
-                  <input type="text" placeholder="Ej: Licencia médica..." className="w-full p-5 bg-white border-2 border-red-100 rounded-2xl font-bold text-xs text-red-900" value={motivoInasistencia} onChange={(e) => setMotivoInasistencia(e.target.value)} />
+                  <label className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-2">Motivo</label>
+                  <input type="text" placeholder="Ej: Licencia médica..." className="w-full p-4 bg-white border border-red-200 shadow-sm rounded-2xl font-bold text-xs text-red-900 outline-none focus:border-red-400 transition-colors placeholder:text-red-200" value={motivoInasistencia} onChange={(e) => setMotivoInasistencia(e.target.value)} />
                 </div>
-                <button onClick={validarInasistencia} disabled={guardando} className="w-full py-6 bg-red-600 text-white rounded-[2.2rem] font-black text-xs uppercase shadow-xl hover:bg-red-700 transition-all flex items-center justify-center gap-3">
+                <button onClick={validarInasistencia} disabled={guardando} className="w-full py-5 bg-red-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-red-600/20 hover:bg-red-700 transition-all flex items-center justify-center gap-3 mt-2 disabled:opacity-50">
                   Validar y Bloquear
                 </button>
               </div>
             </div>
           </div>
 
-          {/* COLUMNA DERECHA */}
-          <div className="lg:col-span-8 bg-white p-12 rounded-[4rem] shadow-xl border border-slate-50 space-y-12">
+          {/* COLUMNA DERECHA: RESUMEN Y HORARIOS */}
+          <div className="lg:col-span-8 space-y-8">
             
-            {/* 🔥 JORNADAS BLOQUEADAS (ACTIVAS Y FUTURAS) 🔥 */}
-            {bloqueosFuturos.length > 0 && (
+            <div className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-full">
+              
+              {/* 🔥 JORNADAS BLOQUEADAS (ACTIVAS Y FUTURAS) 🔥 */}
+              {bloqueosFuturos.length > 0 && (
+                <div className="space-y-6 mb-12">
+                  <h3 className="text-[11px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-red-100">
+                    <AlertCircle size={14} /> Jornadas Bloqueadas (Activas a futuro)
+                  </h3>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {bloqueosFuturos.map(b => (
+                      <div key={b.id} className="bg-red-50 border border-red-100 p-5 rounded-[1.5rem] flex justify-between items-center group shadow-sm transition-all hover:shadow-md">
+                        <div className="text-left">
+                          <p className="text-[11px] font-black text-red-600 uppercase mb-0.5 tracking-tight">
+                            {new Date(b.fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'long' })}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Sin atención</p>
+                          {b.motivo && <p className="text-[9px] font-semibold text-slate-400 mt-1 truncate max-w-[150px]">Motivo: {b.motivo}</p>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => revisarPacientesPendientes(b.fecha)} className="w-10 h-10 flex items-center justify-center text-blue-500 hover:bg-blue-50 bg-white rounded-full shadow-sm border border-blue-100 transition-all" title="Ver pacientes pendientes por reagendar">
+                            <Users size={16}/>
+                          </button>
+                          <button onClick={async () => { await supabase.from('bloqueos_agenda').delete().eq('id', b.id); fetchBloqueos(); toast.success("Día rehabilitado"); }} className="w-10 h-10 flex items-center justify-center text-red-500 hover:bg-red-50 bg-white rounded-full shadow-sm border border-red-100 transition-all" title="Eliminar Bloqueo">
+                            <Trash2 size={16}/>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* HORARIOS SEMANALES */}
               <div className="space-y-6">
-                <h3 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-3"><AlertCircle size={16} /> Jornadas Bloqueadas (Activas)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {bloqueosFuturos.map(b => (
-                    <div key={b.id} className="bg-red-50/40 border border-red-100 p-6 rounded-[2rem] flex justify-between items-center group">
-                      <div className="text-left">
-                        <p className="text-[9px] font-black text-red-600 uppercase mb-1">{new Date(b.fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-                        <p className="text-xs font-bold text-slate-600 italic uppercase tracking-tighter">Sin atención disponible</p>
-                        {b.motivo && <p className="text-[9px] font-bold text-slate-400 mt-1">Motivo: {b.motivo}</p>}
+                <h3 className="text-[11px] font-black text-[#0A111F] uppercase tracking-widest flex items-center gap-2 pb-4 border-b border-slate-100">
+                  <CalendarDays size={14} className="text-[#C9A24B]"/> Resumen Horarios Semanales
+                </h3>
+                
+                <div className="space-y-3">
+                  {DIAS.map((dia) => {
+                    const bloques = disponibilidad.filter(b => b.dia_semana === dia.id && !b.fecha_especifica);
+                    return (
+                      <div key={dia.id} className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 p-4 hover:bg-slate-50 rounded-2xl transition-all group border border-transparent hover:border-slate-100">
+                        <div className="w-28 text-left shrink-0">
+                          <span className="text-xs font-black uppercase text-slate-800 tracking-wide group-hover:text-[#C9A24B] transition-colors">{dia.label}</span>
+                        </div>
+                        
+                        <div className="flex-1 flex flex-wrap gap-3 justify-start">
+                            {bloques.length === 0 ? (
+                              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">Libre / Sin Atención</span>
+                            ) : bloques.map(b => (
+                              <div key={b.id} className="bg-white border border-slate-200 px-4 py-2.5 rounded-2xl flex items-center gap-4 shadow-sm group/item hover:border-[#C9A24B] transition-colors">
+                                <div className="text-left">
+                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Horario</span>
+                                  <span className="text-[11px] font-black text-[#0A111F]">{b.hora_inicio.substring(0,5)} a {b.hora_fin.substring(0,5)}</span>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-[#C9A24B]/10 text-[#C9A24B] flex items-center justify-center text-[9px] font-black tracking-tighter border border-[#C9A24B]/20">
+                                  B{b.box_id}
+                                </div>
+                                <button onClick={() => eliminarBloque(b)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover/item:opacity-100" title="Eliminar bloque">
+                                  <Trash2 size={14}/>
+                                </button>
+                              </div>
+                            ))}
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => revisarPacientesPendientes(b.fecha)} className="p-3 text-blue-400 hover:text-blue-600 hover:bg-blue-50 bg-white rounded-xl shadow-sm transition-all" title="Ver pacientes pendientes por reagendar">
-                          <Users size={16}/>
-                        </button>
-                        <button onClick={async () => { await supabase.from('bloqueos_agenda').delete().eq('id', b.id); fetchBloqueos(); toast.success("Día rehabilitado"); }} className="p-3 text-red-300 hover:text-red-500 hover:bg-red-50 bg-white rounded-xl shadow-sm transition-all" title="Eliminar Bloqueo">
-                          <Trash2 size={16}/>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
-            )}
-
-            <div className="space-y-2 pt-6 border-t border-slate-100">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3 mb-8"><CalendarDays size={16} /> Horarios Semanales Maestro</h3>
-              {DIAS.map((dia) => {
-                const bloques = disponibilidad.filter(b => b.dia_semana === dia.id && !b.fecha_especifica);
-                return (
-                  <div key={dia.id} className="flex flex-col md:flex-row items-center gap-8 p-6 hover:bg-slate-50/80 rounded-[2.5rem] transition-all group">
-                    <div className="w-32 text-left shrink-0"><span className="text-xs font-black uppercase text-slate-900 italic group-hover:text-[#D4AF37] transition-colors">{dia.label}</span></div>
-                    <div className="flex-1 flex flex-wrap gap-4 justify-start">
-                        {bloques.length === 0 ? (<span className="text-[9px] font-black text-slate-200 uppercase italic py-2">Libre</span>) : bloques.map(b => (
-                          <div key={b.id} className="bg-white border border-slate-100 px-6 py-3 rounded-2xl flex items-center gap-5 shadow-sm group/item">
-                            <div className="text-left">
-                              <span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Bloque</span>
-                              <span className="text-xs font-black text-slate-700">{b.hora_inicio.substring(0,5)} - {b.hora_fin.substring(0,5)}</span>
-                            </div>
-                            <div className="w-10 h-10 rounded-xl bg-slate-900 text-[#D4AF37] flex items-center justify-center text-[10px] font-black border border-slate-800">S{b.box_id}</div>
-                            <button onClick={() => eliminarBloque(b)} className="p-2 text-slate-100 hover:text-red-500 transition-all opacity-0 group-hover/item:opacity-100"><Trash2 size={16}/></button>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )
-              })}
             </div>
           </div>
         </div>
       </div>
 
-      {/* MODAL DE CONFLICTOS DE AGENDA Y REAGENDAMIENTO SEMANAL */}
-      <AnimatePresence>
-        {mostrarModalConflictos && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-[#FDFDFD] w-full max-w-5xl max-h-[90vh] flex flex-col rounded-[3rem] shadow-2xl overflow-hidden border border-slate-100"
-            >
-              {/* HEADER MODAL */}
-              <div className={`${modoModal === 'bloquear' ? 'bg-red-500' : 'bg-blue-500'} p-8 flex items-center justify-between shrink-0 shadow-sm relative z-10 transition-colors`}>
-                <div className="flex items-center gap-4 text-white">
-                  {modoModal === 'bloquear' ? <AlertCircle size={36} /> : <Users size={36} />}
-                  <div>
-                    <h2 className="text-2xl font-black uppercase italic leading-none tracking-tighter">Pacientes Pendientes</h2>
-                    <p className={`${modoModal === 'bloquear' ? 'text-red-200' : 'text-blue-200'} text-[10px] font-black uppercase tracking-[0.3em] mt-1.5`}>
-                      {citasConflictivas.length} citas detectadas el {fechaInasistencia}
-                    </p>
+      {/* MODAL DE CONFLICTOS Y REAGENDAMIENTO ENVOLVIDO EN PORTAL */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {mostrarModalConflictos && (
+            <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-[#0A111F]/60 backdrop-blur-sm p-4 text-left">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-[#FBF8F2] w-full max-w-5xl max-h-[90vh] flex flex-col rounded-[3rem] shadow-2xl overflow-hidden text-left"
+              >
+                {/* HEADER MODAL */}
+                <div className={`${modoModal === 'bloquear' ? 'bg-red-500' : 'bg-blue-600'} p-8 md:p-10 flex items-center justify-between shrink-0 shadow-sm relative z-10 transition-colors text-left`}>
+                  <div className="flex items-center gap-5 text-white">
+                    <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
+                      {modoModal === 'bloquear' ? <AlertCircle size={32} /> : <Users size={32} />}
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black uppercase italic leading-none tracking-tight">Pacientes Pendientes</h2>
+                      <p className="text-white/80 text-[10px] font-black uppercase tracking-[0.3em] mt-2">
+                        {citasConflictivas.length} citas detectadas el {fechaInasistencia}
+                      </p>
+                    </div>
                   </div>
+                  <button onClick={() => setMostrarModalConflictos(false)} className={`p-3 text-white rounded-full transition-all backdrop-blur-md ${modoModal === 'bloquear' ? 'bg-red-600/50 hover:bg-red-700' : 'bg-blue-700/50 hover:bg-blue-800'}`}>
+                    <X size={20} />
+                  </button>
                 </div>
-                <button onClick={() => setMostrarModalConflictos(false)} className={`p-3 text-white rounded-full transition-all ${modoModal === 'bloquear' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                  <X size={20} />
-                </button>
-              </div>
 
-              {/* CONTENIDO SCROLLABLE */}
-              <div className="p-8 overflow-y-auto bg-slate-50 flex-1 space-y-4">
-                
-                {citasConflictivas.length === 0 ? (
-                  <div className="py-12 flex flex-col items-center justify-center text-center opacity-70">
-                    <CheckCircle2 size={48} className="text-emerald-500 mb-4" />
-                    <p className="text-sm font-black text-slate-800 uppercase">Agenda Limpia</p>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Todos los pacientes de este día han sido gestionados.</p>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-[11px] font-bold text-slate-500 mb-6 bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-800">
-                      Puedes gestionar a los pacientes directamente desde aquí. <br/>
-                      {modoModal === 'bloquear' && 'Si decides no hacerlo ahora, presiona "Forzar Bloqueo" al final y las citas quedarán pendientes.'}
-                    </p>
+                {/* CONTENIDO SCROLLABLE */}
+                <div className="p-8 md:p-10 overflow-y-auto bg-[#FBF8F2] flex-1 space-y-6 custom-scrollbar text-left">
+                  
+                  {citasConflictivas.length === 0 ? (
+                    <div className="py-20 flex flex-col items-center justify-center text-center">
+                      <div className="w-24 h-24 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 mb-6 shadow-inner">
+                        <CheckCircle2 size={48} />
+                      </div>
+                      <p className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Agenda Limpia</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-2">Todos los pacientes han sido gestionados.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 flex items-start gap-4 shadow-sm text-left">
+                        <Info size={20} className="text-blue-500 shrink-0 mt-0.5" />
+                        <p className="text-xs font-bold text-blue-800 leading-relaxed">
+                          Puedes gestionar a los pacientes directamente desde este panel reagendando o cancelando sus horas. <br className="hidden md:block"/>
+                          {modoModal === 'bloquear' && 'Si decides no hacerlo ahora, presiona "Forzar Bloqueo" al final y las citas quedarán como pendientes para más tarde.'}
+                        </p>
+                      </div>
 
-                    {citasConflictivas.map((cita) => {
-                      let horaFomateada = "Sin hora";
-                      try { horaFomateada = new Date(cita.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); } catch (e) {}
-                      
-                      const telefonoLimpio = cita.pacientes?.telefono ? cita.pacientes.telefono.replace(/\D/g, '') : '';
-                      const isEditing = citaEnEdicion === cita.id;
+                      <div className="space-y-4">
+                        {citasConflictivas.map((cita) => {
+                          let horaFomateada = "Sin hora";
+                          try { horaFomateada = new Date(cita.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); } catch (e) {}
+                          
+                          const telefonoLimpio = cita.pacientes?.telefono ? cita.pacientes.telefono.replace(/\D/g, '') : '';
+                          const isEditing = citaEnEdicion === cita.id;
 
-                      // Calcular duración visual de la cita original
-                      let durationStr = "45 min";
-                      try {
-                        const dMins = Math.round((new Date(cita.fin).getTime() - new Date(cita.inicio).getTime()) / 60000);
-                        if (dMins > 0) durationStr = `${dMins} min`;
-                      } catch (e) {}
+                          // Calcular duración visual de la cita original
+                          let durationStr = "45 min";
+                          try {
+                            const dMins = Math.round((new Date(cita.fin).getTime() - new Date(cita.inicio).getTime()) / 60000);
+                            if (dMins > 0) durationStr = `${dMins} min`;
+                          } catch (e) {}
 
-                      return (
-                        <div key={cita.id} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col group transition-all">
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div className="flex items-center gap-5">
-                              <div className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-600 flex flex-col items-center justify-center border border-slate-100 shrink-0">
-                                <Clock size={14} className="mb-1 opacity-50" />
-                                <span className="text-[10px] font-black">{horaFomateada}</span>
-                              </div>
-                              <div>
-                                <h4 className="font-black text-sm text-slate-800 uppercase leading-none">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
-                                <div className="flex items-center gap-3 mt-2">
-                                  <span className="text-[9px] font-bold text-slate-400 tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100 flex items-center gap-1">
-                                    <Clock size={10}/> {durationStr}
-                                  </span>
-                                  <span className="text-[9px] font-bold text-slate-400 tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100">RUT: {cita.pacientes?.rut || 'Sin registrar'}</span>
-                                  {telefonoLimpio && (
-                                    <span className="text-[9px] font-bold text-blue-500 tracking-widest flex items-center gap-1">
-                                      <Phone size={10}/> {cita.pacientes.telefono}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* ACCIONES DEL PACIENTE */}
-                            {!isEditing && (
-                              <div className="flex gap-2 self-start md:self-auto">
-                                {telefonoLimpio && (
-                                  <>
-                                    <a href={`tel:${telefonoLimpio}`} className="p-3 bg-slate-50 text-slate-400 hover:bg-blue-500 hover:text-white rounded-xl transition-all" title="Llamar">
-                                      <Phone size={16} />
-                                    </a>
-                                    <a href={`https://wa.me/${telefonoLimpio}`} target="_blank" rel="noreferrer" className="p-3 bg-emerald-50 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all" title="WhatsApp">
-                                      <MessageCircle size={16} />
-                                    </a>
-                                  </>
-                                )}
-                                <div className="w-px h-8 bg-slate-100 mx-1 self-center"></div>
-                                <button onClick={() => {
-                                  const dInicio = new Date(cita.inicio);
-                                  const dFin = new Date(cita.fin);
-                                  const calcMins = Math.round((dFin.getTime() - dInicio.getTime()) / 60000);
-                                  setDuracionCitaEdicion(calcMins > 0 ? calcMins : 45);
-
-                                  setCitaEnEdicion(cita.id);
-                                  setNuevaFecha(''); setNuevaHora(''); setNuevoBox(1);
-                                  setNuevoEspecialista(profesionalId);
-                                }} className="px-4 py-2 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white rounded-xl transition-all flex items-center gap-2" title="Reagendar">
-                                  <CalendarClock size={14} /> Reagendar
-                                </button>
-                                <button onClick={() => anularCitaDirecta(cita.id)} className="p-3 bg-red-50 text-red-500 hover:bg-red-600 hover:text-white rounded-xl transition-all" title="Cancelar Cita">
-                                  <Ban size={16} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* PANEL DE EDICIÓN (AGENDA SEMANAL) */}
-                          <AnimatePresence>
-                            {isEditing && (
-                              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                <div className="mt-5 pt-5 border-t border-slate-100 flex flex-col gap-6">
-                                  
-                                  <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                                    <div className="flex gap-4 w-full md:w-auto flex-1">
-                                      <div className="space-y-2 flex-1">
-                                        <label className="text-[9px] font-black text-blue-400 uppercase ml-2 flex items-center gap-1"><UserCircle size={12}/> Especialista a derivar</label>
-                                        <select className="w-full p-4 bg-white border border-blue-200 rounded-xl font-bold text-xs outline-none text-slate-700" value={nuevoEspecialista} onChange={(e) => setNuevoEspecialista(e.target.value)}>
-                                          {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-                                        </select>
-                                      </div>
-                                      <div className="space-y-2 w-32 shrink-0">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Asignar Box</label>
-                                        <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none" value={nuevoBox} onChange={(e) => setNuevoBox(Number(e.target.value))}>
-                                          <option value={1}>BOX 1</option><option value={2}>BOX 2</option><option value={3}>BOX 3</option>
-                                        </select>
-                                      </div>
-                                    </div>
-                                    <div className="bg-emerald-50 px-4 py-3 rounded-xl border border-emerald-100 self-end md:self-auto">
-                                      <span className="text-[10px] font-black text-emerald-600 uppercase">Buscando huecos de {duracionCitaEdicion} min</span>
-                                    </div>
+                          return (
+                            <div key={cita.id} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col group transition-all text-left">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                <div className="flex items-center gap-5">
+                                  <div className="w-16 h-16 rounded-2xl bg-slate-50 text-slate-600 flex flex-col items-center justify-center border border-slate-100 shrink-0 shadow-inner">
+                                    <Clock size={16} className="mb-1 opacity-40 text-[#C9A24B]" />
+                                    <span className="text-[11px] font-black">{horaFomateada}</span>
                                   </div>
-
-                                  {/* CALENDARIO SEMANAL */}
-                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col">
-                                    
-                                    <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-xl shadow-sm border border-slate-100">
-                                      <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronLeft size={18}/></button>
-                                      <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
-                                        Semana del {semanaInicio.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                                  <div>
+                                    <h4 className="font-black text-base text-[#0A111F] uppercase leading-none tracking-tight">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
+                                    <div className="flex flex-wrap items-center gap-3 mt-3">
+                                      <span className="text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 px-2.5 py-1.5 rounded-md border border-slate-200 flex items-center gap-1.5 uppercase">
+                                        <Clock size={10} className="text-[#C9A24B]"/> {durationStr}
                                       </span>
-                                      <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronRight size={18}/></button>
-                                    </div>
-
-                                    <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar">
-                                      {cargandoSlots ? (
-                                        <div className="w-full py-10 flex flex-col items-center justify-center text-slate-400 gap-2">
-                                          <Loader2 className="animate-spin" size={24} />
-                                          <span className="text-[10px] font-black uppercase">Calculando disponibilidad...</span>
-                                        </div>
-                                      ) : (
-                                        dispoSemana.map((dia, idx) => {
-                                          const nombreDia = dia.dateObj.toLocaleDateString('es-CL', { weekday: 'short' });
-                                          const numDia = dia.dateObj.getDate();
-                                          const esHoy = dia.date === new Date().toISOString().split('T')[0];
-
-                                          return (
-                                            <div key={idx} className={`min-w-[110px] flex-1 bg-white border ${esHoy ? 'border-blue-300 shadow-md' : 'border-slate-200'} rounded-2xl p-3 flex flex-col items-center`}>
-                                              <div className="text-center mb-3">
-                                                <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">{nombreDia}</span>
-                                                <span className={`block text-lg font-black ${esHoy ? 'text-blue-600' : 'text-slate-800'}`}>{numDia}</span>
-                                              </div>
-
-                                              <div className="w-full flex-1 flex flex-col gap-2 overflow-y-auto max-h-48 pr-1 custom-scrollbar">
-                                                {dia.status === 'bloqueado' && <span className="text-[9px] font-bold text-red-400 text-center py-4 italic">Bloqueado</span>}
-                                                {dia.status === 'sin_horario' && <span className="text-[9px] font-bold text-slate-300 text-center py-4 italic">Sin Horario</span>}
-                                                {dia.status === 'lleno' && <span className="text-[9px] font-bold text-amber-400 text-center py-4 italic">Agenda Llena</span>}
-                                                
-                                                {dia.status === 'limpio' && dia.slots.map((slot: string, sIdx: number) => {
-                                                  const isSelected = nuevaFecha === dia.date && nuevaHora === slot;
-                                                  return (
-                                                    <button
-                                                      key={sIdx}
-                                                      onClick={() => { setNuevaFecha(dia.date); setNuevaHora(slot); }}
-                                                      className={`w-full py-2 rounded-lg text-[10px] font-black transition-all border ${isSelected ? 'bg-emerald-500 text-white border-emerald-600 shadow-md' : 'bg-slate-50 text-emerald-600 border-emerald-100 hover:bg-emerald-50'}`}
-                                                    >
-                                                      {slot}
-                                                    </button>
-                                                  )
-                                                })}
-                                              </div>
-                                            </div>
-                                          )
-                                        })
+                                      <span className="text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 px-2.5 py-1.5 rounded-md border border-slate-200 uppercase">
+                                        RUT: {cita.pacientes?.rut || 'Sin registrar'}
+                                      </span>
+                                      {telefonoLimpio && (
+                                        <span className="text-[9px] font-bold text-blue-600 tracking-widest flex items-center gap-1.5 bg-blue-50 px-2.5 py-1.5 rounded-md border border-blue-100 uppercase">
+                                          <Phone size={10}/> {cita.pacientes.telefono}
+                                        </span>
                                       )}
                                     </div>
-                                    
-                                    <div className="mt-2 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-4">
-                                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                        Seleccionado: <span className={nuevaHora ? "text-emerald-600" : "text-red-400"}>
-                                          {nuevaHora ? `${nuevaFecha} a las ${nuevaHora}` : "Ninguno"}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-3 w-full md:w-auto">
-                                        <button onClick={() => setCitaEnEdicion(null)} className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase hover:text-slate-700 transition-all">Cancelar</button>
-                                        <button onClick={() => reagendarCitaDirecta(cita.id)} disabled={guardando || !nuevaHora} className={`flex-1 md:flex-none px-8 py-3 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-md flex items-center justify-center gap-2 transition-all ${nuevaHora ? 'bg-emerald-500 hover:bg-emerald-600 active:scale-95' : 'bg-slate-300 cursor-not-allowed'}`}>
-                                          {guardando ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>} Confirmar
-                                        </button>
-                                      </div>
-                                    </div>
-
                                   </div>
                                 </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )
-                    })}
-                  </>
-                )}
-              </div>
 
-              {/* FOOTER MODAL - CAMBIA SEGÚN EL MODO */}
-              <div className="p-6 bg-white border-t border-slate-100 shrink-0 flex flex-col md:flex-row gap-4">
-                {modoModal === 'bloquear' ? (
-                  <>
-                    <button onClick={() => setMostrarModalConflictos(false)} className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-colors">
-                      Cancelar y Cerrar
+                                {/* ACCIONES DEL PACIENTE */}
+                                {!isEditing && (
+                                  <div className="flex flex-wrap gap-2 self-start md:self-auto shrink-0">
+                                    {telefonoLimpio && (
+                                      <>
+                                        <a href={`tel:${telefonoLimpio}`} className="w-10 h-10 flex items-center justify-center bg-slate-50 border border-slate-200 text-slate-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm" title="Llamar">
+                                          <Phone size={16} />
+                                        </a>
+                                        <a href={`https://wa.me/${telefonoLimpio}`} target="_blank" rel="noreferrer" className="w-10 h-10 flex items-center justify-center bg-slate-50 border border-slate-200 text-emerald-400 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 rounded-full transition-all shadow-sm" title="WhatsApp">
+                                          <MessageCircle size={16} />
+                                        </a>
+                                      </>
+                                    )}
+                                    <div className="w-px h-6 bg-slate-200 mx-1 self-center hidden sm:block"></div>
+                                    <button onClick={() => {
+                                      const dInicio = new Date(cita.inicio);
+                                      const dFin = new Date(cita.fin);
+                                      const calcMins = Math.round((dFin.getTime() - dInicio.getTime()) / 60000);
+                                      setDuracionCitaEdicion(calcMins > 0 ? calcMins : 45);
+
+                                      setCitaEnEdicion(cita.id);
+                                      setNuevaFecha(''); setNuevaHora(''); setNuevoBox(1);
+                                      setNuevoEspecialista(profesionalId);
+                                    }} className="px-5 py-2 bg-[#C9A24B]/10 border border-[#C9A24B]/30 text-[#C9A24B] text-[10px] font-black uppercase tracking-widest hover:bg-[#C9A24B] hover:text-white rounded-full transition-all flex items-center gap-2 shadow-sm" title="Reagendar">
+                                      <CalendarClock size={14} /> Reagendar
+                                    </button>
+                                    <button onClick={() => anularCitaDirecta(cita.id)} className="w-10 h-10 flex items-center justify-center bg-slate-50 border border-slate-200 text-red-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-full transition-all shadow-sm" title="Cancelar Cita">
+                                      <Ban size={16} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* PANEL DE EDICIÓN (AGENDA SEMANAL) */}
+                              <AnimatePresence>
+                                {isEditing && (
+                                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                                    <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col gap-6 text-left">
+                                      
+                                      <div className="flex flex-col md:flex-row gap-5 items-center justify-between">
+                                        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto flex-1">
+                                          <div className="space-y-2 flex-1">
+                                            <label className="text-[9px] font-black text-[#C9A24B] uppercase tracking-widest ml-2 flex items-center gap-1.5"><Stethoscope size={12}/> Derivar a Especialista</label>
+                                            <select className="w-full p-4 bg-white border border-[#C9A24B]/30 shadow-sm rounded-2xl font-bold text-xs outline-none text-[#0A111F] focus:border-[#C9A24B] transition-colors" value={nuevoEspecialista} onChange={(e) => setNuevoEspecialista(e.target.value)}>
+                                              {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                                            </select>
+                                          </div>
+                                          <div className="space-y-2 sm:w-32 shrink-0">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Asignar Box</label>
+                                            <select className="w-full p-4 bg-white border border-slate-200 shadow-sm rounded-2xl font-bold text-xs outline-none focus:border-[#C9A24B] transition-colors text-slate-800" value={nuevoBox} onChange={(e) => setNuevoBox(Number(e.target.value))}>
+                                              <option value={1}>BOX 1</option><option value={2}>BOX 2</option><option value={3}>BOX 3</option>
+                                            </select>
+                                          </div>
+                                        </div>
+                                        <div className="bg-emerald-50 px-5 py-4 rounded-2xl border border-emerald-100 self-end md:self-auto shadow-sm">
+                                          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Buscando bloques de {duracionCitaEdicion} min</span>
+                                        </div>
+                                      </div>
+
+                                      {/* CALENDARIO SEMANAL */}
+                                      <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-200 flex flex-col shadow-inner">
+                                        
+                                        <div className="flex items-center justify-between mb-5 bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100">
+                                          <button onClick={prevWeek} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-700 transition-all border border-transparent hover:border-slate-200"><ChevronLeft size={18}/></button>
+                                          <span className="text-[10px] font-black text-[#0A111F] uppercase tracking-widest">
+                                            Semana del {semanaInicio.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                                          </span>
+                                          <button onClick={nextWeek} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-700 transition-all border border-transparent hover:border-slate-200"><ChevronRight size={18}/></button>
+                                        </div>
+
+                                        <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
+                                          {cargandoSlots ? (
+                                            <div className="w-full py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
+                                              <Loader2 className="animate-spin text-[#C9A24B]" size={28} />
+                                              <span className="text-[10px] font-black uppercase tracking-widest">Calculando disponibilidad...</span>
+                                            </div>
+                                          ) : (
+                                            dispoSemana.map((dia, idx) => {
+                                              const nombreDia = dia.dateObj.toLocaleDateString('es-CL', { weekday: 'short' });
+                                              const numDia = dia.dateObj.getDate();
+                                              const esHoy = dia.date === new Date().toISOString().split('T')[0];
+
+                                              return (
+                                                <div key={idx} className={`min-w-[120px] flex-1 bg-white border ${esHoy ? 'border-[#C9A24B] shadow-md' : 'border-slate-200 shadow-sm'} rounded-[1.5rem] p-4 flex flex-col items-center`}>
+                                                  <div className="text-center mb-4 border-b border-slate-50 w-full pb-2">
+                                                    <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{nombreDia}</span>
+                                                    <span className={`block text-xl font-black ${esHoy ? 'text-[#C9A24B]' : 'text-[#0A111F]'}`}>{numDia}</span>
+                                                  </div>
+
+                                                  <div className="w-full flex-1 flex flex-col gap-2 overflow-y-auto max-h-48 pr-1 custom-scrollbar">
+                                                    {dia.status === 'bloqueado' && <span className="text-[9px] font-bold text-red-400 text-center py-4 italic">Día Bloqueado</span>}
+                                                    {dia.status === 'sin_horario' && <span className="text-[9px] font-bold text-slate-300 text-center py-4 italic">Sin Horario</span>}
+                                                    {dia.status === 'lleno' && <span className="text-[9px] font-bold text-amber-500 text-center py-4 italic">Agenda Llena</span>}
+                                                    
+                                                    {dia.status === 'limpio' && dia.slots.map((slot: string, sIdx: number) => {
+                                                      const isSelected = nuevaFecha === dia.date && nuevaHora === slot;
+                                                      return (
+                                                        <button
+                                                          key={sIdx}
+                                                          onClick={() => { setNuevaFecha(dia.date); setNuevaHora(slot); }}
+                                                          className={`w-full py-2.5 rounded-xl text-[11px] font-black transition-all border tracking-widest ${isSelected ? 'bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/30' : 'bg-slate-50 text-emerald-600 border-emerald-100 hover:bg-emerald-50 hover:border-emerald-200'}`}
+                                                        >
+                                                          {slot}
+                                                        </button>
+                                                      )
+                                                    })}
+                                                  </div>
+                                                </div>
+                                              )
+                                            })
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="mt-2 flex flex-col md:flex-row items-center justify-between gap-5 border-t border-slate-200 pt-6">
+                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto text-center md:text-left">
+                                          Turno Seleccionado: <span className={nuevaHora ? "text-emerald-600 ml-1" : "text-red-400 ml-1"}>
+                                            {nuevaHora ? `${nuevaFecha} a las ${nuevaHora} hrs.` : "Ninguno"}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 w-full md:w-auto">
+                                          <button onClick={() => setCitaEnEdicion(null)} className="flex-1 md:flex-none px-6 py-4 bg-white border border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-[#0A111F] rounded-2xl transition-all shadow-sm">Cancelar</button>
+                                          <button onClick={() => reagendarCitaDirecta(cita.id)} disabled={guardando || !nuevaHora} className={`flex-1 md:flex-none px-8 py-4 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all ${nuevaHora ? 'bg-[#0A111F] hover:bg-[#1a2538] active:scale-95' : 'bg-slate-300 cursor-not-allowed'}`}>
+                                            {guardando ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Confirmar
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* FOOTER MODAL - CAMBIA SEGÚN EL MODO */}
+                <div className="p-8 bg-white border-t border-slate-100 shrink-0 flex flex-col md:flex-row gap-4 text-left">
+                  {modoModal === 'bloquear' ? (
+                    <>
+                      <button onClick={() => setMostrarModalConflictos(false)} className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest hover:text-[#0A111F] transition-colors border border-slate-200 rounded-[2rem] hover:bg-slate-50 w-full md:w-auto text-center">
+                        Cancelar y Cerrar
+                      </button>
+                      <button onClick={ejecutarBloqueoFinal} disabled={guardando} className="flex-1 py-5 bg-[#0A111F] text-[#C9A24B] border-2 border-[#0A111F] font-black text-[11px] uppercase tracking-widest rounded-[2rem] shadow-xl hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {guardando ? <Loader2 className="animate-spin" size={18}/> : <AlertCircle size={18}/>}
+                        {citasConflictivas.length > 0 ? "Forzar Bloqueo del Día (Dejar Pendientes)" : "Confirmar Bloqueo de Agenda"}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => setMostrarModalConflictos(false)} className="w-full py-5 bg-[#0A111F] text-[#C9A24B] font-black text-[11px] uppercase tracking-widest rounded-[2rem] shadow-xl hover:bg-[#1a2538] transition-all">
+                      Finalizar Revisión y Cerrar Panel
                     </button>
-                    <button onClick={ejecutarBloqueoFinal} disabled={guardando} className="flex-1 py-5 bg-slate-900 text-[#D4AF37] border-2 border-slate-900 font-black text-xs uppercase tracking-[0.2em] rounded-[2rem] shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3">
-                      {guardando ? <Loader2 className="animate-spin" size={18}/> : <AlertCircle size={18}/>}
-                      {citasConflictivas.length > 0 ? "Forzar Bloqueo del Día (Dejar Pendientes)" : "Confirmar Bloqueo de Agenda"}
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => setMostrarModalConflictos(false)} className="w-full py-5 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-[2rem] shadow-xl hover:bg-blue-700 transition-all">
-                    Finalizar Revisión y Cerrar Panel
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
       
       <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
-    </div>
+    </main>
   )
 }
