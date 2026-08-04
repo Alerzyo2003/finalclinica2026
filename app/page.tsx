@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, ReactNode } from 'react'
 import { useRole } from '@/app/hooks/useRole'
 import { supabase } from '@/lib/supabase' // Asegúrate de que esta ruta sea correcta
 import {
@@ -310,7 +310,7 @@ const pendientesHoy = citasHoy.filter(c => c.estado === 'programada').length
   }
 
   const getAccesosRapidos = () => {
-    const accesos: { titulo: string; desc: string; icono: JSX.Element; href: string }[] = []
+    const accesos: { titulo: string; desc: string; icono: ReactNode; href: string }[] = []
 
     if (isAdmin || isRecepcionista) {
       accesos.push({ titulo: 'Nuevo Paciente', desc: 'Registrar ficha clínica', icono: <Users size={22} />, href: '/pacientes/nuevo' })
@@ -610,7 +610,7 @@ const pendientesHoy = citasHoy.filter(c => c.estado === 'programada').length
 }
 
 // ---------------------------------------------------------------------------
-function StatCard({ icon, label, value, delta, variants }: { icon: JSX.Element; label: string; value: string; delta?: number; variants?: any }) {
+function StatCard({ icon, label, value, delta, variants }: { icon: ReactNode; label: string; value: string; delta?: number; variants?: any }) {
   const up = (delta ?? 0) >= 0
   return (
     <motion.div variants={variants} className="bg-white rounded-[2rem] border border-[#EDE3D3] shadow-sm p-6">
