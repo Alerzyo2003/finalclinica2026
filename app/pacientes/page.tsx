@@ -5,11 +5,15 @@ import {
   Search, UserPlus, Loader2, Edit3, UserCheck, UserX, 
   ChevronDown, ChevronUp, Activity, Wallet, ShieldCheck, 
   Coins, ReceiptText, CheckCircle2, X, ShieldAlert, AlertTriangle, 
-  ChevronRight, Fingerprint, Phone, Mail, Stethoscope, User
+  ChevronRight, Fingerprint, Phone, Mail, Stethoscope, User, ClipboardList, SlidersHorizontal
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import Link from 'next/link'
+
+const GOLD = '#C9A24B'
+const NAVY = '#0E1B2E'
+const GOLD_LIGHT = '#E8CD8A'
 
 export default function ClientesPage() {
   const [pacientes, setPacientes] = useState<any[]>([])
@@ -48,6 +52,31 @@ export default function ClientesPage() {
   const [motivoBloqueo, setMotivoBloqueo] = useState('')
   const [cargandoEstado, setCargandoEstado] = useState(false)
 
+  // ==========================================
+  // ESTADOS MÓDULO FILTROS
+  // ==========================================
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
+  const [filtros, setFiltros] = useState({
+    prevision: '',
+    sexo: '',
+    tipoPaciente: '',
+    soloConvenio: false,
+    edadMin: '',
+    edadMax: '',
+  })
+  const [opcionesPrevision, setOpcionesPrevision] = useState<string[]>([])
+  const [opcionesTipoPaciente, setOpcionesTipoPaciente] = useState<string[]>([])
+
+  const cantidadFiltrosActivos = Object.entries(filtros).filter(([key, val]) => {
+    if (typeof val === 'boolean') return val === true
+    return String(val).trim() !== ''
+  }).length
+
+  const limpiarFiltros = () => setFiltros({
+    prevision: '', sexo: '', tipoPaciente: '',
+    soloConvenio: false, edadMin: '', edadMax: '',
+  })
+
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -61,33 +90,65 @@ export default function ClientesPage() {
     getUserProfile()
   }, [])
 
-  useEffect(() => { fetchInitialPacientes() }, [verDeshabilitados, refreshKey])
+  // Carga las opciones reales existentes en la BD para los selects de filtro
+  useEffect(() => {
+    const fetchOpcionesFiltro = async () => {
+      const { data } = await supabase.from('pacientes').select('prevision, tipo_paciente').limit(3000)
+      if (data) {
+        setOpcionesPrevision([...new Set(data.map((d: any) => d.prevision).filter(Boolean))].sort())
+        setOpcionesTipoPaciente([...new Set(data.map((d: any) => d.tipo_paciente).filter(Boolean))].sort())
+      }
+    }
+    fetchOpcionesFiltro()
+  }, [refreshKey])
+
+  useEffect(() => { cargarPacientes() }, [verDeshabilitados, refreshKey, filtros])
 
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-    if (busqueda.trim() === '') { fetchInitialPacientes(); return; }
+    if (busqueda.trim() === '') { cargarPacientes(); return; }
     if (busqueda.trim().length < 2) return
     setBuscando(true)
-    searchTimeoutRef.current = setTimeout(() => ejecutarBusqueda(busqueda), 600)
+    searchTimeoutRef.current = setTimeout(() => cargarPacientes(busqueda), 600)
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current) }
   }, [busqueda])
 
-  async function fetchInitialPacientes() {
-    setLoading(true)
-    const { data } = await supabase.from('pacientes').select('*').eq('activo', !verDeshabilitados).order('nombre', { ascending: true }).limit(30)
-    setPacientes(data || [])
-    setLoading(false)
+  const calcularFechaDesdeEdad = (edad: number) => {
+    const hoy = new Date()
+    const fecha = new Date(hoy.getFullYear() - edad, hoy.getMonth(), hoy.getDate())
+    return fecha.toISOString().split('T')[0]
   }
 
-  async function ejecutarBusqueda(term: string) {
-    const palabras = term.trim().split(/\s+/).filter(p => p.length > 0);
-    let query = supabase.from('pacientes').select('*').eq('activo', !verDeshabilitados);
-    palabras.forEach((palabra) => {
-      query = query.or(`nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%,rut.ilike.%${palabra}%`);
-    });
-    const { data } = await query.limit(20);
-    setPacientes(data || []);
-    setBuscando(false);
+  async function cargarPacientes(term?: string) {
+    const buscandoTexto = !!term && term.trim().length >= 2
+    if (buscandoTexto) setBuscando(true); else setLoading(true)
+
+    try {
+      let query = supabase.from('pacientes').select('*').eq('activo', !verDeshabilitados)
+
+      if (buscandoTexto) {
+        const palabras = term!.trim().split(/\s+/).filter(p => p.length > 0)
+        palabras.forEach((palabra) => {
+          query = query.or(`nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%,rut.ilike.%${palabra}%`)
+        })
+      }
+
+      // 🔥 FILTROS 🔥
+      if (filtros.prevision) query = query.eq('prevision', filtros.prevision)
+      if (filtros.sexo) query = query.eq('sexo', filtros.sexo)
+      if (filtros.tipoPaciente) query = query.eq('tipo_paciente', filtros.tipoPaciente)
+      if (filtros.soloConvenio) query = query.eq('tarjeta_comunidad', true)
+      // Edad mínima: nació hace al menos X años -> fecha_nacimiento <= hoy-X
+      if (filtros.edadMin) query = query.lte('fecha_nacimiento', calcularFechaDesdeEdad(Number(filtros.edadMin)))
+      // Edad máxima: nació hace como mucho X+1 años -> fecha_nacimiento >= hoy-(X+1)
+      if (filtros.edadMax) query = query.gte('fecha_nacimiento', calcularFechaDesdeEdad(Number(filtros.edadMax) + 1))
+
+      const { data } = await query.order('nombre', { ascending: true }).limit(buscandoTexto ? 30 : 50)
+      setPacientes(data || [])
+    } finally {
+      setLoading(false)
+      setBuscando(false)
+    }
   }
 
   // ==========================================
@@ -109,17 +170,19 @@ export default function ClientesPage() {
         const rutLimpio = paciente.rut.trim();
         const rutFuzzy = `%${rutLimpio.replaceAll('.', '').split('').join('%')}%`;
 
-        // 1. Buscar Planes Oficiales Aprobados
-        const { data: presupuestosPaciente, error: errPres } = await supabase
-            .from('presupuestos').select('id, id_dentalink').eq('paciente_id', paciente.id).eq('aprobado', true);
+        // 1. Buscar Planes Oficiales (Aprobados explícita o implícitamente por pago)
+        const { data: todosLosPresupuestos, error: errPres } = await supabase
+            .from('presupuestos').select('id, id_dentalink, aprobado, total_abonado').eq('paciente_id', paciente.id);
         if (errPres) throw errPres;
+
+        const presupuestosAprobados = todosLosPresupuestos?.filter(p => p.aprobado === true || (p.total_abonado && p.total_abonado > 0)) || [];
 
         // 2. Buscar Planes Temporales (Dentalink)
         const { data: presTemporales } = await supabase
             .from('temp_presupuestos').select('id_dentalink').or(`rut.eq.${rutLimpio},rut.ilike.${rutFuzzy}`);
 
-        const idsSupabase = presupuestosPaciente?.map(p => p.id) || [];
-        const idsDentalinkOficiales = presupuestosPaciente?.filter(p => p.id_dentalink).map(p => String(p.id_dentalink)) || [];
+        const idsSupabase = presupuestosAprobados?.map(p => p.id) || [];
+        const idsDentalinkOficiales = presupuestosAprobados?.filter(p => p.id_dentalink).map(p => String(p.id_dentalink)) || [];
         const idsSoloTemporales = presTemporales?.map(p => String(p.id_dentalink)) || [];
         
         // Unimos todos los IDs de Dentalink sin repetir
@@ -287,83 +350,197 @@ export default function ClientesPage() {
   }
 
   return (
-    <div className="p-8 bg-[#F8FAFC] min-h-screen text-left text-slate-900 font-sans pb-24">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 md:p-10 bg-[#FBF8F2] min-h-screen text-left text-slate-800 font-sans pb-24">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6">
           <div className="text-left">
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">Pacientes</h1>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Base de datos maestra</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0A111F]">
+              Pacientes
+            </h1>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Base de datos maestra</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => setVerDeshabilitados(!verDeshabilitados)} className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase transition-all shadow-sm border ${verDeshabilitados ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:border-slate-300'}`}>
+            <button onClick={() => setVerDeshabilitados(!verDeshabilitados)} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm border ${verDeshabilitados ? 'text-[#0A111F]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`} style={verDeshabilitados ? { backgroundColor: GOLD, borderColor: GOLD } : undefined}>
               {verDeshabilitados ? <UserCheck size={14} /> : <UserX size={14} />} {verDeshabilitados ? 'Ver Activos' : 'Ver Inactivos'}
             </button>
-            <Link href="/pacientes/nuevo" className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2">
+            <Link href="/pacientes/nuevo" className="flex-1 sm:flex-none px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 text-[#0A111F] bg-[#C9A24B] hover:bg-[#B38D3A]">
               <UserPlus size={16} /> Nuevo Ingreso
             </Link>
           </div>
         </div>
 
-        {/* BUSCADOR */}
-        <div className="relative group text-left max-w-2xl">
-          <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
-            {buscando ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
+        {/* BUSCADOR + FILTROS */}
+        <div className="relative">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative w-full group">
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#C9A24B] transition-colors">
+                {buscando ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+              </div>
+              <input type="text" placeholder="Filtrar por nombre, RUT o identificación..." className="w-full bg-white border border-slate-200 py-3.5 pl-14 pr-4 rounded-full shadow-sm outline-none font-bold text-sm text-slate-700 focus:border-[#C9A24B] focus:ring-4 focus:ring-[#C9A24B]/10 transition-all" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+            </div>
+            <button
+              onClick={() => setFiltrosAbiertos(!filtrosAbiertos)}
+              className={`flex items-center justify-center gap-2 px-5 py-3 rounded-full shadow-sm text-[11px] font-black uppercase tracking-wider shrink-0 border transition-all ${
+                filtrosAbiertos || cantidadFiltrosActivos > 0
+                  ? 'text-[#0A111F] border-transparent'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+              }`}
+              style={filtrosAbiertos || cantidadFiltrosActivos > 0 ? { backgroundColor: GOLD } : undefined}
+            >
+              <SlidersHorizontal size={14} />
+              Filtros
+              {cantidadFiltrosActivos > 0 && (
+                <span className="w-4 h-4 rounded-full bg-[#0A111F] text-white text-[9px] flex items-center justify-center">{cantidadFiltrosActivos}</span>
+              )}
+              <ChevronDown size={13} className={`transition-transform ${filtrosAbiertos ? 'rotate-180' : ''}`} />
+            </button>
           </div>
-          <input type="text" placeholder="Filtrar por nombre, rut o apellidos..." className="w-full bg-white border border-slate-200 p-5 pl-16 rounded-[2.2rem] shadow-sm outline-none font-bold text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+
+          {/* PANEL DE FILTROS */}
+          <AnimatePresence>
+            {filtrosAbiertos && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, y: -8, height: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 bg-white border border-slate-200 rounded-[2rem] shadow-lg p-6 space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Previsión</label>
+                      <select
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-[#C9A24B] transition-all cursor-pointer"
+                        value={filtros.prevision}
+                        onChange={(e) => setFiltros(prev => ({ ...prev, prevision: e.target.value }))}
+                      >
+                        <option value="">Todas</option>
+                        {opcionesPrevision.map(op => <option key={op} value={op}>{op}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Sexo</label>
+                      <select
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-[#C9A24B] transition-all cursor-pointer"
+                        value={filtros.sexo}
+                        onChange={(e) => setFiltros(prev => ({ ...prev, sexo: e.target.value }))}
+                      >
+                        <option value="">Todos</option>
+                        <option value="Masculino">Masculino</option>
+                        <option value="Femenino">Femenino</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+
+                    {opcionesTipoPaciente.length > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Tipo de paciente</label>
+                        <select
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-[#C9A24B] transition-all cursor-pointer"
+                          value={filtros.tipoPaciente}
+                          onChange={(e) => setFiltros(prev => ({ ...prev, tipoPaciente: e.target.value }))}
+                        >
+                          <option value="">Todos</option>
+                          {opcionesTipoPaciente.map(op => <option key={op} value={op}>{op}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Edad mínima</label>
+                      <input
+                        type="number" min={0} placeholder="Ej: 18"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-[#C9A24B] transition-all"
+                        value={filtros.edadMin}
+                        onChange={(e) => setFiltros(prev => ({ ...prev, edadMin: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Edad máxima</label>
+                      <input
+                        type="number" min={0} placeholder="Ej: 65"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-[#C9A24B] transition-all"
+                        value={filtros.edadMax}
+                        onChange={(e) => setFiltros(prev => ({ ...prev, edadMax: e.target.value }))}
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-[#C9A24B] cursor-pointer"
+                        checked={filtros.soloConvenio}
+                        onChange={(e) => setFiltros(prev => ({ ...prev, soloConvenio: e.target.checked }))}
+                      />
+                      <span className="text-[11px] font-bold text-slate-600">Con convenio / tarjeta comunidad</span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <button
+                      onClick={limpiarFiltros}
+                      disabled={cantidadFiltrosActivos === 0}
+                      className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Limpiar filtros
+                    </button>
+                    <button
+                      onClick={() => setFiltrosAbiertos(false)}
+                      className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#0A111F] shadow-sm hover:brightness-105 transition-all"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* TABLA */}
-        <div className="bg-white rounded-[3rem] border border-slate-100 shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-slate-50 bg-slate-50/30">
-                  <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase text-left">Paciente</th>
-                  <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase text-left">Identificación</th>
-                  <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase text-right">Ficha</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {loading ? (
-                  <tr><td colSpan={3} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></td></tr>
-                ) : (
-                  pacientes.map((p) => (
-                    <FilaPaciente
-                      key={p.id}
-                      p={p}
-                      isExpanded={pacienteExpandido === p.id}
-                      onExpand={() => setPacienteExpandido(pacienteExpandido === p.id ? null : p.id)}
-                      onPagar={() => abrirCaja(p)}
-                      onCambiarEstado={() => abrirModalBloqueo(p)}
-                      refreshKey={refreshKey}
-                      perfil={perfil} 
-                    />
-                  ))
-                )}
-                {pacientes.length === 0 && !loading && (
-                    <tr><td colSpan={3} className="p-10 text-center text-slate-400 font-bold text-sm">No se encontraron pacientes.</td></tr>
-                )}
-              </tbody>
-            </table>
+        {/* LISTADO DE PACIENTES */}
+        {loading ? (
+          <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-[#C9A24B]" size={36} /></div>
+        ) : pacientes.length === 0 ? (
+          <div className="py-20 text-center text-slate-400 font-bold text-sm bg-white rounded-[2rem] border border-slate-100 shadow-sm">
+            No se encontraron pacientes.
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            {pacientes.map((p) => (
+              <FilaPaciente
+                key={p.id}
+                p={p}
+                isExpanded={pacienteExpandido === p.id}
+                onExpand={() => setPacienteExpandido(pacienteExpandido === p.id ? null : p.id)}
+                onPagar={() => abrirCaja(p)}
+                onCambiarEstado={() => abrirModalBloqueo(p)}
+                refreshKey={refreshKey}
+                perfil={perfil}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* MODAL CAMBIO DE ESTADO (DESHABILITAR / REACTIVAR) */}
       <AnimatePresence>
         {modalEstadoAbierto && pacienteEstado && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
              <motion.div
                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-               className="bg-white max-w-md w-full rounded-[3rem] p-10 shadow-2xl text-center"
+               className="bg-white max-w-md w-full rounded-[2.5rem] p-8 sm:p-10 shadow-2xl text-center"
              >
                 <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-6 border-[8px] ${pacienteEstado.activo ? 'bg-red-50 text-red-500 border-red-500/10' : 'bg-emerald-50 text-emerald-500 border-emerald-500/10'}`}>
                   {pacienteEstado.activo ? <AlertTriangle size={32}/> : <ShieldCheck size={32}/>}
                 </div>
                 
-                <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900 mb-2">
+                <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tighter text-[#0A111F] mb-2">
                   {pacienteEstado.activo ? 'Inhabilitar Paciente' : 'Reactivar Paciente'}
                 </h3>
                 
@@ -403,19 +580,19 @@ export default function ClientesPage() {
       <AnimatePresence>
         {modalPagoAbierto && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden text-left">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left bg-white">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
+                <div className="p-6 sm:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left" style={{ background: `linear-gradient(135deg, ${NAVY}, #081420)` }}>
                    <div className="flex items-center gap-4 text-left">
-                      <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-sm"><ReceiptText size={28}/></div>
+                      <div className="p-3 rounded-2xl shadow-sm" style={{ backgroundColor: 'rgba(201,162,75,0.15)', border: `1px solid ${GOLD}` }}><ReceiptText size={24} style={{ color: GOLD_LIGHT }}/></div>
                       <div>
-                        <h2 className="font-black text-2xl uppercase tracking-tighter italic leading-none text-slate-900">Caja y Pagos</h2>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Paciente: {pacientePago?.nombre} {pacientePago?.apellido}</p>
+                        <h2 className="font-display text-lg sm:text-xl tracking-tight text-white leading-none">Caja y Pagos</h2>
+                        <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mt-1" style={{ color: GOLD }}>Paciente: {pacientePago?.nombre} {pacientePago?.apellido}</p>
                       </div>
                    </div>
-                   <button onClick={() => setModalPagoAbierto(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={24}/></button>
+                   <button onClick={() => setModalPagoAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors shrink-0"><X size={22}/></button>
                 </div>
 
-                <div className="p-6 md:p-8 bg-slate-50 flex-1 overflow-y-auto custom-scrollbar">
+                <div className="p-6 sm:p-8 bg-slate-50 flex-1 overflow-y-auto custom-scrollbar">
                     {cargandoDeudas ? (
                         <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-slate-400" size={40}/></div>
                     ) : deudasPaciente.length === 0 ? (
@@ -429,7 +606,7 @@ export default function ClientesPage() {
                            <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm text-center md:text-left flex flex-col md:flex-row md:items-center justify-between gap-4">
                               <div>
                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deuda Pendiente Total</h4>
-                                <p className="text-4xl font-black text-slate-900 tracking-tighter">${calcularDeudaTotalCaja().toLocaleString('es-CL')}</p>
+                                <p className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter">${calcularDeudaTotalCaja().toLocaleString('es-CL')}</p>
                               </div>
                               <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto md:mx-0"><AlertTriangle size={24}/></div>
                            </div>
@@ -438,9 +615,9 @@ export default function ClientesPage() {
                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-2">Detalle de Tratamientos Aprobados</h4>
                               <div className="space-y-2">
                                  {deudasPaciente.map(d => (
-                                     <div key={d.id} className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-blue-300">
-                                         <div>
-                                            <div className="flex items-center gap-2">
+                                     <div key={d.id} className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-[#C9A24B]/40 gap-3">
+                                         <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                                 <p className="text-xs font-black uppercase text-slate-800 leading-tight">{d.nombreDisplay}</p>
                                                 <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${d.estado === 'realizado' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
                                                     {d.estado}
@@ -448,7 +625,7 @@ export default function ClientesPage() {
                                             </div>
                                             <p className="text-[9px] font-bold text-slate-400 mt-1 tracking-widest">Pactado: ${Number(d.precio_pactado).toLocaleString('es-CL')} | Pagado: ${Number(d.abonado).toLocaleString('es-CL')}</p>
                                          </div>
-                                         <p className="text-sm font-black text-red-500">${d.deuda.toLocaleString('es-CL')}</p>
+                                         <p className="text-sm font-black text-red-500 shrink-0">${d.deuda.toLocaleString('es-CL')}</p>
                                      </div>
                                  ))}
                               </div>
@@ -457,7 +634,7 @@ export default function ClientesPage() {
                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200">
                               <div className="space-y-2">
                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Método de Pago</label>
-                                 <select className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer shadow-sm" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+                                 <select className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#C9A24B] focus:ring-4 focus:ring-[#C9A24B]/10 transition-all cursor-pointer shadow-sm" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
                                      <option value="Tarjeta">Tarjeta (Débito/Crédito)</option>
                                      <option value="Efectivo">Efectivo</option>
                                      <option value="Transferencia">Transferencia</option>
@@ -480,7 +657,7 @@ export default function ClientesPage() {
                                    <input 
                                      type="text" 
                                      placeholder={metodoPago === 'Efectivo' ? 'Ej: 12345' : 'Ej: TX-98765'} 
-                                     className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-blue-500 placeholder:text-slate-300 uppercase transition-all shadow-sm" value={codigoTransaccion} onChange={(e) => setCodigoTransaccion(e.target.value)} />
+                                     className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-[#C9A24B] placeholder:text-slate-300 uppercase transition-all shadow-sm" value={codigoTransaccion} onChange={(e) => setCodigoTransaccion(e.target.value)} />
                                 </div>
                               )}
                            </div>
@@ -488,11 +665,12 @@ export default function ClientesPage() {
                     )}
                 </div>
 
-                <div className="p-6 md:p-8 border-t border-slate-100 bg-white shrink-0">
+                <div className="p-6 sm:p-8 border-t border-slate-100 bg-white shrink-0">
                    <button
                       onClick={procesarPagoCaja}
                       disabled={cargandoAccion || deudasPaciente.length === 0 || !montoIngresado}
-                      className="w-full py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="w-full py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:brightness-110"
+                      style={{ background: NAVY, color: GOLD_LIGHT }}
                    >
                       {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <Coins size={18}/>}
                       Registrar Pago Seguro
@@ -541,12 +719,14 @@ function FilaPaciente({ p, isExpanded, onExpand, onPagar, onCambiarEstado, refre
       const rutLimpio = p.rut.trim();
       const rutFuzzy = `%${rutLimpio.replaceAll('.', '').split('').join('%')}%`;
 
-      const { data: presOficiales } = await supabase.from('presupuestos').select('id, estado, aprobado, id_dentalink').eq('paciente_id', p.id);
+      // 🔥 CORREGIDO: Traer total_abonado para detectar planes aprobados implícitamente
+      const { data: presOficiales } = await supabase.from('presupuestos').select('id, estado, aprobado, id_dentalink, total_abonado').eq('paciente_id', p.id);
       const { data: presTemporales } = await supabase.from('temp_presupuestos').select('id_dentalink').or(`rut.eq.${rutLimpio},rut.ilike.${rutFuzzy}`);
       
       const activos = presOficiales?.filter(x => x.estado !== 'finalizado' && x.estado !== 'cancelado').length || 0;
       const finalizados = presOficiales?.filter(x => x.estado === 'finalizado').length || 0;
-      const presAprobados = presOficiales?.filter(x => x.aprobado === true) || [];
+      // 🔥 CORREGIDO: Un plan se considera aprobado si tiene la marca O si ya se le ha abonado dinero.
+      const presAprobados = presOficiales?.filter(x => x.aprobado === true || (x.total_abonado && x.total_abonado > 0)) || [];
       
       let totalPresupuestado = 0; let totalAbonado = 0; let totalRealizado = 0;
 
@@ -596,198 +776,210 @@ function FilaPaciente({ p, isExpanded, onExpand, onPagar, onCambiarEstado, refre
   const tieneAntecedentes = antecedentesBD.length > 0;
 
   return (
-    <>
-      <tr onClick={onExpand} className={`cursor-pointer transition-all duration-300 ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'}`}>
-        <td className="px-10 py-7">
-          <div className="flex items-center gap-5 text-left text-slate-900">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xs transition-all ${isExpanded ? 'bg-blue-600 text-white rotate-6 scale-110 shadow-lg shadow-blue-500/30' : 'bg-slate-100 text-slate-500'} ${!p.activo && !isExpanded && 'bg-red-50 text-red-400'}`}>
+    <div className={`bg-white rounded-[2rem] border shadow-sm overflow-hidden transition-all ${isExpanded ? 'border-[#C9A24B]/50 shadow-md' : 'border-slate-100'}`}>
+      
+      {/* FILA PRINCIPAL (COLAPSADA) */}
+      <div onClick={onExpand} className={`cursor-pointer transition-all relative ${isExpanded ? 'bg-[#C9A24B]/5' : 'hover:bg-slate-50/60'} ${isExpanded ? 'border-l-4' : 'border-l-4 border-transparent'}`} style={isExpanded ? { borderLeftColor: GOLD } : undefined}>
+        <div className="flex items-center justify-between gap-3 p-4 sm:p-6">
+          <div className="flex items-center gap-3 sm:gap-5 min-w-0">
+            <div className={`w-11 h-11 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center font-black text-xs sm:text-sm shrink-0 transition-all relative ${!p.activo ? 'bg-red-50 text-red-400' : 'text-white'}`} style={p.activo ? { backgroundColor: NAVY } : undefined}>
               {p.nombre?.[0]}{p.apellido?.[0]}
+              {p.activo && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white" />}
             </div>
-            <div className="text-left text-slate-900">
-              <p className={`font-black uppercase text-sm leading-none mb-1.5 ${!p.activo ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.nombre} {p.apellido}</p>
-              <span className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-1 ${p.activo ? 'text-emerald-500' : 'text-red-500'}`}>
+            <div className="min-w-0 text-left">
+              <p className={`font-black uppercase text-xs sm:text-sm leading-tight mb-1 truncate ${!p.activo ? 'text-slate-400 line-through' : 'text-[#0A111F]'}`}>{p.nombre} {p.apellido}</p>
+              <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${p.activo ? 'text-emerald-500' : 'text-red-500'}`}>
                 {p.activo ? <><CheckCircle2 size={10}/> Paciente Vigente</> : <><AlertTriangle size={10}/> Archivo Bloqueado</>}
               </span>
+              <span className="sm:hidden text-[10px] font-bold text-slate-400 mt-1 block">{p.rut}</span>
             </div>
           </div>
-        </td>
-        <td className="px-10 py-7 text-left text-slate-900">
-           <span className="text-[11px] font-black text-slate-600 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm tracking-wide">{p.rut}</span>
-        </td>
-        <td className="px-10 py-7 text-right">
-            <div className={`inline-flex p-3 rounded-2xl transition-all shadow-sm ${isExpanded ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-400'}`}>
-               {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="hidden sm:inline-block text-[11px] font-black text-slate-600 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl tracking-wide">{p.rut}</span>
+            <div className={`p-2.5 sm:p-3 rounded-2xl transition-all shadow-sm ${isExpanded ? 'text-white' : 'bg-white border border-slate-200 text-slate-400'}`} style={isExpanded ? { backgroundColor: NAVY } : undefined}>
+               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
-        </td>
-      </tr>
+          </div>
+        </div>
+      </div>
 
+      {/* CONTENIDO EXPANDIDO */}
       <AnimatePresence>
         {isExpanded && (
-          <tr>
-            <td colSpan={3} className="p-0 border-none">
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-slate-50/50">
-                
-                <div className="m-6 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                    {stats.loading ? (
-                       <div className="p-16 flex flex-col items-center justify-center gap-3">
-                           <Loader2 className="animate-spin text-blue-500" size={32} />
-                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sincronizando Historial...</p>
-                       </div>
-                    ) : (
-                       <div className={`grid grid-cols-1 md:grid-cols-${esAsistente ? '2' : '3'} divide-y md:divide-y-0 md:divide-x divide-slate-100 text-left`}>
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="px-4 sm:px-6 pb-6">
+              <div className="flex items-center justify-between mb-4 pt-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificación</span>
+                <span className="text-[11px] font-black text-slate-700 bg-white border border-slate-200 px-4 py-1.5 rounded-lg">{p.rut}</span>
+              </div>
+
+              {stats.loading ? (
+                 <div className="p-16 flex flex-col items-center justify-center gap-3 bg-slate-50/50 rounded-[1.5rem] border border-slate-100">
+                     <Loader2 className="animate-spin" style={{ color: GOLD }} size={32} />
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sincronizando Historial...</p>
+                 </div>
+              ) : (
+                 <div className={`grid grid-cols-1 ${esAsistente ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
+                     
+                     {/* COLUMNA 1: DATOS PERSONALES */}
+                     <div className="p-6 flex flex-col h-full bg-slate-50/60 rounded-[1.5rem] border border-slate-100">
+                        <div className="flex-1 space-y-4">
+                           <div>
+                              <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest flex items-center gap-1.5">
+                                  <User size={12} className="text-[#C9A24B]"/> Ficha Personal
+                              </p>
+                              <h3 className="text-base sm:text-lg font-black text-[#0A111F] leading-tight mt-2 uppercase">{p.nombre} {p.apellido}</h3>
+                              <p className="text-xs font-bold text-slate-500 mt-1">{calcularEdad(p.fecha_nacimiento)} años</p>
+                           </div>
                            
-                           {/* COLUMNA 1: DATOS PERSONALES */}
-                           <div className="p-8 flex flex-col h-full bg-slate-50/30">
-                              <div className="flex-1 space-y-5">
-                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest flex items-center gap-1">
-                                        <User size={12}/> Ficha Personal
-                                    </p>
-                                    <h3 className="text-xl font-black text-slate-900 leading-none mt-2 uppercase">{p.nombre} {p.apellido}</h3>
-                                    <p className="text-xs font-bold text-slate-500 mt-2">{calcularEdad(p.fecha_nacimiento)} años</p>
-                                 </div>
-                                 
-                                 {/* CAJA DE ANTECEDENTES CON LÓGICA DE VER MÁS */}
-                                 <div className={`p-4 rounded-2xl text-[11px] font-bold flex gap-3 items-start border shadow-sm ${tieneAntecedentes ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
-                                    {tieneAntecedentes ? <AlertTriangle size={18} className="shrink-0 text-red-500" /> : <ShieldCheck size={18} className="shrink-0 text-emerald-500" />}
-                                    
-                                    {tieneAntecedentes ? (
-                                        <div className="flex flex-col w-full items-start">
-                                            <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1.5">Antecedentes Médicos</span>
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {antecedentesBD.slice(0, mostrarTodosAntecedentes ? antecedentesBD.length : MAX_ANT).map((ant, idx) => (
-                                                <span key={idx} className="bg-white/80 border border-red-200 text-red-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase leading-tight shadow-sm">
-                                                  {ant.categoria}: {ant.contenido}
-                                                </span>
-                                              ))}
-                                              
-                                              {!mostrarTodosAntecedentes && antecedentesBD.length > MAX_ANT && (
-                                                 <button 
-                                                    onClick={(e) => { e.stopPropagation(); setMostrarTodosAntecedentes(true); }} 
-                                                    className="bg-red-500 text-white px-2 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-red-600 transition-all shadow-sm"
-                                                 >
-                                                    +{antecedentesBD.length - MAX_ANT} más
-                                                 </button>
-                                              )}
-                                            </div>
-                                            
-                                            {mostrarTodosAntecedentes && antecedentesBD.length > MAX_ANT && (
-                                                 <button 
-                                                    onClick={(e) => { e.stopPropagation(); setMostrarTodosAntecedentes(false); }} 
-                                                    className="text-[9px] font-black text-red-500 uppercase mt-2 hover:underline tracking-widest"
-                                                 >
-                                                    Mostrar menos
-                                                 </button>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col">
-                                            <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-0.5">Antecedentes Médicos</span>
-                                            <span>Paciente Sano. Sin antecedentes registrados.</span>
-                                        </div>
-                                    )}
-                                 </div>
-                                 
-                                 <div className="space-y-2 text-[11px] font-bold text-slate-600 pt-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                                    <p className="flex items-center gap-2"><Fingerprint size={14} className="text-slate-400"/> {p.rut}</p>
-                                    <p className="flex items-center gap-2"><Mail size={14} className="text-slate-400"/> {p.email || 'Sin correo'}</p>
-                                    <p className="flex items-center gap-2"><Phone size={14} className="text-slate-400"/> {p.telefono || 'Sin teléfono'}</p>
-                                    <p className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-50 text-blue-600"><ShieldCheck size={14} className="text-blue-400"/> {p.prevision || 'Particular'}</p>
-                                 </div>
-                              </div>
-                              <Link href={`/pacientes/editar/${p.id}`} className="w-full mt-6 py-3.5 bg-slate-900 text-white text-[10px] font-black uppercase hover:bg-black rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md">
-                                 Actualizar Datos <ChevronRight size={14}/>
-                              </Link>
-                           </div>
-
-                           {/* COLUMNA 2: TRATAMIENTOS */}
-                           <div className="p-8 flex flex-col h-full">
-                              <div className="flex-1 space-y-6">
-                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                                     <Stethoscope size={14} className="text-blue-500"/> Resumen Clínico
-                                 </h4>
-                                 
-                                 <div className="grid grid-cols-2 gap-4">
-                                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
-                                         <p className="text-3xl font-black text-blue-600 mb-1">{stats.activos}</p>
-                                         <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Planes Activos</p>
-                                     </div>
-                                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
-                                         <p className="text-3xl font-black text-emerald-500 mb-1">{stats.finalizados}</p>
-                                         <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Finalizados</p>
-                                     </div>
-                                 </div>
-
-                                 
-                              </div>
-                              <Link href={`/pacientes/${p.id}`} className="w-full mt-6 py-3.5 bg-blue-600 text-white text-[10px] font-black uppercase hover:bg-blue-700 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md shadow-blue-500/20">
-                                 Abrir Ficha Clínica <ChevronRight size={14}/>
-                              </Link>
-                           </div>
-
-                           {/* COLUMNA 3: RECAUDACIÓN */}
-                           {!esAsistente && (
-                             <div className="p-8 flex flex-col h-full bg-slate-50/30">
-                                <div className="flex-1 space-y-6">
-                                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                                       <Wallet size={14} className="text-emerald-500"/> Estado Financiero
-                                   </h4>
-                                   
-                                   {/* 🔥 AQUÍ ESTÁ EL RECUADRO VERDE DEL SALDO A FAVOR 🔥 */}
-                                   {stats.saldoAFavor > 0 && (
-                                     <div className="flex justify-between items-center bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 shadow-sm mb-4">
-                                         <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Saldo a Favor</span>
-                                         <span className="text-sm font-black text-emerald-600">+${stats.saldoAFavor.toLocaleString('es-CL')}</span>
-                                     </div>
-                                   )}
-
-                                   <div className="space-y-4">
-                                      <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pactado</span>
-                                          <span className="text-sm font-black text-slate-900">${stats.totalP.toLocaleString('es-CL')}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Abonado</span>
-                                          <span className="text-sm font-black text-emerald-600">${stats.abonado.toLocaleString('es-CL')}</span>
+                           {/* CAJA DE ANTECEDENTES CON LÓGICA DE VER MÁS */}
+                           <div className={`p-4 rounded-2xl text-[11px] font-bold flex gap-3 items-start border shadow-sm ${tieneAntecedentes ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+                              {tieneAntecedentes ? <AlertTriangle size={18} className="shrink-0 text-red-500" /> : <ShieldCheck size={18} className="shrink-0 text-emerald-500" />}
+                              
+                              {tieneAntecedentes ? (
+                                  <div className="flex flex-col w-full items-start min-w-0">
+                                      <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1.5">Antecedentes Médicos</span>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {antecedentesBD.slice(0, mostrarTodosAntecedentes ? antecedentesBD.length : MAX_ANT).map((ant, idx) => (
+                                          <span key={idx} className="bg-white/80 border border-red-200 text-red-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase leading-tight shadow-sm">
+                                            {ant.categoria}: {ant.contenido}
+                                          </span>
+                                        ))}
+                                        
+                                        {!mostrarTodosAntecedentes && antecedentesBD.length > MAX_ANT && (
+                                           <button 
+                                              onClick={(e) => { e.stopPropagation(); setMostrarTodosAntecedentes(true); }} 
+                                              className="bg-red-500 text-white px-2 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-red-600 transition-all shadow-sm"
+                                           >
+                                              +{antecedentesBD.length - MAX_ANT} más
+                                           </button>
+                                        )}
                                       </div>
                                       
-                                      <div className={`flex justify-between items-center p-5 rounded-2xl border shadow-sm ${saldoPendiente > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                                          <span className={`text-[10px] font-black uppercase tracking-widest ${saldoPendiente > 0 ? 'text-red-800' : 'text-emerald-800'}`}>Saldo por abonar</span>
-                                          <span className={`text-xl font-black ${saldoPendiente > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                              ${saldoPendiente > 0 ? saldoPendiente.toLocaleString('es-CL') : '0'}
-                                          </span>
-                                      </div>
+                                      {mostrarTodosAntecedentes && antecedentesBD.length > MAX_ANT && (
+                                           <button 
+                                              onClick={(e) => { e.stopPropagation(); setMostrarTodosAntecedentes(false); }} 
+                                              className="text-[9px] font-black text-red-500 uppercase mt-2 hover:underline tracking-widest"
+                                           >
+                                              Mostrar menos
+                                           </button>
+                                      )}
+                                  </div>
+                              ) : (
+                                  <div className="flex flex-col">
+                                      <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-0.5">Antecedentes Médicos</span>
+                                      <span>Paciente Sano. Sin antecedentes registrados.</span>
+                                  </div>
+                              )}
+                           </div>
+                           
+                           <div className="space-y-2 text-[11px] font-bold text-slate-600 pt-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                              <p className="flex items-center gap-2"><Fingerprint size={14} className="text-slate-400 shrink-0"/> {p.rut}</p>
+                              <p className="flex items-center gap-2 truncate"><Mail size={14} className="text-slate-400 shrink-0"/> <span className="truncate">{p.email || 'Sin correo'}</span></p>
+                              <p className="flex items-center gap-2"><Phone size={14} className="text-slate-400 shrink-0"/> {p.telefono || 'Sin teléfono'}</p>
+                              <p className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-50" style={{ color: '#8A6D2F' }}><ShieldCheck size={14} style={{ color: GOLD }}/> {p.prevision || 'Particular'}</p>
+                           </div>
+                        </div>
+                        <Link href={`/pacientes/editar/${p.id}`} className="w-full mt-5 py-3.5 text-white text-[10px] font-black uppercase hover:brightness-125 rounded-xl transition-all flex items-center justify-center gap-2 shadow-md" style={{ backgroundColor: NAVY }}>
+                           Actualizar Datos <ChevronRight size={14}/>
+                        </Link>
+                     </div>
+
+                     {/* COLUMNA 2: TRATAMIENTOS */}
+                     <div className="p-6 flex flex-col h-full bg-slate-50/60 rounded-[1.5rem] border border-slate-100">
+                        <div className="flex-1 space-y-5">
+                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-200 pb-3">
+                               <Stethoscope size={14} style={{ color: GOLD }}/> Resumen Clínico
+                           </h4>
+                           
+                           <div className="grid grid-cols-2 gap-3">
+                               <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
+                                   <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-blue-50 flex items-center justify-center">
+                                     <ClipboardList size={18} className="text-blue-500" />
                                    </div>
+                                   <p className="text-2xl sm:text-3xl font-black text-slate-800 mb-1">{stats.activos}</p>
+                                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Planes Activos</p>
+                               </div>
+                               <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
+                                   <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-emerald-50 flex items-center justify-center">
+                                     <CheckCircle2 size={18} className="text-emerald-500" />
+                                   </div>
+                                   <p className="text-2xl sm:text-3xl font-black text-slate-800 mb-1">{stats.finalizados}</p>
+                                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Finalizados</p>
+                               </div>
+                           </div>
+                        </div>
+                        <Link href={`/pacientes/${p.id}`} className="w-full mt-5 py-3.5 text-white text-[10px] font-black uppercase hover:brightness-125 rounded-xl transition-all flex items-center justify-center gap-2 shadow-md" style={{ backgroundColor: NAVY }}>
+                           Abrir Ficha Clínica <ChevronRight size={14}/>
+                        </Link>
+                     </div>
+
+                     {/* COLUMNA 3: RECAUDACIÓN */}
+                     {!esAsistente && (
+                       <div className="p-6 flex flex-col h-full bg-slate-50/60 rounded-[1.5rem] border border-slate-100">
+                          <div className="flex-1 space-y-4">
+                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-200 pb-3">
+                                 <Wallet size={14} style={{ color: GOLD }}/> Estado Financiero
+                             </h4>
+                             
+                             {stats.saldoAFavor > 0 && (
+                               <div className="flex justify-between items-center bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 shadow-sm">
+                                   <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Saldo a Favor</span>
+                                   <span className="text-sm font-black text-emerald-600">+${stats.saldoAFavor.toLocaleString('es-CL')}</span>
+                               </div>
+                             )}
+
+                             <div className="space-y-3">
+                                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pactado</span>
+                                    <span className="text-sm font-black text-slate-900">${stats.totalP.toLocaleString('es-CL')}</span>
                                 </div>
-                                <button onClick={(e) => { e.stopPropagation(); onPagar(); }} className="w-full mt-6 py-3.5 bg-emerald-500 text-white text-[10px] font-black uppercase hover:bg-emerald-600 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20">
-                                   <Coins size={14}/> Ir a Recaudación
-                                </button>
+                                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Abonado</span>
+                                    <span className="text-sm font-black text-emerald-600">${stats.abonado.toLocaleString('es-CL')}</span>
+                                </div>
+                                
+                                <div className={`flex justify-between items-center p-4 rounded-2xl border shadow-sm ${saldoPendiente > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                    <span className={`text-[10px] font-black uppercase tracking-widest ${saldoPendiente > 0 ? 'text-red-800' : 'text-emerald-800'}`}>Saldo por abonar</span>
+                                    <span className={`text-lg sm:text-xl font-black ${saldoPendiente > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                        ${saldoPendiente > 0 ? saldoPendiente.toLocaleString('es-CL') : '0'}
+                                    </span>
+                                </div>
                              </div>
-                           )}
-
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); onPagar(); }} className="w-full mt-5 py-3.5 text-[#0A111F] text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 shadow-md hover:brightness-105" style={{ backgroundColor: GOLD }}>
+                             <Coins size={14}/> Ir a Recaudación
+                          </button>
                        </div>
-                    )}
-                </div>
-                
-                {['ADMIN', 'RECEPCIONISTA'].includes(perfil?.rol) && (
-                  <div className="flex justify-end px-8 pb-6">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onCambiarEstado(); }}
-                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border shadow-sm ${
-                          p.activo ? 'text-slate-500 border-slate-200 bg-white hover:bg-slate-50' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                        }`}
-                      >
-                        {p.activo ? <ShieldAlert size={14} className="text-red-400"/> : <ShieldCheck size={14}/>}
-                        {p.activo ? 'Inhabilitar Ficha de Paciente' : 'Reactivar Paciente'}
-                      </button>
-                  </div>
-                )}
+                     )}
 
-              </motion.div>
-            </td>
-          </tr>
+                 </div>
+              )}
+              
+              {['ADMIN', 'RECEPCIONISTA'].includes(perfil?.rol) && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 p-4 sm:p-5 bg-slate-50/60 rounded-[1.5rem] border border-slate-100">
+                    <div className="flex items-start gap-2 text-left">
+                      <ShieldCheck size={16} className="text-slate-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-black text-slate-700">{p.activo ? '¿Deseas inhabilitar esta ficha?' : '¿Deseas reactivar esta ficha?'}</p>
+                        <p className="text-[10px] font-medium text-slate-400 mt-0.5">{p.activo ? 'Inhabilitar la ficha de paciente impide su uso en nuevas atenciones.' : 'Reactivar la ficha permite volver a agendar y atender al paciente.'}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onCambiarEstado(); }}
+                      className={`w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border shadow-sm ${
+                        p.activo ? 'text-red-500 border-red-200 bg-white hover:bg-red-50' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      {p.activo ? <ShieldAlert size={14}/> : <ShieldCheck size={14}/>}
+                      {p.activo ? 'Inhabilitar Ficha de Paciente' : 'Reactivar Paciente'}
+                    </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </div>
   )
 }
