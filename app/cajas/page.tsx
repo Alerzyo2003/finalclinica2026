@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { 
   Wallet, Plus, Lock, Unlock, Users, Info, 
   Calendar, ArrowRight, Loader2, CheckCircle2, History,
-  Banknote, X, ReceiptText, ChevronRight, AlertCircle, TrendingUp, Clock4
+  Banknote, X, ReceiptText, ChevronRight, AlertCircle, TrendingUp, Clock4, Eye
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -34,7 +34,7 @@ export default function GestionCajasPage() {
           .from('perfiles')
           .select('nombre_completo')
           .eq('id', user.id)
-          .maybeSingle() // Cambiado de single a maybeSingle para evitar errores si no hay perfil
+          .maybeSingle()
 
         setResponsable(perfil?.nombre_completo || user.user_metadata?.nombre_completo || user.email || 'Recepcionista')
       }
@@ -63,7 +63,6 @@ export default function GestionCajasPage() {
       
       if (errCe) throw errCe
       
-      // CORRECCIÓN: Casting a any para evitar error de propiedad pagos
       const abiertasProcesadas = abiertas?.map((caja: any) => {
         const sumaPagos = (caja.pagos as any[])?.reduce((acc: number, p: any) => acc + Number(p.monto), 0) || 0
         return { ...caja, acumulado: Number(caja.monto_apertura) + sumaPagos }
@@ -113,7 +112,6 @@ export default function GestionCajasPage() {
   }
 
   const handleCerrarCaja = async (caja: any) => {
-    // CORRECCIÓN: Uso seguro de confirm para SSR
     if (typeof window !== 'undefined') {
         if (!window.confirm(`¿Confirmas el cierre del turno de ${caja.nombre_responsable}?`)) return
     }
@@ -136,142 +134,233 @@ export default function GestionCajasPage() {
   }
 
   if (cargando) return (
-    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#FDFDFD]">
-      <Loader2 className="animate-spin text-blue-600" size={40} />
-      <p className="font-black text-[10px] uppercase tracking-[0.3em] text-slate-400">Verificando Finanzas...</p>
+    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-white">
+      <Loader2 className="animate-spin text-[#C49A5C]" size={40} />
+      <p className="font-bold text-xs uppercase tracking-widest text-slate-400">Verificando Finanzas...</p>
     </div>
   )
 
   const hayCajaAbierta = cajasAbiertas.length > 0
+  const cajaActiva = hayCajaAbierta ? cajasAbiertas[0] : null
 
   return (
-    <main className="min-h-screen bg-[#FDFDFD] p-8 md:p-12 font-sans text-slate-900 text-left">
-      <div className="max-w-6xl mx-auto space-y-12">
+    <main className="min-h-screen bg-white p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
+      
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[800px] h-[900px] bg-[url('/fondo-caja.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-100"
+      ></div>
+
+      <div className="max-w-[1400px] mx-auto space-y-8 relative z-10">
         
         {/* HEADER */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-1 text-left">
-            <h1 className="text-5xl font-black uppercase tracking-tighter text-slate-900 leading-none italic text-left">Control <br/> <span className="text-blue-600">de Caja</span></h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] ml-1 text-left">Terminal de Arqueo y Recaudación</p>
+          <div className="space-y-1">
+            <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tight text-[#0B1527] leading-[1.1]">
+              CONTROL <br />
+              <span className="text-[#C49A5C]">DE CAJA</span>
+            </h1>
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-3">Terminal de Arqueo y Recaudación</p>
+            <div className="w-12 h-[3px] bg-[#C49A5C] mt-2 rounded-full"></div>
           </div>
           
           <button 
             disabled={hayCajaAbierta}
             onClick={() => setModalApertura(true)}
-            className={`px-10 py-5 rounded-[2rem] font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center gap-3 ${
+            className={`flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100 min-w-[300px] transition-all ${
               hayCajaAbierta 
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none' 
-              : 'bg-slate-900 text-white hover:bg-blue-600 shadow-slate-200 active:scale-95'
+              ? 'opacity-90 cursor-not-allowed' 
+              : 'hover:border-[#C49A5C]/40 hover:shadow-md cursor-pointer active:scale-95'
             }`}
           >
-            {hayCajaAbierta ? <Lock size={18} /> : <Plus size={18} />}
-            {hayCajaAbierta ? 'Caja bloqueada' : 'Nuevo Turno'}
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-full ${hayCajaAbierta ? 'bg-[#FCF8F2] text-[#C49A5C]' : 'bg-emerald-50 text-emerald-600'}`}>
+                {hayCajaAbierta ? <Lock size={20} /> : <Plus size={20} />}
+              </div>
+              <div className="text-left">
+                <p className="font-bold text-slate-800 text-sm">{hayCajaAbierta ? 'CAJA BLOQUEADA' : 'ABRIR CAJA'}</p>
+                <p className="text-xs text-slate-400 font-medium">{hayCajaAbierta ? 'Solo usuarios autorizados' : 'Iniciar un nuevo turno'}</p>
+              </div>
+            </div>
+            <ChevronRight className="text-slate-300" size={20} />
           </button>
         </header>
 
-        {/* ALERTA */}
-        <div className={`p-6 rounded-3xl flex items-center gap-5 border shadow-sm ${hayCajaAbierta ? 'bg-blue-50 border-blue-100 text-blue-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
-          <div className="bg-white p-3 rounded-2xl shadow-sm shrink-0">
-            {hayCajaAbierta ? <TrendingUp size={24} className="text-blue-500" /> : <Info size={24} className="text-amber-500" />}
-          </div>
-          <p className="text-[11px] font-bold uppercase leading-relaxed tracking-wide text-left">
-            {hayCajaAbierta 
-              ? `Sesión activa iniciada por ${cajasAbiertas[0].nombre_responsable}. Solo se permite una caja abierta a la vez.`
-              : `Aviso: Los totales mostrados corresponden únicamente a ingresos directos registrados en sistema.`
-            }
-          </p>
-        </div>
-
-        {/* SESIÓN ACTIVA */}
-        <section className="space-y-6 text-left">
-          <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.4em] ml-6 text-left">Operación en Curso</h2>
-          {cajasAbiertas.length === 0 ? (
-            <div className="bg-white p-12 rounded-[3rem] border-2 border-dashed border-slate-100 text-center">
-              <p className="text-slate-300 font-black uppercase text-xs italic tracking-widest">No hay turnos abiertos actualmente</p>
+        {/* ALERTA / BANNER INFORMATIVO */}
+        {hayCajaAbierta && (
+          <div className="flex flex-col md:flex-row items-center bg-white rounded-2xl p-5 border border-slate-100 shadow-sm gap-6 md:gap-0 max-w-[950px]">
+            <div className="flex items-center gap-5 flex-1">
+              <div className="bg-[#FCF8F2] p-3 rounded-full text-[#C49A5C] shrink-0">
+                <TrendingUp size={22} />
+              </div>
+              <div>
+                <p className="text-xs md:text-sm font-bold text-[#0B1527] uppercase tracking-wide">
+                  SESIÓN ACTIVA INICIADA POR {cajaActiva.nombre_responsable}.
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">Solo se permite una caja abierta a la vez.</p>
+              </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-6">
-              {cajasAbiertas.map((caja) => (
-                <div key={caja.id} className="bg-slate-900 rounded-[3.5rem] p-4 shadow-2xl overflow-hidden relative">
-                  <div className="absolute top-0 right-0 p-10 opacity-10 rotate-12"><Banknote size={150} className="text-white"/></div>
-                  
-                  <div className="bg-white/5 backdrop-blur-md rounded-[3rem] p-10 flex flex-col md:flex-row justify-between items-center gap-8 relative z-10 border border-white/10">
-                    <div className="space-y-4 text-left w-full md:w-auto">
-                      <div className="flex items-center gap-3 bg-blue-600/20 w-fit px-4 py-1.5 rounded-full border border-blue-500/20">
-                         <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                         <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Turno Activo</span>
-                      </div>
-                      <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter text-left">{caja.nombre_responsable}</h3>
-                      <div className="flex items-center gap-4 text-slate-400 text-xs font-bold uppercase text-left">
-                        <span className="flex items-center gap-1 text-left"><Calendar size={14}/> {new Date(caja.fecha_apertura).toLocaleDateString('es-CL')}</span>
-                        <span className="flex items-center gap-1 text-left"><Clock4 size={14}/> {new Date(caja.fecha_apertura).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})} hrs</span>
-                      </div>
-                    </div>
+            
+            <div className="hidden md:block w-px h-10 bg-slate-200 mx-8"></div>
+            
+            <div className="flex items-center gap-5 flex-1 md:flex-none md:pr-10">
+              <div className="bg-[#FCF8F2] p-3 rounded-full text-[#C49A5C] shrink-0">
+                <Clock4 size={22} />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-[#0B1527] uppercase tracking-widest">INICIADA</p>
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                  {new Date(cajaActiva.fecha_apertura).toLocaleDateString('es-CL')} • {new Date(cajaActiva.fecha_apertura).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
-                    <div className="flex gap-4 md:gap-8">
-                      <div className="text-center md:text-right">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Base Inicial</p>
-                        <p className="text-xl font-bold text-white">${Number(caja.monto_apertura).toLocaleString('es-CL')}</p>
-                      </div>
-                      <div className="w-px h-12 bg-white/10 hidden md:block" />
-                      <div className="text-center md:text-right">
-                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1 italic">Total Acumulado</p>
-                        <p className="text-4xl font-black text-blue-400 tracking-tighter">${Number(caja.acumulado || 0).toLocaleString('es-CL')}</p>
-                      </div>
-                    </div>
+        {/* MAIN GRID: TURNO ACTIVO & RESUMEN */}
+        {hayCajaAbierta ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
+            
+            {/* TARJETA TURNO ACTIVO (Oscura) */}
+            <div className="lg:col-span-2 bg-[#0A1629] rounded-3xl p-8 relative flex flex-col justify-between shadow-xl min-h-[340px]">
+              <div className="relative z-10">
+                <span className="bg-[#C49A5C] text-white text-[10px] font-bold uppercase tracking-widest px-5 py-2 rounded-full inline-block mb-6 shadow-sm">
+                  Turno Activo
+                </span>
+                <h3 className="text-3xl md:text-4xl font-black text-white uppercase tracking-tight">{cajaActiva.nombre_responsable}</h3>
+                <div className="flex items-center gap-6 text-slate-300 text-xs font-medium mt-3">
+                  <span className="flex items-center gap-2"><Calendar size={16}/> {new Date(cajaActiva.fecha_apertura).toLocaleDateString('es-CL')}</span>
+                  <span className="flex items-center gap-2"><Clock4 size={16}/> {new Date(cajaActiva.fecha_apertura).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+              </div>
 
-                    <button 
-                      onClick={() => handleCerrarCaja(caja)}
-                      className="bg-white text-slate-900 px-8 py-5 rounded-[1.8rem] font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl active:scale-95"
-                    >
-                      Cerrar Turno
-                    </button>
+              {/* Línea divisoria sutil */}
+              <div className="w-full h-px bg-white/10 my-8"></div>
+
+              <div className="flex flex-col md:flex-row items-start md:items-end justify-between relative z-10 gap-6 md:gap-0">
+                <div className="flex gap-12 md:gap-20">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-2">Base Inicial</p>
+                    <p className="text-3xl font-bold text-white">${Number(cajaActiva.monto_apertura).toLocaleString('es-CL')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-[#C49A5C] uppercase tracking-widest mb-2">Total Acumulado</p>
+                    <p className="text-4xl md:text-5xl font-black text-[#C49A5C]">${Number(cajaActiva.acumulado || 0).toLocaleString('es-CL')}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
 
-        {/* HISTORIAL */}
-        <section className="space-y-6 pt-6 text-left">
-          <div className="flex items-center justify-between px-6">
-            <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.4em] flex items-center gap-2 text-left"><History size={16} /> Registro Histórico</h2>
-            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest italic">Mostrando últimos cierres</span>
+                <button 
+                  onClick={() => handleCerrarCaja(cajaActiva)}
+                  className="bg-[#C49A5C] text-white px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest flex items-center gap-2.5 hover:bg-[#b58b4f] transition-all shadow-lg shadow-[#C49A5C]/20 w-full md:w-auto justify-center"
+                >
+                  <Lock size={18} /> Cerrar Turno
+                </button>
+              </div>
+            </div>
+
+            {/* TARJETA RESUMEN DEL DÍA (Blanca) */}
+            <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-sm border border-slate-100 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 text-[#0B1527] font-black text-sm uppercase tracking-wide mb-8">
+                  <div className="p-2.5 bg-[#FCF8F2] text-[#C49A5C] rounded-xl"><TrendingUp size={20} /></div>
+                  Resumen del Día
+                </div>
+                
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-5">
+                    <div className="flex items-center gap-4 text-[13px] text-slate-600 font-bold uppercase tracking-wider">
+                      <div className="p-2 bg-[#FCF8F2] rounded-lg text-[#C49A5C]"><ReceiptText size={16} /></div>
+                      Ingresos Totales
+                    </div>
+                    <div className="font-black text-[#C49A5C] text-xl">${Number(cajaActiva.acumulado || 0).toLocaleString('es-CL')}</div>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-5">
+                    <div className="flex items-center gap-4 text-[13px] text-slate-600 font-bold uppercase tracking-wider">
+                      <div className="p-2 bg-[#FCF8F2] rounded-lg text-[#C49A5C]"><TrendingUp size={16} /></div>
+                      Transacciones
+                    </div>
+                    <div className="font-black text-[#0B1527] text-xl">{cajaActiva.pagos?.length || 0}</div>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-5">
+                    <div className="flex items-center gap-4 text-[13px] text-slate-600 font-bold uppercase tracking-wider">
+                      <div className="p-2 bg-[#FCF8F2] rounded-lg text-[#C49A5C]"><Banknote size={16} /></div>
+                      Promedio por Transacción
+                    </div>
+                    <div className="font-black text-[#0B1527] text-xl">
+                      ${cajaActiva.pagos?.length ? Math.round(Number(cajaActiva.acumulado) / cajaActiva.pagos.length).toLocaleString('es-CL') : 0}
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-1">
+                    <div className="flex items-center gap-4 text-[13px] text-slate-600 font-bold uppercase tracking-wider">
+                      <div className="p-2 bg-[#FCF8F2] rounded-lg text-[#C49A5C]"><Users size={16} /></div>
+                      Pacientes Atendidos
+                    </div>
+                    <div className="font-black text-[#0B1527] text-xl">{cajaActiva.pagos?.length || 0}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+        ) : (
+          <div className="bg-white p-12 rounded-3xl border border-slate-100 shadow-sm text-center">
+            <p className="text-slate-400 font-bold uppercase text-sm tracking-widest">No hay turnos abiertos actualmente</p>
+          </div>
+        )}
+
+        {/* REGISTRO HISTÓRICO (Tabla) */}
+        <section className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-sm border border-slate-100 overflow-hidden mt-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between p-6 md:p-8 border-b border-slate-100 gap-4">
+            <h2 className="text-sm font-black uppercase text-[#0B1527] tracking-wide flex items-center gap-3">
+              <div className="p-2 bg-[#FCF8F2] text-[#C49A5C] rounded-lg"><History size={18} /></div>
+              Registro Histórico
+            </h2>
+            <button className="flex items-center gap-2 text-[11px] font-bold text-[#C49A5C] uppercase tracking-widest hover:text-[#0B1527] transition-colors">
+              <History size={14} /> Ver histórico completo <ChevronRight size={14}/>
+            </button>
           </div>
           
-          <div className="bg-white rounded-[3rem] shadow-xl border border-slate-100 overflow-hidden text-left">
-            <div className="grid grid-cols-1 divide-y divide-slate-50">
-              {cajasCerradas.map((caja) => (
-                <div 
-                  key={caja.id} 
-                  onClick={() => router.push(`/cajas/${caja.id}`)}
-                  className="p-8 flex flex-col md:flex-row items-center justify-between hover:bg-slate-50/80 transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center gap-6 w-full md:w-auto">
-                    <div className="bg-slate-100 p-5 rounded-2xl text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all duration-500 shadow-inner">
-                      <ReceiptText size={24} />
-                    </div>
-                    <div className="space-y-1 text-left">
-                      <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight text-left">{caja.nombre_responsable}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-left">
-                        Cierre: {new Date(caja.fecha_cierre).toLocaleString('es-CL')}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-8 mt-4 md:mt-0">
-                    <div className="text-right">
-                      <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em] mb-1">Monto de Liquidación</p>
-                      <p className="text-2xl font-black text-slate-900 tracking-tighter">${(caja.monto_cierre || 0).toLocaleString('es-CL')}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-full text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                      <ChevronRight size={24} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-transparent text-[10px] text-[#C49A5C] uppercase tracking-[0.15em] font-black border-b border-slate-100">
+                  <th className="px-8 py-5">Fecha</th>
+                  <th className="px-8 py-5">Usuario</th>
+                  <th className="px-8 py-5">Hora Inicio</th>
+                  <th className="px-8 py-5">Hora Cierre</th>
+                  <th className="px-8 py-5">Base Inicial</th>
+                  <th className="px-8 py-5">Total Acumulado</th>
+                  <th className="px-8 py-5 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 text-sm">
+                {cajasCerradas.map((caja) => (
+                  <tr key={caja.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-8 py-6 font-bold text-[#0B1527]">{new Date(caja.fecha_apertura).toLocaleDateString('es-CL')}</td>
+                    <td className="px-8 py-6 font-bold text-[#0B1527]">{caja.nombre_responsable}</td>
+                    <td className="px-8 py-6 text-slate-500 font-medium">{new Date(caja.fecha_apertura).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})}</td>
+                    <td className="px-8 py-6 text-slate-500 font-medium">{new Date(caja.fecha_cierre).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})}</td>
+                    <td className="px-8 py-6 text-[#0B1527] font-bold">${Number(caja.monto_apertura).toLocaleString('es-CL')}</td>
+                    <td className="px-8 py-6 text-emerald-600 font-black">${Number(caja.monto_cierre || 0).toLocaleString('es-CL')}</td>
+                    <td className="px-8 py-6 text-center">
+                      <button 
+                        onClick={() => router.push(`/cajas/${caja.id}`)}
+                        className="p-2.5 bg-[#FCF8F2] text-[#C49A5C] rounded-xl hover:bg-[#C49A5C] hover:text-white transition-all inline-flex"
+                      >
+                        <Eye size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {cajasCerradas.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-8 py-8 text-center text-slate-400 font-medium text-sm">
+                      No hay registros históricos disponibles.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
@@ -279,47 +368,49 @@ export default function GestionCajasPage() {
       {/* MODAL APERTURA */}
       <AnimatePresence>
         {modalApertura && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white w-full max-w-lg rounded-[4rem] shadow-2xl overflow-hidden border border-slate-100 text-center"
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100"
             >
-              <div className="p-12 text-center space-y-6">
-                <div className="bg-blue-600 w-24 h-24 rounded-[2.5rem] flex items-center justify-center text-white mx-auto shadow-2xl shadow-blue-200">
-                  <Unlock size={44} />
+              <div className="p-8 text-center space-y-6">
+                <div className="bg-[#FCF8F2] w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-[#C49A5C] mx-auto">
+                  <Unlock size={36} />
                 </div>
                 <div>
-                  <h3 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">Apertura Turno</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Configuración inicial del cajero</p>
+                  <h3 className="text-2xl font-black uppercase tracking-tight text-[#0B1527]">Apertura de Caja</h3>
+                  <p className="text-xs font-bold text-[#C49A5C] uppercase tracking-wider mt-2">Configuración inicial del turno</p>
                 </div>
 
-                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Responsable:</span>
-                  <span className="font-black uppercase italic text-slate-800 tracking-tight">{responsable}</span>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between mt-4">
+                  <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Cajero:</span>
+                  <span className="font-bold text-slate-800">{responsable}</span>
                 </div>
 
-                <div className="space-y-4 pt-4 text-center">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Monto en efectivo (Sencillo)</label>
+                <div className="space-y-3 pt-2">
+                  <label className="text-xs font-bold uppercase text-slate-500 tracking-wider block text-left">Monto en caja (Sencillo)</label>
                   <div className="relative group">
-                    <span className="absolute left-8 top-1/2 -translate-y-1/2 text-3xl font-black text-emerald-500">$</span>
+                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-black text-[#C49A5C]">$</span>
                     <input 
                       type="number" 
                       autoFocus
                       value={montoInicial} 
                       onChange={(e) => setMontoInicial(e.target.value)}
-                      className="w-full bg-slate-50 border-4 border-transparent focus:border-blue-500 focus:bg-white rounded-[2.5rem] py-10 pl-16 pr-8 text-6xl font-black outline-none transition-all text-center text-slate-900"
+                      className="w-full bg-white border-2 border-slate-200 focus:border-[#C49A5C] rounded-2xl py-4 pl-12 pr-6 text-2xl font-bold outline-none transition-all text-[#0B1527]"
                     />
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 pt-6">
+                <div className="flex flex-col gap-3 pt-4">
                   <button 
                     disabled={abriendoCaja}
                     onClick={handleAbrirCaja}
-                    className="w-full bg-slate-900 text-white py-8 rounded-[2.2rem] font-black text-sm uppercase shadow-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 disabled:bg-slate-300"
+                    className="w-full bg-[#0B1527] text-white py-4 rounded-2xl font-bold text-sm uppercase tracking-wide hover:bg-[#0B1527]/90 transition-all flex items-center justify-center gap-2 disabled:bg-slate-300"
                   >
-                    {abriendoCaja ? <Loader2 className="animate-spin" /> : 'Confirmar e Iniciar Operaciones'}
+                    {abriendoCaja ? <Loader2 className="animate-spin" /> : 'Confirmar Apertura'}
                   </button>
-                  <button onClick={() => setModalApertura(false)} className="py-2 text-[10px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors tracking-widest">Cancelar Proceso</button>
+                  <button onClick={() => setModalApertura(false)} className="py-3 text-xs font-bold uppercase text-slate-400 hover:text-red-500 transition-colors tracking-wider">
+                    Cancelar
+                  </button>
                 </div>
               </div>
             </motion.div>
