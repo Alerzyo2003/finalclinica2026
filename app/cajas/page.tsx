@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+// 1. IMPORTAMOS CREATEPORTAL
+import { createPortal } from 'react-dom'
 import { 
   Wallet, Plus, Lock, Unlock, Users, Info, 
   Calendar, ArrowRight, Loader2, CheckCircle2, History,
@@ -18,10 +20,14 @@ export default function GestionCajasPage() {
   const [modalApertura, setModalApertura] = useState(false)
   const [abriendoCaja, setAbriendoCaja] = useState(false)
   
+  // 2. ESTADO PARA SABER SI EL COMPONENTE YA CARGÓ EN EL CLIENTE (Necesario para los Portals)
+  const [isMounted, setIsMounted] = useState(false)
+  
   const [responsable, setResponsable] = useState('Cargando...')
   const [montoInicial, setMontoInicial] = useState('0')
 
   useEffect(() => {
+    setIsMounted(true) // Indicamos que ya cargó en el navegador
     fetchCajas()
     obtenerNombreUsuario()
   }, [])
@@ -365,58 +371,62 @@ export default function GestionCajasPage() {
         </section>
       </div>
 
-      {/* MODAL APERTURA */}
-      <AnimatePresence>
-        {modalApertura && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100"
-            >
-              <div className="p-8 text-center space-y-6">
-                <div className="bg-[#FCF8F2] w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-[#C49A5C] mx-auto">
-                  <Unlock size={36} />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-black uppercase tracking-tight text-[#0B1527]">Apertura de Caja</h3>
-                  <p className="text-xs font-bold text-[#C49A5C] uppercase tracking-wider mt-2">Configuración inicial del turno</p>
-                </div>
+      {/* 3. ENVOLVEMOS EL MODAL EN CREATEPORTAL AL FINAL DEL ARCHIVO */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {modalApertura && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100"
+              >
+                <div className="p-8 text-center space-y-6">
+                  <div className="bg-[#FCF8F2] w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-[#C49A5C] mx-auto">
+                    <Unlock size={36} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black uppercase tracking-tight text-[#0B1527]">Apertura de Caja</h3>
+                    <p className="text-xs font-bold text-[#C49A5C] uppercase tracking-wider mt-2">Configuración inicial del turno</p>
+                  </div>
 
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between mt-4">
-                  <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Cajero:</span>
-                  <span className="font-bold text-slate-800">{responsable}</span>
-                </div>
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between mt-4">
+                    <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Cajero:</span>
+                    <span className="font-bold text-slate-800">{responsable}</span>
+                  </div>
 
-                <div className="space-y-3 pt-2">
-                  <label className="text-xs font-bold uppercase text-slate-500 tracking-wider block text-left">Monto en caja (Sencillo)</label>
-                  <div className="relative group">
-                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-black text-[#C49A5C]">$</span>
-                    <input 
-                      type="number" 
-                      autoFocus
-                      value={montoInicial} 
-                      onChange={(e) => setMontoInicial(e.target.value)}
-                      className="w-full bg-white border-2 border-slate-200 focus:border-[#C49A5C] rounded-2xl py-4 pl-12 pr-6 text-2xl font-bold outline-none transition-all text-[#0B1527]"
-                    />
+                  <div className="space-y-3 pt-2">
+                    <label className="text-xs font-bold uppercase text-slate-500 tracking-wider block text-left">Monto en caja (Sencillo)</label>
+                    <div className="relative group">
+                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-black text-[#C49A5C]">$</span>
+                      <input 
+                        type="number" 
+                        autoFocus
+                        value={montoInicial} 
+                        onChange={(e) => setMontoInicial(e.target.value)}
+                        className="w-full bg-white border-2 border-slate-200 focus:border-[#C49A5C] rounded-2xl py-4 pl-12 pr-6 text-2xl font-bold outline-none transition-all text-[#0B1527]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 pt-4">
+                    <button 
+                      disabled={abriendoCaja}
+                      onClick={handleAbrirCaja}
+                      className="w-full bg-[#0B1527] text-white py-4 rounded-2xl font-bold text-sm uppercase tracking-wide hover:bg-[#0B1527]/90 transition-all flex items-center justify-center gap-2 disabled:bg-slate-300"
+                    >
+                      {abriendoCaja ? <Loader2 className="animate-spin" /> : 'Confirmar Apertura'}
+                    </button>
+                    <button onClick={() => setModalApertura(false)} className="py-3 text-xs font-bold uppercase text-slate-400 hover:text-red-500 transition-colors tracking-wider">
+                      Cancelar
+                    </button>
                   </div>
                 </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
 
-                <div className="flex flex-col gap-3 pt-4">
-                  <button 
-                    disabled={abriendoCaja}
-                    onClick={handleAbrirCaja}
-                    className="w-full bg-[#0B1527] text-white py-4 rounded-2xl font-bold text-sm uppercase tracking-wide hover:bg-[#0B1527]/90 transition-all flex items-center justify-center gap-2 disabled:bg-slate-300"
-                  >
-                    {abriendoCaja ? <Loader2 className="animate-spin" /> : 'Confirmar Apertura'}
-                  </button>
-                  <button onClick={() => setModalApertura(false)} className="py-3 text-xs font-bold uppercase text-slate-400 hover:text-red-500 transition-colors tracking-wider">
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </main>
   )
 }
