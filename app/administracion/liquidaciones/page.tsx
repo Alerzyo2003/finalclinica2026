@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+// 1. IMPORTAMOS CREATEPORTAL
+import { createPortal } from 'react-dom'
 import { 
   Calculator, Search, Eye, CheckCircle2, 
   Loader2, Calendar as CalendarIcon, DollarSign,
@@ -20,7 +22,11 @@ export default function LiquidacionesPage() {
   const [guardandoContrato, setGuardandoContrato] = useState(false)
   const [procesandoPago, setProcesandoPago] = useState<string | null>(null) 
 
+  // 2. ESTADO PARA LOS PORTALS (Asegurar que carga en el cliente)
+  const [isMounted, setIsMounted] = useState(false)
+
   useEffect(() => {
+    setIsMounted(true)
     fetchData()
   }, [mesSeleccionado])
 
@@ -63,7 +69,7 @@ export default function LiquidacionesPage() {
         .lte('fecha_pago', finRango)
         .not('estado', 'eq', 'Anulado');
 
-      // 4. Obtener liquidaciones cerradas en este rango de mes (Para saber cuánto ya le hemos pagado este mes)
+      // 4. Obtener liquidaciones cerradas en este rango de mes
       const { data: liquidacionesCerradas } = await supabase
         .from('liquidaciones')
         .select('profesional_id, monto_total')
@@ -110,20 +116,9 @@ export default function LiquidacionesPage() {
             const itemEstado = pago.presupuesto_items?.estado?.toLowerCase() || '';
             const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
 
-            // 🔥 OBTENER EL TIPO DE REPARTO QUE TRAE LA BASE DE DATOS
             const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
             const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
             const pctClinicaItem = 1 - pctDrItem;
-
-            // 🛑 LOG DE DEPURACIÓN EN CONSOLA (Abre la consola de tu navegador F12 para verlo)
-            console.log(`[LIQUIDACION DEBUG] Prestación ID: ${pago.item_id}`, {
-              montoPago,
-              tipoRepartoEnBD: pago.presupuesto_items?.tipo_reparto,
-              tipoRepartoDetectado: tipoReparto,
-              porcentajeContratoDr: porcentajeDr,
-              pctDrItemAplicado: pctDrItem,
-              itemTerminado: estaTerminado
-            });
 
             const costoLab = Number(pago.presupuesto_items?.costo_laboratorio || 0);
             const precioPactado = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
@@ -133,7 +128,7 @@ export default function LiquidacionesPage() {
             if (fraccionPago > 1) fraccionPago = 1;
 
             const labADescontar = costoLab * fraccionPago;
-            let montoImponible = montoPago; // NUNCA descontar el laboratorio del imponible para la comisión.
+            let montoImponible = montoPago;
             if (montoImponible < 0) montoImponible = 0;
 
             if (estaTerminado) {
@@ -149,15 +144,12 @@ export default function LiquidacionesPage() {
 
         const totalProduccion = sumaAtenciones + sumaAbonos;
         
-        // Total de dinero líquido generado este mes
         const totalLiquidoMensual = honorarioAtenciones + honorariosAbonos + reembolsosDoctor;
         const margenClinica = utilidadAtenciones + utilidadAbonos;
 
-        // RESTAMOS LO YA PAGADO EN ESTE MES PARA MOSTRAR SOLO EL PENDIENTE
         const totalYaPagadoHistorico = historialPagosMap[p.id] || 0;
         const saldoPendienteDoctor = Math.max(0, totalLiquidoMensual - totalYaPagadoHistorico);
 
-        // Si ya tiene un pago previo guardado y el saldo pendiente es 0, está completamente cerrado
         const completamentePagado = totalYaPagadoHistorico > 0 && saldoPendienteDoctor <= 0;
 
         return {
@@ -246,144 +238,154 @@ export default function LiquidacionesPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-8 pb-24 font-sans text-left">
-      <div className="max-w-7xl mx-auto space-y-10 text-left">
+    <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
+      
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
+      ></div>
+
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10 text-left">
         
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 text-left">
-          <div className="flex items-center gap-6 text-left">
-            <div className="bg-slate-900 p-5 rounded-[2.2rem] text-white shadow-2xl">
-              <Calculator size={30} strokeWidth={2.5} />
+        {/* HEADER */}
+        <header className="bg-white/90 backdrop-blur-md p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 text-left">
+          <div className="flex items-center gap-5 text-left w-full lg:w-auto">
+            <div className="bg-[#0A111F] w-16 h-16 rounded-full flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
+              <Calculator size={28} />
             </div>
             <div className="text-left">
-              <h1 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter">Cierre de Caja</h1>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] flex items-center gap-2 mt-2">
-                <TrendingUp size={12} className="text-emerald-500"/> Rendimiento por especialista
+              <h1 className="text-2xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">
+                CIERRE DE CAJA
+              </h1>
+              <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase tracking-widest mt-1.5 flex items-center gap-2">
+                <TrendingUp size={14} className="text-[#C9A24B]"/> Rendimiento por especialista
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 bg-white p-2 rounded-[2rem] shadow-sm border border-slate-100 text-left">
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-left">
-              <CalendarIcon size={16} className="text-blue-600"/>
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+            <div className="flex items-center gap-3 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-full w-full sm:w-auto focus-within:border-[#C9A24B] transition-colors shadow-inner">
+              <CalendarIcon size={16} className="text-slate-400"/>
               <input 
                 type="month" 
                 value={mesSeleccionado} 
                 onChange={(e) => setMesSeleccionado(e.target.value)}
-                className="bg-transparent font-black text-xs uppercase outline-none text-slate-700 cursor-pointer"
+                className="bg-transparent font-black text-xs uppercase outline-none text-[#0A111F] cursor-pointer"
               />
             </div>
-            <div className="relative group text-left">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+            <div className="relative w-full sm:w-auto text-left flex-1">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
                 type="text" 
-                placeholder="Buscar Dr..." 
-                className="pl-11 pr-6 py-3 bg-slate-50 rounded-xl text-xs font-bold border border-transparent focus:border-blue-500 outline-none transition-all w-64 text-slate-900"
+                placeholder="Buscar especialista..." 
+                className="w-full pl-12 pr-6 py-3.5 bg-slate-50 border border-slate-200 rounded-full text-xs font-bold outline-none focus:border-[#C9A24B] transition-colors shadow-inner text-[#0A111F] placeholder:text-slate-400"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
               />
             </div>
           </div>
+        </header>
+
+        {/* MÉTRICAS (STAT CARDS) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+          <StatCard label="Producción Total" value={globalTotal} icon={<DollarSign size={20}/>} type="light" />
+          <StatCard label="Pendiente de Pago" value={globalHonorarios} icon={<Users size={20}/>} type="gold" />
+          <StatCard label="Margen Clínica Neta" value={globalUtilidad} icon={<ArrowUpRight size={20}/>} type="dark" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-          <StatCard label="Producción Total" value={globalTotal} icon={<DollarSign size={20}/>} color="blue" />
-          <StatCard label="Pendiente de Pago" value={globalHonorarios} icon={<Users size={20}/>} color="emerald" />
-          <StatCard label="Margen Clínica Neta" value={globalTotal - liquidaciones.reduce((acc,curr) => acc + curr.totalYaPagado, 0)} icon={<ArrowUpRight size={20}/>} color="slate" isDark />
-        </div>
-
-        <div className="bg-white rounded-[3.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden text-left">
+        {/* TABLA DE LIQUIDACIONES */}
+        <div className="bg-white/95 backdrop-blur-sm rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden text-left">
           <div className="overflow-x-auto text-left">
-            <table className="w-full text-left border-separate border-spacing-0 min-w-[800px]">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
-                <tr className="bg-slate-900 text-white">
-                  <th className="px-10 py-8 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Especialista Responsable</th>
-                  <th className="px-6 py-8 text-[10px] font-black uppercase tracking-widest text-center whitespace-nowrap">Contrato (%)</th>
-                  <th className="px-6 py-8 text-[10px] font-black uppercase tracking-widest text-center whitespace-nowrap">Producción</th>
-                  <th className="px-6 py-8 text-[10px] font-black uppercase tracking-widest text-center text-emerald-400 whitespace-nowrap">Líquido a Pagar</th>
-                  <th className="px-10 py-8 text-[10px] font-black uppercase tracking-widest text-right whitespace-nowrap">Acciones</th>
+                <tr className="border-b border-slate-100 bg-[#FBF8F2]/50">
+                  <th className="px-10 py-6 text-[10px] font-black text-[#0A111F] uppercase tracking-widest whitespace-nowrap">Especialista Responsable</th>
+                  <th className="px-6 py-6 text-[10px] font-black text-[#0A111F] uppercase tracking-widest text-center whitespace-nowrap">Contrato (%)</th>
+                  <th className="px-6 py-6 text-[10px] font-black text-[#0A111F] uppercase tracking-widest text-center whitespace-nowrap">Producción</th>
+                  <th className="px-6 py-6 text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center whitespace-nowrap">Líquido a Pagar</th>
+                  <th className="px-10 py-6 text-[10px] font-black text-[#0A111F] uppercase tracking-widest text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-left">
+              <tbody className="divide-y divide-slate-100/60 text-left">
                 {cargando ? (
                   <tr>
-                    <td colSpan={5} className="py-32 text-center">
-                      <Loader2 className="animate-spin mx-auto text-blue-600 mb-4" size={40} />
+                    <td colSpan={5} className="py-24 text-center">
+                      <Loader2 className="animate-spin mx-auto text-[#C9A24B] mb-4" size={40} />
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Calculando balances y contratos...</p>
                     </td>
                   </tr>
                 ) : filtradas.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-32 text-center">
-                      <CheckCircle2 className="mx-auto text-slate-300 mb-4" size={40} />
+                    <td colSpan={5} className="py-24 text-center">
+                      <CheckCircle2 className="mx-auto text-emerald-500 mb-4 opacity-50" size={40} />
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">No hay producción en este mes</p>
                     </td>
                   </tr>
                 ) : filtradas.map((liq) => (
-                  <tr key={liq.id} className={`transition-all group text-left ${liq.yaPagado ? 'bg-slate-50/60 opacity-70' : 'hover:bg-blue-50/40'}`}>
-                    <td className="px-10 py-7 text-left">
-                      <div className="flex items-center gap-4 text-left">
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm shrink-0">
+                  <tr key={liq.id} className={`transition-all group text-left ${liq.yaPagado ? 'bg-slate-50/50 opacity-70' : 'hover:bg-slate-50/80 cursor-pointer'}`}>
+                    <td className="px-10 py-6 text-left">
+                      <div className="flex items-center gap-5 text-left">
+                        <div className="w-12 h-12 bg-[#C9A24B]/10 rounded-2xl flex items-center justify-center font-black text-[#C9A24B] group-hover:bg-[#C9A24B] group-hover:text-white transition-colors shrink-0">
                           {liq.nombreCompleto.charAt(0)}
                         </div>
                         <div className="text-left">
-                          <p className="text-sm font-black text-slate-800 uppercase italic leading-none text-left">{liq.nombreCompleto}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 tracking-widest text-left">ID: {liq.user_id.substring(0,8)}</p>
+                          <p className="text-sm font-black text-[#0A111F] uppercase leading-tight text-left">{liq.nombreCompleto}</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest text-left">ID: {liq.user_id.substring(0,8)}</p>
                         </div>
                       </div>
                     </td>
                     
-                    <td className="px-6 py-7 text-center">
+                    <td className="px-6 py-6 text-center">
                       <button 
                         onClick={() => setModalContrato({abierto: true, prof: liq, porcentaje: liq.porcentaje_comision})} 
-                        className="flex items-center justify-center gap-2 mx-auto bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all text-[11px] font-black text-slate-600"
+                        className="flex items-center justify-center gap-2 mx-auto bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl hover:border-[#C9A24B] hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] transition-colors text-[11px] font-black text-[#0A111F]"
                         title="Modificar porcentaje del doctor"
                       >
-                        {liq.porcentaje_comision}% <Edit3 size={14}/>
+                        {liq.porcentaje_comision}% <Edit3 size={14} className="text-slate-400 group-hover:text-[#C9A24B]"/>
                       </button>
                     </td>
 
-                    <td className="px-6 py-7 text-center">
-                      <span className="bg-slate-100 px-4 py-2 rounded-xl text-xs font-black text-slate-800 shadow-sm border border-slate-200">
+                    <td className="px-6 py-6 text-center">
+                      <span className="bg-slate-50 px-4 py-2 rounded-xl text-xs font-black text-[#0A111F] border border-slate-100">
                         ${(liq.total || 0).toLocaleString('es-CL')}
                       </span>
                     </td>
                     
-                    <td className="px-6 py-7 text-center">
+                    <td className="px-6 py-6 text-center">
                       <div className="flex flex-col items-center gap-1.5 justify-center">
                         <span className={`text-sm font-black px-4 py-2 rounded-xl border ${
-                          liq.honorarios > 0 ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-slate-400 bg-slate-50 border-slate-200'
+                          liq.honorarios > 0 ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-slate-400 bg-slate-50 border-slate-100'
                         }`}>
                           ${Math.round(liq.honorarios).toLocaleString('es-CL')}
                         </span>
                         {liq.totalYaPagado > 0 && (
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100/80 px-2 py-0.5 rounded-md border border-slate-200/50">
+                          <span className="text-[9px] font-black text-[#C9A24B] uppercase tracking-widest bg-[#C9A24B]/10 px-2.5 py-1 rounded-md border border-[#C9A24B]/20">
                             Ya Pagado: ${liq.totalYaPagado.toLocaleString('es-CL')}
                           </span>
                         )}
                       </div>
                     </td>
                     
-                    <td className="px-10 py-7 text-right">
+                    <td className="px-10 py-6 text-right">
                       <div className="flex items-center justify-end gap-3 text-right">
                         <Link 
                           href={`/administracion/liquidaciones/${liq.user_id}?mes=${mesSeleccionado}`}
-                          className="inline-flex items-center justify-center w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-900 hover:text-white transition-all shadow-sm border border-slate-200"
+                          className="inline-flex items-center justify-center w-12 h-12 bg-white text-slate-400 rounded-2xl hover:border-[#C9A24B] hover:text-[#C9A24B] transition-colors shadow-sm border border-slate-200"
                           title="Ver Detalle"
                         >
                           <Eye size={18} />
                         </Link>
 
                         {liq.yaPagado ? (
-                          <div className="inline-flex items-center justify-center px-4 h-12 bg-slate-100 text-slate-400 rounded-2xl shadow-sm border border-slate-200 font-black text-[10px] uppercase tracking-widest gap-2 cursor-default">
-                            <Check size={16} className="text-emerald-500" />
-                            Al día
+                          <div className="inline-flex items-center justify-center px-4 h-12 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest gap-2 cursor-default">
+                            <Check size={16} /> Al día
                           </div>
                         ) : (
                           <button 
                             onClick={() => handleFinalizarLiquidacion(liq)}
                             disabled={procesandoPago === liq.id || liq.honorarios <= 0}
-                            className="inline-flex items-center justify-center px-4 h-12 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-sm border border-transparent font-black text-[10px] uppercase tracking-widest gap-2"
+                            className="inline-flex items-center justify-center px-5 h-12 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-md font-black text-[10px] uppercase tracking-widest gap-2"
                             title="Finalizar y Registrar Pago Complementario"
                           >
                             {procesandoPago === liq.id ? (
@@ -406,58 +408,94 @@ export default function LiquidacionesPage() {
         </div>
       </div>
 
-      {/* MODAL EDITAR CONTRATO */}
-      <AnimatePresence>
-        {modalContrato.abierto && (
-          <div className="fixed inset-0 z-[99999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 text-left">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden text-left">
-               <div className="p-8 bg-slate-900 text-white flex justify-between items-center text-left">
-                 <h3 className="text-xl font-black uppercase italic tracking-tighter text-left">Editar Contrato</h3>
-                 <button onClick={() => setModalContrato({abierto: false, prof: null, porcentaje: 40})} className="hover:text-red-400 transition-colors text-left"><X size={20}/></button>
-               </div>
-               <div className="p-8 space-y-6 text-left">
-                  <div className="text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">Profesional</p>
-                    <p className="text-sm font-black text-slate-800 uppercase italic leading-none mt-1 text-left">{modalContrato.prof?.nombreCompleto}</p>
+      {/* MODAL EDITAR CONTRATO ENVOLVIDO EN CREATEPORTAL */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {modalContrato.abierto && (
+            <div className="fixed inset-0 z-[999999] bg-[#0A111F]/60 backdrop-blur-sm flex items-center justify-center p-4 text-left">
+              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden text-left border border-slate-100">
+                <div className="p-8 bg-[#FBF8F2] flex justify-between items-center text-left border-b border-slate-100">
+                  <h3 className="text-xl font-black text-[#0A111F] uppercase italic tracking-tight text-left">Editar Contrato</h3>
+                  <button onClick={() => setModalContrato({abierto: false, prof: null, porcentaje: 40})} className="p-2 bg-white rounded-full hover:text-red-500 transition-colors shadow-sm text-slate-400 text-left"><X size={20}/></button>
+                </div>
+                
+                <div className="p-8 space-y-6 text-left">
+                  <div className="text-left bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-left">Especialista</p>
+                    <p className="text-sm font-black text-[#0A111F] uppercase leading-tight mt-1.5 text-left">{modalContrato.prof?.nombreCompleto}</p>
                   </div>
-                  <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black uppercase text-blue-600 ml-1 text-left">Porcentaje de Ganancia (%)</label>
-                    <input 
-                       type="number" 
-                       autoFocus 
-                       min={0} max={100}
-                       className="w-full p-5 rounded-2xl bg-blue-50/50 font-black text-xl text-blue-600 border border-blue-100 outline-none focus:border-blue-500 transition-all text-center" 
-                       value={modalContrato.porcentaje} 
-                       onChange={(e) => setModalContrato({...modalContrato, porcentaje: Number(e.target.value)})} 
-                    />
-                    <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-widest mt-2">La clínica ganará automáticamente el {100 - modalContrato.porcentaje}%</p>
+                  
+                  <div className="space-y-3 text-left">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1 text-left">Porcentaje Dr. (%)</label>
+                    <div className="relative group">
+                      <input 
+                        type="number" 
+                        autoFocus 
+                        min={0} max={100}
+                        className="w-full p-5 rounded-2xl bg-white font-black text-xl text-[#C9A24B] border border-slate-200 outline-none focus:border-[#C9A24B] transition-colors text-center shadow-sm" 
+                        value={modalContrato.porcentaje} 
+                        onChange={(e) => setModalContrato({...modalContrato, porcentaje: Number(e.target.value)})} 
+                      />
+                      <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                    </div>
+                    
+                    <div className="bg-[#C9A24B]/10 p-3 rounded-xl border border-[#C9A24B]/20 text-center">
+                      <p className="text-[9px] font-bold text-[#8A6D2F] uppercase tracking-widest leading-relaxed">
+                        Clínica margen: <span className="font-black">{100 - modalContrato.porcentaje}%</span>
+                      </p>
+                    </div>
                   </div>
-                  <button onClick={handleGuardarContrato} disabled={guardandoContrato} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-left">
-                    {guardandoContrato ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>}
+
+                  <button 
+                    onClick={handleGuardarContrato} 
+                    disabled={guardandoContrato} 
+                    className="w-full bg-[#0A111F] text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-left mt-4"
+                  >
+                    {guardandoContrato ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>}
                     Actualizar Contrato
                   </button>
-               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
+    </main>
   )
 }
 
-function StatCard({ label, value, icon, color, isDark }: any) {
+function StatCard({ label, value, icon, type }: { label: string, value: number, icon: any, type: 'light' | 'dark' | 'gold' }) {
+  let styleClasses = '';
+  let iconStyle = '';
+  let badgeStyle = '';
+
+  if (type === 'dark') {
+    styleClasses = 'bg-[#0A111F] border-[#0A111F] text-white shadow-2xl';
+    iconStyle = 'bg-white/10 text-[#C9A24B]';
+    badgeStyle = 'bg-white/10 text-[#C9A24B] border border-[#C9A24B]/30';
+  } else if (type === 'gold') {
+    styleClasses = 'bg-[#C9A24B] border-[#C9A24B] text-white shadow-xl';
+    iconStyle = 'bg-white/20 text-white';
+    badgeStyle = 'bg-white/20 text-white border border-white/40';
+  } else {
+    styleClasses = 'bg-white/95 backdrop-blur-sm border-slate-100 text-[#0A111F] shadow-sm';
+    iconStyle = 'bg-[#0A111F] text-[#C9A24B] shadow-inner';
+    badgeStyle = 'bg-[#FBF8F2] text-slate-500 border border-slate-200';
+  }
+
   return (
-    <div className={`p-8 md:p-10 rounded-[3rem] border transition-all hover:scale-[1.02] duration-300 text-left ${
-      isDark ? 'bg-slate-900 border-slate-800 text-white shadow-2xl' : 'bg-white border-slate-100 text-slate-900 shadow-sm'
-    }`}>
+    <div className={`p-8 rounded-[2.5rem] border transition-transform hover:-translate-y-1 duration-300 text-left flex flex-col justify-between min-h-[180px] ${styleClasses}`}>
       <div className="flex justify-between items-start mb-6 text-left">
-        <div className={`p-4 rounded-2xl ${isDark ? 'bg-slate-800 text-blue-400' : `bg-${color}-50 text-${color}-600`}`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconStyle}`}>
           {icon}
         </div>
-        <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>Mes Actual</span>
+        <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-full ${badgeStyle}`}>Mes Actual</span>
       </div>
-      <p className={`text-[10px] font-black uppercase tracking-widest opacity-60 mb-2 text-left`}>{label}</p>
-      <p className="text-3xl lg:text-4xl font-black italic tracking-tighter truncate text-left">${(value || 0).toLocaleString('es-CL')}</p>
+      <div>
+        <p className={`text-[10px] font-black uppercase tracking-widest mb-1.5 text-left ${type === 'light' ? 'text-slate-500' : 'text-white/80'}`}>{label}</p>
+        <p className="text-3xl lg:text-4xl font-black italic tracking-tighter truncate text-left">${(value || 0).toLocaleString('es-CL')}</p>
+      </div>
     </div>
   )
 }
