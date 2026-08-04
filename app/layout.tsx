@@ -73,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (busqueda.length > 2) ejecutarBusqueda(busqueda)
@@ -81,6 +82,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => clearTimeout(delayDebounceFn)
   }, [busqueda])
 
+  useEffect(() => {
+    setMostrarResultados(false);
+    setBusqueda('');
+  }, [pathname]);
+  
   async function ejecutarBusqueda(term: string) {
     setBuscando(true)
     setMostrarResultados(true)
@@ -136,7 +142,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <head>
         <title>AureoDent</title>
-        {/* Next.js detectará automáticamente el archivo app/icon.png, no necesitas la etiqueta link */}
       </head>
       <body className="bg-[#FBF8F2] h-screen w-screen font-sans antialiased text-slate-800 overflow-hidden flex">
         <Toaster richColors position="top-right" />
@@ -145,7 +150,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <>
             {/* --- SIDEBAR OSCURO --- */}
             <aside 
-              className={`fixed md:relative inset-y-0 left-0 z-40 w-[280px] min-w-[280px] bg-[#0A111F] flex flex-col justify-between shrink-0 h-full transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none border-r border-white/5 ${
+              /* AQUÍ ESTÁ EL CAMBIO: z-50 en móviles, md:z-0 en escritorio */
+              className={`fixed md:relative inset-y-0 left-0 z-50 md:z-0 w-[280px] min-w-[280px] bg-[#0A111F] flex flex-col justify-between shrink-0 h-full transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none border-r border-white/5 ${
                 mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
               }`}
             >
@@ -301,10 +307,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </aside>
             
-            {/* Backdrop Móvil */}
+            {/* Backdrop Móvil (Actualizado a z-40 para igualar el nivel) */}
             <AnimatePresence>
               {mobileMenuOpen && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-[#0A111F]/80 backdrop-blur-sm z-30 md:hidden" onClick={() => setMobileMenuOpen(false)} />
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-[#0A111F]/80 backdrop-blur-sm z-40 md:hidden" onClick={() => setMobileMenuOpen(false)} />
               )}
             </AnimatePresence>
             
@@ -402,7 +408,6 @@ function SidebarSubLink({ href, label, onClick }: { href: string, label: string,
           : 'text-[#8A96A8] hover:text-white hover:bg-white/5'
       }`}
     >
-      {/* Indicador de activo a la izquierda (como un dot) */}
       <div className={`absolute -left-[5px] w-2 h-2 rounded-full border-2 border-[#0A111F] transition-colors ${isActive ? 'bg-[#C9A24B]' : 'bg-transparent border-transparent'}`} />
       
       {!isActive && <Circle size={4} className="text-white/20 ml-1" />}
