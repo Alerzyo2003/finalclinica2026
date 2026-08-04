@@ -6,7 +6,8 @@ import {
   CalendarDays, Timer, UserCheck, Trash2, Activity, ClipboardList, 
   CheckCircle2, Plus, Calendar as CalendarIcon, Briefcase, 
   AlertTriangle, Phone, Mail, MessageCircle, Ban, RefreshCcw, ChevronDown, CalendarClock,
-  Coins, ReceiptText, Stethoscope,Users, User, ChevronRight as ChevronRightIcon, LayoutGrid, List, Lock, FileText, Send, ArrowDown, Save, File, Link as LinkIcon
+  Coins, ReceiptText, Stethoscope,Users, User, ChevronRight as ChevronRightIcon, LayoutGrid, List, Lock, FileText, Send, ArrowDown, Save, File, Link as LinkIcon,
+  MessageSquareText
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner' 
@@ -80,7 +81,7 @@ export default function AgendaPage() {
   const [filtroEspecialista, setFiltroEspecialista] = useState('Todos')
   const [citaEnReprogramacion, setCitaEnReprogramacion] = useState<any>(null)
   const [notificacion, setNotificacion] = useState<{ nombre: string } | null>(null)
-  
+  const [motivoVisibleId, setMotivoVisibleId] = useState<string | null>(null)  
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
   const [userRol, setUserRol] = useState<string>('') 
   
@@ -262,7 +263,9 @@ export default function AgendaPage() {
         query = query.eq('profesional_id', especialistaActivo);
     }
     
-    const { data: citasData } = await query.order('inicio', { ascending: true });
+    const { data: citasData } = await query
+  .order('inicio', { ascending: true })
+  .order('id', { ascending: true });
     
     if (!citasData || citasData.length === 0) {
         setCitasDia([]);
@@ -627,7 +630,7 @@ export default function AgendaPage() {
 
         detalleText += `\n💰 *Total Plan:* $${total.toLocaleString('es-CL')}`;
         if (abonado > 0) detalleText += `\n✅ *Abonado:* $${abonado.toLocaleString('es-CL')}`;
-        if (total - abonado > 0) detalleText += `\n🔴 *Saldo Pendiente:* $${(total - abonado).toLocaleString('es-CL')}`;
+        if (total - abonado > 0) detalleText += `\n🔴 *Saldo Pendiente:* ${(total - abonado).toLocaleString('es-CL')}`;
 
         detalleText += `\n\nCualquier consulta, estamos a tu disposición. ¡Saludos! 🦷`;
 
@@ -1148,7 +1151,6 @@ export default function AgendaPage() {
   const GOLD_LIGHT = '#E8CD8A'
   const INK = '#0B1220'
 
-  // Pantalla de carga (Splash) mejorada y elegante con Framer Motion
   if (cargandoPagina) return (
     <div className="h-full flex flex-col items-center justify-center bg-[#FBF8F2] relative overflow-hidden">
         <motion.div
@@ -1185,56 +1187,56 @@ export default function AgendaPage() {
           Agenda <span className="italic font-serif" style={{ color: GOLD }}>Clínica</span>
         </h1>
         
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3 w-full xl:w-auto mt-4 xl:mt-0">
           {puedeVerFinanzas && (
-            <button onClick={() => setModalBloqueo(true)} className="px-5 py-2.5 rounded-lg border border-red-200 text-red-500 text-[11px] font-bold uppercase tracking-wider hover:bg-red-50 transition-colors flex items-center gap-2 bg-white">
+            <button onClick={() => setModalBloqueo(true)} className="w-full sm:w-auto justify-center px-4 md:px-5 py-2.5 rounded-lg border border-red-200 text-red-500 text-[11px] font-bold uppercase tracking-wider hover:bg-red-50 transition-colors flex items-center gap-2 bg-white">
               <Lock size={14} /> Bloquear
             </button>
           )}
-          <Link href="/semana" className="px-5 py-2.5 rounded-lg border border-[#C9A24B]/30 text-slate-600 text-[11px] font-bold uppercase tracking-wider hover:bg-[#C9A24B]/5 transition-colors flex items-center gap-2 bg-white">
+          <Link href="/semana" className="w-full sm:w-auto justify-center px-4 md:px-5 py-2.5 rounded-lg border border-[#C9A24B]/30 text-slate-600 text-[11px] font-bold uppercase tracking-wider hover:bg-[#C9A24B]/5 transition-colors flex items-center gap-2 bg-white">
             <CalendarDays size={14} className="text-[#C9A24B]"/> Bloque Semanal
           </Link>
-          <button onClick={() => { fetchCitasHuerfanas(); setModalHuerfanasAbierto(true); }} className="px-5 py-2.5 rounded-lg border border-amber-200 text-slate-600 text-[11px] font-bold uppercase tracking-wider hover:bg-amber-50 transition-colors flex items-center gap-2 bg-white">
+          <button onClick={() => { fetchCitasHuerfanas(); setModalHuerfanasAbierto(true); }} className="w-full sm:w-auto justify-center px-4 md:px-5 py-2.5 rounded-lg border border-amber-200 text-slate-600 text-[11px] font-bold uppercase tracking-wider hover:bg-amber-50 transition-colors flex items-center gap-2 bg-white">
             <AlertTriangle size={14} className="text-amber-500" /> Huérfanas
           </button>
-          <button onClick={() => { resetEstados(); setModalAbierto(true); }} className="px-6 py-2.5 rounded-lg font-bold text-[11px] uppercase tracking-wider shadow-md transition-all flex items-center gap-2 text-[#0A111F] bg-[#C9A24B] hover:bg-[#B38D3A]">
+          <button onClick={() => { resetEstados(); setModalAbierto(true); }} className="w-full sm:w-auto justify-center px-4 md:px-6 py-2.5 rounded-lg font-bold text-[11px] uppercase tracking-wider shadow-md transition-all flex items-center gap-2 text-[#0A111F] bg-[#C9A24B] hover:bg-[#B38D3A]">
             <Plus size={14} strokeWidth={3} /> Agendar
           </button>
         </div>
       </div>
 
       {/* CONTROLES / FILTROS */}
-      <div className="flex flex-col md:flex-row items-center justify-start gap-4 mb-10">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-start gap-3 md:gap-4 mb-8">
         
         {/* Selector de Especialista */}
-        <div className="bg-white border border-slate-200 rounded-full px-5 py-2 shadow-sm flex items-center gap-2">
-           <Users size={16} className="text-[#C9A24B]"/>
-           <select className="text-[11px] font-bold uppercase text-slate-600 bg-transparent outline-none cursor-pointer pr-4" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
+        <div className="bg-white border border-slate-200 rounded-full px-4 md:px-5 py-2 shadow-sm flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+           <Users size={16} className="text-[#C9A24B] shrink-0"/>
+           <select className="text-[11px] font-bold uppercase text-slate-600 bg-transparent outline-none cursor-pointer pr-4 w-full" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
              <option value="Todos">Todos los especialistas</option>
              {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
            </select>
         </div>
 
         {/* Toggle Día / Semana */}
-        <div className="flex items-center bg-white rounded-full p-1 border border-slate-200 shadow-sm">
-          <button onClick={() => setVistaAgenda('dia')} className={`px-6 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${vistaAgenda === 'dia' ? 'bg-[#C9A24B] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+        <div className="flex items-center justify-between bg-white rounded-full p-1 border border-slate-200 shadow-sm w-full md:w-auto">
+          <button onClick={() => setVistaAgenda('dia')} className={`flex-1 justify-center px-4 md:px-6 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${vistaAgenda === 'dia' ? 'bg-[#C9A24B] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
             <List size={14}/> Día
           </button>
-          <button onClick={() => setVistaAgenda('semana')} className={`px-6 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${vistaAgenda === 'semana' ? 'bg-[#C9A24B] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+          <button onClick={() => setVistaAgenda('semana')} className={`flex-1 justify-center px-4 md:px-6 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${vistaAgenda === 'semana' ? 'bg-[#C9A24B] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
             <LayoutGrid size={14}/> Semana
           </button>
         </div>
 
         {/* Selector de Fecha */}
-        <div className="flex items-center bg-white rounded-full px-4 py-1.5 border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between bg-white rounded-full px-2 md:px-4 py-1.5 border border-slate-200 shadow-sm w-full md:w-auto">
           <button onClick={() => {
             const newDate = new Date(selectedDate);
             newDate.setDate(newDate.getDate() - (vistaAgenda === 'semana' ? 7 : 1));
             setSelectedDate(newDate);
           }} className="p-2 text-slate-400 hover:text-[#0A111F] transition-colors"><ChevronLeft size={16}/></button>
           
-          <div className="relative flex items-center justify-center px-6 cursor-pointer group" onClick={() => dateInputRef.current?.showPicker()}>
-             <CalendarIcon size={16} className="mr-2 text-slate-400" />
+          <div className="flex-1 relative flex items-center justify-center px-4 md:px-6 cursor-pointer group" onClick={() => dateInputRef.current?.showPicker()}>
+             <CalendarIcon size={16} className="mr-2 text-slate-400 shrink-0" />
              <span className="text-[12px] font-bold text-slate-700 capitalize min-w-[120px] text-center">
                {selectedDate.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' })}
              </span>
@@ -1250,8 +1252,8 @@ export default function AgendaPage() {
       </div>
 
       {/* BUSCADOR Y BADGE */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-10 text-left">
-         <div className="relative w-full max-w-lg group">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-8 text-left">
+         <div className="relative w-full max-w-full sm:max-w-lg group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#C9A24B] transition-colors" size={16} />
             <input 
                type="text" 
@@ -1261,7 +1263,7 @@ export default function AgendaPage() {
                onChange={(e) => setBusquedaAgenda(e.target.value)}
             />
          </div>
-         <div className="bg-white text-slate-700 px-6 py-3 rounded-full border border-slate-200 shadow-sm flex items-center gap-2 shrink-0">
+         <div className="bg-white text-slate-700 px-6 py-3 rounded-full border border-slate-200 shadow-sm flex items-center justify-center sm:justify-start gap-2 shrink-0 w-full sm:w-auto">
             <CalendarDays size={16} className="text-[#C9A24B]" />
             <span className="font-bold text-xs uppercase tracking-widest">{citasFiltradas.length} Citas hoy</span>
          </div>
@@ -1269,7 +1271,7 @@ export default function AgendaPage() {
 
       {/* TIMELINE DE CITAS */}
       {vistaAgenda === 'dia' && (
-        <div className="relative pl-[100px] md:pl-[140px] pt-4 pb-20">
+        <div className="relative pl-0 md:pl-[140px] pt-4 pb-20 mt-4 md:mt-0">
           
           {/* Línea Vertical Dorada Animada */}
           {citasFiltradas.length > 0 && (
@@ -1296,6 +1298,7 @@ export default function AgendaPage() {
                 const pApellido = c.pacientes?.apellido || '';
                 const doctor = profesionales.find(p => p.user_id === c.profesional_id);
                 const theme = getAvatarColorClass(pNombre + pApellido);
+                const estadoConfig = ESTADOS_CITA[c.estado] || ESTADOS_CITA.programada;
 
                 return (
                     <motion.div 
@@ -1306,7 +1309,7 @@ export default function AgendaPage() {
                         className="relative mb-6 z-10 flex md:block flex-col gap-2 group"
                     >
                     {/* Tiempos en la izquierda */}
-                    <div className="md:absolute md:-left-[140px] md:top-4 md:w-[80px] text-left md:text-right flex md:block items-center gap-2">
+                    <div className="md:absolute md:-left-[140px] md:top-4 md:w-[80px] text-left md:text-right flex md:block items-center justify-between md:justify-start gap-2 mb-2 md:mb-0 px-2 md:px-0">
                         <p className="text-xl font-black text-[#0A111F] leading-none tracking-tight group-hover:text-[#C9A24B] transition-colors">{hInicio}</p>
                         <p className="text-xs font-semibold text-slate-400 mt-1">{hFin}</p>
                     </div>
@@ -1320,52 +1323,101 @@ export default function AgendaPage() {
                     />
 
                     {/* Tarjeta de Cita */}
-                    <div className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-slate-100 border-l-4 ${theme.border} p-5 md:p-6 w-full flex flex-col gap-4 hover:-translate-y-0.5`}>
+                    <div className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-slate-100 border-l-4 ${theme.border} p-4 md:p-6 w-full flex flex-col gap-4 hover:-translate-y-0.5`}>
                         {/* Fila Superior: Info Paciente y Dropdown */}
                         <div className="flex justify-between items-start">
                         <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full ${theme.bg} ${theme.text} flex items-center justify-center font-bold text-lg`}>
+                            <div className={`w-12 h-12 rounded-full ${theme.bg} ${theme.text} flex items-center justify-center font-bold text-lg shrink-0`}>
                             {getInitials(pNombre, pApellido)}
                             </div>
                             
-                            <div>
-                            <h3 className="text-base font-black text-[#0A111F] uppercase tracking-wide leading-tight">{pNombre} {pApellido}</h3>
-                            <div className="flex items-center gap-2 mt-1.5 text-xs font-semibold text-slate-400 uppercase">
-                                <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
-                                <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                                <span className="flex items-center gap-1"><User size={12} className="text-slate-400"/> Dr. {doctor?.apellido || 'S/A'}</span>
-                            </div>
-                            </div>
+                           <div className="relative">
+<div className="flex items-center gap-2">
+    <h3 className="text-base font-black text-[#0A111F] uppercase tracking-wide leading-tight">{pNombre} {pApellido}</h3>
+    <button
+    onClick={(e) => { e.stopPropagation(); setMotivoVisibleId(motivoVisibleId === c.id ? null : c.id); }}
+    className={`p-1.5 rounded-full transition-all shrink-0 ${
+        motivoVisibleId === c.id 
+            ? 'text-[#C9A24B] bg-[#C9A24B]/10' 
+            : 'text-slate-400 hover:text-[#C9A24B] hover:bg-slate-50'
+    }`}
+    title="Ver motivo de la cita"
+>
+    <MessageSquareText size={15} />
+</button>
+</div>
+<div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs font-semibold text-slate-400 uppercase">
+    <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
+    <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+    <span className="flex items-center gap-1"><User size={12} className="text-slate-400"/> Dr. {doctor?.apellido || 'S/A'}</span>
+</div>
+
+<AnimatePresence>
+{motivoVisibleId === c.id && (
+    <>
+        {/* Overlay invisible para cerrar al hacer click afuera */}
+        <div 
+            className="fixed inset-0 z-20" 
+            onClick={() => setMotivoVisibleId(null)}
+        />
+        <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="absolute left-0 top-full mt-3 z-30 w-72 max-w-[85vw]"
+        >
+            {/* Flechita apuntando hacia el ícono */}
+            <div className="absolute -top-1.5 left-4 w-3 h-3 rotate-45 bg-[#0E1B2E] border-t border-l border-[#C9A24B]/30" />
+
+            <div className="relative bg-[#0E1B2E] border border-[#C9A24B]/30 rounded-2xl shadow-2xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 border-b border-white/10">
+                    <div className="w-6 h-6 rounded-full bg-[#C9A24B]/15 flex items-center justify-center shrink-0">
+                        <MessageSquareText size={12} style={{ color: '#E8CD8A' }} />
+                    </div>
+                    <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#E8CD8A' }}>
+                        Motivo de la cita
+                    </p>
+                </div>
+                <p className="px-4 py-3.5 text-xs font-semibold text-white/90 leading-relaxed">
+                    {c.motivo || 'Consulta general'}
+                </p>
+            </div>
+        </motion.div>
+    </>
+)}
+</AnimatePresence>
+</div>
                         </div>
 
-                        <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-full flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 hover:bg-slate-100 transition-colors">
-                            <div className={`w-2 h-2 rounded-full ${theme.bg.replace('bg-', 'bg-').replace('-100', '-500')}`}></div>
-                            <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className="appearance-none bg-transparent outline-none cursor-pointer pr-4 font-black">
-                            {Object.entries(ESTADOS_CITA).map(([key, val]) => ( <option key={key} value={key}>{val.label.toUpperCase()}</option> ))}
-                            </select>
-                            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"/>
-                        </div>
+                        <div className={`relative ${estadoConfig.bg} border border-transparent px-2 md:px-3 py-1.5 rounded-full flex items-center gap-2 text-[10px] font-black uppercase ${estadoConfig.text} transition-colors shrink-0 ml-2`}>
+    <div className={`w-2 h-2 rounded-full ${estadoConfig.dot}`}></div>
+    <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className={`appearance-none bg-transparent outline-none cursor-pointer pr-4 font-black ${estadoConfig.text}`}>
+    {Object.entries(ESTADOS_CITA).map(([key, val]) => ( <option key={key} value={key} className="text-slate-800 bg-white">{val.label.toUpperCase()}</option> ))}
+    </select>
+    <ChevronDown size={12} className={`absolute right-2 md:right-3 top-1/2 -translate-y-1/2 pointer-events-none ${estadoConfig.text} opacity-60`}/>
+</div>
                         </div>
 
                         {/* Fila Inferior: Badges y Botones */}
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-2 pt-4 border-t border-slate-50 gap-4">
                         <div>
                             {puedeVerFinanzas && c.requiereCobroInmediato ? (
-                                <span onClick={() => abrirCaja(c)} className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider animate-pulse cursor-pointer">
+                                <span onClick={() => abrirCaja(c)} className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider animate-pulse cursor-pointer inline-block">
                                 🔔 POR COBRAR: ${c.finanzas?.deuda_realizada.toLocaleString('es-CL')}
                                 </span>
                             ) : puedeVerFinanzas && c.estadoFinanciero === 'deuda' ? (
-                                <span className="bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                <span className="bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block">
                                 DEUDA: ${c.finanzas?.deuda.toLocaleString('es-CL')}
                                 </span>
                             ) : puedeVerFinanzas && c.estadoFinanciero === 'saldado' ? (
-                            <span className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider">SALDADO</span>
+                            <span className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block">SALDADO</span>
                             ) : (
-                            <span className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider">SIN SALDO</span>
+                            <span className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block">SIN SALDO</span>
                             )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-start sm:justify-end">
                             <button onClick={() => iniciarReprogramacion(c)} className="p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Reprogramar"><CalendarClock size={16}/></button>
                             <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-500 hover:bg-slate-50 transition-colors" title="WhatsApp"><MessageCircle size={16}/></button>
                             <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-blue-500 hover:bg-slate-50 transition-colors" title="Enviar Presupuesto"><FileText size={16}/></button>
@@ -1376,7 +1428,7 @@ export default function AgendaPage() {
                             
                             <button onClick={() => handleEliminarCita(c)} className="p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors" title="Eliminar"><Trash2 size={16}/></button>
                             
-                            <Link href={`/pacientes/${c.paciente_id}`} className="ml-2 text-[10px] font-black text-blue-600 px-4 py-2 uppercase tracking-widest hover:bg-blue-50 rounded-lg transition-colors">
+                            <Link href={`/pacientes/${c.paciente_id}`} className="ml-auto sm:ml-2 text-[10px] font-black text-blue-600 px-4 py-2 uppercase tracking-widest hover:bg-blue-50 rounded-lg transition-colors">
                             FICHA
                             </Link>
                         </div>
@@ -1949,7 +2001,7 @@ export default function AgendaPage() {
                         </div>
                         <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Duración base</label>
-                          <div className="grid grid-cols-3 gap-2 text-left">
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-left">
                             {duracionesDisponibles.slice(0,6).map(m => ( 
                                 <button 
                                   key={m} 
@@ -1983,52 +2035,54 @@ export default function AgendaPage() {
                         <button onClick={() => navegarSemana('adelante')} className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-[10px] uppercase text-slate-700 transition-all text-left">Sig. <ChevronRight size={14}/></button>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto custom-scrollbar -mr-4 pr-4">
-                        <div className="grid grid-cols-6 gap-2 md:gap-4 sticky top-0 bg-[#F8FAFC] z-10 py-2 mb-2">
-                          {getDiasLunesSabado(semanaInicio).map(dia => (
-                            <p key={getLocalDateISO(dia)} className="text-[10px] font-black uppercase text-slate-500 text-center">
-                              {dia.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })}
-                            </p>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-1 gap-1.5">
-                          {slotsHorarios.map(hora => (
-                            <div key={hora} className="grid grid-cols-6 gap-2 md:gap-4 items-center min-h-[44px]">
-                              {getDiasLunesSabado(semanaInicio).map(dia => {
-                                const fStr = getLocalDateISO(dia);
-                                const laboral = esHorarioLaboral(fStr, hora, filtro.duracionDefault);
-                                const ocupado = esCitaOcupada(fStr, hora, filtro.duracionDefault);
-                                const sel = horasSeleccionadas.some(x => x.fecha === fStr && x.hora === hora);
-                                const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin));
-                                
-                                const chocaConSeleccion = horasSeleccionadas.some(s => {
-                                  if (s.fecha === fStr && s.hora === hora) return false;
-                                  const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
-                                  const selEnd = selStart + s.duracion * 60000;
-                                  const slotStart = new Date(`${fStr}T${hora}:00`).getTime();
-                                  const slotEnd = slotStart + filtro.duracionDefault * 60000;
-                                  return slotStart < selEnd && slotEnd > selStart;
-                                });
+                      <div className="flex-1 overflow-x-auto overflow-y-auto w-full custom-scrollbar -mr-4 pr-4 pb-12">
+                        <div className="min-w-[700px] lg:min-w-0 pr-4 lg:pr-0 pb-4">
+                          <div className="grid grid-cols-6 gap-2 md:gap-4 sticky top-0 bg-[#F8FAFC] z-10 py-2 mb-2">
+                            {getDiasLunesSabado(semanaInicio).map(dia => (
+                              <p key={getLocalDateISO(dia)} className="text-[10px] font-black uppercase text-slate-500 text-center">
+                                {dia.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })}
+                              </p>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {slotsHorarios.map(hora => (
+                              <div key={hora} className="grid grid-cols-6 gap-2 md:gap-4 items-center min-h-[44px]">
+                                {getDiasLunesSabado(semanaInicio).map(dia => {
+                                  const fStr = getLocalDateISO(dia);
+                                  const laboral = esHorarioLaboral(fStr, hora, filtro.duracionDefault);
+                                  const ocupado = esCitaOcupada(fStr, hora, filtro.duracionDefault);
+                                  const sel = horasSeleccionadas.some(x => x.fecha === fStr && x.hora === hora);
+                                  const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin));
+                                  
+                                  const chocaConSeleccion = horasSeleccionadas.some(s => {
+                                    if (s.fecha === fStr && s.hora === hora) return false;
+                                    const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
+                                    const selEnd = selStart + s.duracion * 60000;
+                                    const slotStart = new Date(`${fStr}T${hora}:00`).getTime();
+                                    const slotEnd = slotStart + filtro.duracionDefault * 60000;
+                                    return slotStart < selEnd && slotEnd > selStart;
+                                  });
 
-                                let btnClass = "w-full py-2.5 text-[10px] font-black rounded-xl border transition-all ";
-                                if (sel) btnClass += "text-white border-[#0E1B2E] shadow-md bg-[#0E1B2E]";
-                                else if (ocupado || diaCompletamenteBloqueado || chocaConSeleccion) btnClass += "bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed opacity-50 line-through decoration-slate-300";
-                                else if (laboral) btnClass += "bg-white border-slate-200 text-slate-600 hover:border-[#C9A24B] hover:text-[#8A6D2F] hover:bg-[#C9A24B]/5 shadow-sm";
-                                else return <div key={fStr}></div>;
+                                  let btnClass = "w-full py-2.5 text-[10px] font-black rounded-xl border transition-all ";
+                                  if (sel) btnClass += "text-white border-[#0E1B2E] shadow-md bg-[#0E1B2E]";
+                                  else if (ocupado || diaCompletamenteBloqueado || chocaConSeleccion) btnClass += "bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed opacity-50 line-through decoration-slate-300";
+                                  else if (laboral) btnClass += "bg-white border-slate-200 text-slate-600 hover:border-[#C9A24B] hover:text-[#8A6D2F] hover:bg-[#C9A24B]/5 shadow-sm";
+                                  else return <div key={fStr}></div>;
 
-                                return (
-                                  <div key={fStr}>
-                                    <button
-                                      onClick={() => handleSlotClick(fStr, hora)}
-                                      className={btnClass}
-                                    >
-                                      {hora}
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ))}
+                                  return (
+                                    <div key={fStr}>
+                                      <button
+                                        onClick={() => handleSlotClick(fStr, hora)}
+                                        className={btnClass}
+                                      >
+                                        {hora}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </main>
@@ -2159,11 +2213,11 @@ export default function AgendaPage() {
                     <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-600 font-black border border-slate-200 shadow-sm">{horasSeleccionadas.length}</div>
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">Turnos</p>
                  </div>
-                 <div className="flex gap-3 items-center text-left text-slate-900 w-full sm:w-auto">
-                    <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); setEsOtroDocumento(false); }} className="text-[10px] font-black text-[#C9A24B] uppercase underline mr-4 text-left whitespace-nowrap">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
-                    {paso === 2 && <button onClick={() => setPaso(1)} className="px-6 py-3.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] uppercase text-slate-600 hover:bg-slate-100 shadow-sm transition-all text-left">Atrás</button>}
+                 <div className="flex flex-col sm:flex-row gap-3 items-center text-left text-slate-900 w-full sm:w-auto">
+                    <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); setEsOtroDocumento(false); }} className="text-[10px] font-black text-[#C9A24B] uppercase underline sm:mr-4 text-center sm:text-left whitespace-nowrap w-full sm:w-auto">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
+                    {paso === 2 && <button onClick={() => setPaso(1)} className="px-6 py-3.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] uppercase text-slate-600 hover:bg-slate-100 shadow-sm transition-all text-center sm:text-left w-full sm:w-auto">Atrás</button>}
                     <button disabled={cargandoAccion || horasSeleccionadas.length === 0 || (paso === 2 && !modoNuevoPaciente && !pacienteSeleccionado)} onClick={() => { if(paso === 1) { setPaso(2); } else { handleGuardar(); } }} className={`px-10 py-3.5 rounded-xl font-black text-[10px] uppercase shadow-md transition-all active:scale-95 whitespace-nowrap w-full sm:w-auto ${citaEnReprogramacion ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'hover:brightness-110'}`} style={!citaEnReprogramacion ? { background: `linear-gradient(120deg, ${GOLD_LIGHT}, ${GOLD})`, color: INK } : undefined}>
-                        {cargandoAccion ? <Loader2 className="animate-spin" size={16} /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
+                        {cargandoAccion ? <Loader2 className="animate-spin inline-block" size={16} /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
                     </button>
                  </div>
               </div>
