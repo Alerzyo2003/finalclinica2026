@@ -2,7 +2,7 @@
 import { useParams, useSearchParams } from 'next/navigation'
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, Calculator, ArrowUpRight, History, AlertCircle } from 'lucide-react'
+import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, Calculator, ArrowUpRight, History, AlertCircle, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 
@@ -103,7 +103,6 @@ export default function DetalleLiquidacionPage() {
         const precioPactado = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
         const pagadoPorDr = Boolean(pago.presupuesto_items?.lab_pagado_por_dr);
         
-        // 🔥 REGLA DE NEGOCIO: Solo se paga comisión si el tratamiento está 100% terminado.
         const itemEstado = pago.presupuesto_items?.estado?.toLowerCase() || '';
         const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
 
@@ -111,13 +110,12 @@ export default function DetalleLiquidacionPage() {
         if (fraccionPago > 1) fraccionPago = 1;
 
         const labAplicado = costoLab * fraccionPago;
-        let montoImponible = montoPago; // NUNCA descontar el laboratorio del imponible para la comisión.
+        let montoImponible = montoPago;
         if (montoImponible < 0) montoImponible = 0;
 
         const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
         const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
 
-        // Si no está terminado, el honorario es CERO para el doctor.
         const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
         const totalAlDoctor = comision + reembolso;
@@ -140,14 +138,12 @@ export default function DetalleLiquidacionPage() {
         .sort((a, b) => {
           const tA = new Date(a.fecha?.replace(' ', 'T') || 0).getTime();
           const tB = new Date(b.fecha?.replace(' ', 'T') || 0).getTime();
-          return tA - tB; // Orden cronológico estricto
+          return tA - tB;
         });
 
-      // 🔥 6. NUEVA ASIGNACIÓN (SOPORTA CORTES Y PAGOS PARCIALES) 🔥
-      // Preparamos un "pool" de producción. A medida que le asignamos una liquidación, restamos el saldo.
       let poolProduccion = produccionCombinada.map(p => ({
         ...p,
-        honorario_restante: p.honorario // Saldo disponible de este item
+        honorario_restante: p.honorario
       }));
 
       const cierresList: any[] = [];
@@ -159,22 +155,16 @@ export default function DetalleLiquidacionPage() {
         for(let i = 0; i < poolProduccion.length; i++) {
             let item = poolProduccion[i];
             
-            // Si este tratamiento ya se pagó completo, pasamos al siguiente
             if (item.honorario_restante <= 0) continue;
-            
-            // Si ya no nos queda dinero de esta liquidación para repartir, paramos
             if (montoARepartir <= 0) break;
 
-            // Tomamos el dinero que necesitemos de este tratamiento (hasta donde alcance)
             let aDescontar = Math.min(item.honorario_restante, montoARepartir);
             
-            // Agregamos este item al comprobante del cierre actual
             itemsDeEstaLiq.push({
                 ...item,
-                honorario: aDescontar // En este cierre, mostramos solo la porción que usamos
+                honorario: aDescontar
             });
 
-            // Restamos lo usado al tratamiento y a la liquidación
             item.honorario_restante -= aDescontar;
             montoARepartir -= aDescontar;
         }
@@ -187,18 +177,16 @@ export default function DetalleLiquidacionPage() {
         });
       });
 
-      // 7. SEPARAR LO QUE QUEDÓ PENDIENTE (REMANENTES Y NUEVOS)
       const pendientesFinal = poolProduccion
-        .filter(p => p.honorario_restante > 0) // Todo lo que sobró, o que no se ha tocado
+        .filter(p => p.honorario_restante > 0)
         .map(p => ({
             ...p,
-            honorario: p.honorario_restante // El honorario pendiente es solo lo que falta por pagar
+            honorario: p.honorario_restante
         }));
 
       setItemsPendientes(pendientesFinal);
-      setCierresCompletados(cierresList.reverse()); // Mostrar el cierre más reciente primero
+      setCierresCompletados(cierresList.reverse());
 
-      // 8. Calcular Resumen Global
       const produccionDelMes = produccionCombinada.filter(p => {
         const fechaItem = new Date(p.fecha?.replace(' ', 'T') || 0);
         return fechaItem.getFullYear() === Number(year) && fechaItem.getMonth() === (Number(month) - 1);
@@ -211,7 +199,6 @@ export default function DetalleLiquidacionPage() {
       });
       const totalPagado = liqsDelMes.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
 
-      // El saldo pendiente ahora es el cálculo real de lo que queda en el pool de producción.
       const saldoPendiente = pendientesFinal.reduce((acc, curr) => acc + curr.honorario, 0);
       
       setResumenMes({ totalMes, totalPagado, saldoPendiente });
@@ -236,35 +223,45 @@ export default function DetalleLiquidacionPage() {
     return `${String(ultimoDiaNum).padStart(2, '0')}/${month}/${year}`;
   }
 
-  if (cargando) return <div className="p-40 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></div>
+  if (cargando) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#FBF8F2] gap-4">
+      <Loader2 className="animate-spin text-[#C9A24B]" size={40}/>
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando reporte de liquidación...</p>
+    </div>
+  )
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans">
+    <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
       
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
+      ></div>
+
       {/* ========================================================================= */}
       {/* VISTA WEB (OCULTA AL IMPRIMIR) */}
       {/* ========================================================================= */}
-      <div className="max-w-7xl mx-auto space-y-8 p-8 pb-20 print:hidden text-left">
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10 print:hidden text-left">
         
-        <Link href="/administracion/liquidaciones" className="flex items-center gap-2 text-slate-400 hover:text-blue-600 font-black text-[10px] uppercase tracking-widest transition-all w-fit">
+        <Link href="/administracion/liquidaciones" className="flex items-center gap-2 text-slate-400 hover:text-[#0A111F] font-black text-[10px] uppercase tracking-widest transition-all w-fit">
           <ChevronLeft size={16}/> Volver a liquidaciones
         </Link>
 
         {/* TARJETAS DE RESUMEN SUPERIOR */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="bg-white/95 backdrop-blur-sm p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Generado (Mes)</p>
-            <p className="text-3xl font-black text-slate-800">${Math.round(resumenMes.totalMes).toLocaleString('es-CL')}</p>
+            <p className="text-3xl font-black text-[#0A111F]">${Math.round(resumenMes.totalMes).toLocaleString('es-CL')}</p>
           </div>
-          <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col justify-center">
+          <div className="bg-emerald-50/80 backdrop-blur-sm p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col justify-center">
             <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">Ya Pagado al Doctor</p>
             <p className="text-3xl font-black text-emerald-700">${Math.round(resumenMes.totalPagado).toLocaleString('es-CL')}</p>
           </div>
-          <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col justify-center relative overflow-hidden">
+          <div className="bg-[#0A111F] p-8 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-center relative overflow-hidden">
             <div className="absolute right-[-20px] bottom-[-20px] opacity-10 pointer-events-none">
               <DollarSign size={120} />
             </div>
-            <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest relative z-10">Saldo Pendiente a Pagar</p>
+            <p className="text-[10px] font-black uppercase text-[#C9A24B] tracking-widest relative z-10">Saldo Pendiente a Pagar</p>
             <p className="text-[9px] text-slate-400 uppercase mt-1 relative z-10">Producción nueva no liquidada</p>
             <p className={`text-4xl font-black mt-3 flex items-center gap-2 relative z-10 ${resumenMes.saldoPendiente > 0 ? "text-white" : "text-slate-500"}`}>
               ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
@@ -272,20 +269,20 @@ export default function DetalleLiquidacionPage() {
           </div>
         </div>
 
-        <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 text-left">
+        <div className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 text-left">
           
           {/* HEADER DEL REPORTE */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100 pb-8 mb-8">
             <div className="text-left">
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 text-left">Desglose de Periodo</p>
-              <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none text-left">
+              <p className="text-[10px] font-black text-[#C9A24B] uppercase tracking-[0.2em] mb-2 text-left">Desglose de Periodo</p>
+              <h1 className="text-3xl font-black text-[#0A111F] uppercase italic leading-none text-left tracking-tight">
                 Detalle de Producción
               </h1>
               <div className="flex flex-wrap items-center gap-3 mt-4 text-left">
-                <div className="bg-slate-100 px-4 py-2 rounded-xl text-xs font-black text-slate-600 uppercase">
+                <div className="bg-slate-50 px-4 py-2 rounded-xl text-xs font-black text-slate-700 uppercase border border-slate-200">
                   Dr. {profesional?.nombre} {profesional?.apellido}
                 </div>
-                <div className="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                <div className="px-4 py-2 border border-[#C9A24B]/30 bg-[#C9A24B]/10 text-[#8A6D2F] rounded-xl text-[10px] font-black uppercase tracking-widest">
                   Contrato Vigente: {profesional?.porcentaje_comision || 40}%
                 </div>
                 <div className="px-4 py-2 border border-slate-200 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -293,7 +290,7 @@ export default function DetalleLiquidacionPage() {
                 </div>
               </div>
             </div>
-            <button onClick={handlePrint} className="bg-slate-100 text-slate-600 px-6 py-4 rounded-2xl hover:bg-slate-900 hover:text-white transition-all shadow-sm font-black text-xs uppercase tracking-widest flex items-center gap-2">
+            <button onClick={handlePrint} className="bg-[#0A111F] text-white px-6 py-4 rounded-2xl hover:bg-[#1a2538] transition-all shadow-md font-black text-xs uppercase tracking-widest flex items-center gap-2 shrink-0">
               <Printer size={18}/> Imprimir Reporte
             </button>
           </div>
@@ -305,45 +302,45 @@ export default function DetalleLiquidacionPage() {
             {/* ========================================================= */}
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-amber-100 text-amber-600 rounded-xl"><AlertCircle size={24} /></div>
+                <div className="p-3 bg-amber-100 text-amber-600 rounded-xl"><AlertCircle size={22} /></div>
                 <div>
-                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Pendiente de Pago</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tratamientos realizados y abonados que aún no se liquidan al doctor</p>
+                  <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Pendiente de Pago</h2>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tratamientos realizados y abonados que aún no se liquidan al doctor</p>
                 </div>
               </div>
 
               {itemsPendientes.length === 0 ? (
-                <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2rem] text-center bg-slate-50/50">
-                  <CheckCircle2 size={40} className="mx-auto text-emerald-400 mb-3 opacity-50" />
-                  <p className="text-xs font-black text-slate-500 uppercase tracking-widest">No hay producción pendiente</p>
+                <div className="p-12 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-center bg-slate-50/50">
+                  <CheckCircle2 size={40} className="mx-auto text-emerald-500 mb-3 opacity-60" />
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">No hay producción pendiente</p>
                   <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Todo está liquidado y al día.</p>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-[2rem] border border-amber-200 shadow-sm">
+                <div className="overflow-hidden rounded-[2.5rem] border border-amber-200/60 shadow-sm bg-white">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-[800px]">
-                      <thead className="bg-amber-50/50 border-b border-amber-100">
+                      <thead className="bg-amber-50/60 border-b border-amber-100">
                         <tr>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase">Fecha</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase">Paciente</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase">Prestación</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right">Ingreso Bruto</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right">Costo Lab</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right">Base Imponible</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right bg-amber-100/50">A Pagar al Dr.</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Fecha</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Paciente</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Prestación</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Ingreso Bruto</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Costo Lab</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Base Imponible</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right bg-amber-100/50">A Pagar al Dr.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {itemsPendientes.map((item: any, idx: number) => (
-                          <tr key={idx} className="text-xs font-bold text-slate-600 hover:bg-slate-50/50 transition-colors">
+                          <tr key={idx} className="text-xs font-bold text-slate-700 hover:bg-slate-50/50 transition-colors">
                             <td className="px-6 py-4 text-slate-400">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
-                            <td className="px-6 py-4 uppercase">{item.paciente}</td>
-                            <td className="px-6 py-4 uppercase text-slate-500 max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
+                            <td className="px-6 py-4 uppercase font-black">{item.paciente}</td>
+                            <td className="px-6 py-4 uppercase text-slate-600 max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
                             <td className="px-6 py-4 text-right text-slate-800">${(item.montoPago || 0).toLocaleString('es-CL')}</td>
                             <td className="px-6 py-4 text-right">
                               {item.descuentoLab > 0 ? (
                                 <div className="flex flex-col items-end">
-                                   <span className={`font-black flex items-center gap-1 ${item.esReembolso ? 'text-amber-500' : 'text-red-400'}`}>
+                                   <span className={`font-black flex items-center gap-1 ${item.esReembolso ? 'text-amber-600' : 'text-red-500'}`}>
                                      <FlaskConical size={12}/> ${Math.round(item.descuentoLab).toLocaleString('es-CL')}
                                    </span>
                                    <span className="text-[8px] font-bold uppercase opacity-60">
@@ -352,17 +349,17 @@ export default function DetalleLiquidacionPage() {
                                 </div>
                               ) : <span className="text-slate-300">-</span>}
                             </td>
-                            <td className="px-6 py-4 text-right text-slate-500">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
-                            <td className="px-6 py-4 text-right font-black text-amber-600 bg-amber-50/30 text-sm">
+                            <td className="px-6 py-4 text-right text-slate-600">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
+                            <td className="px-6 py-4 text-right font-black text-amber-700 bg-amber-50/40 text-sm">
                               ${Math.round(item.honorario).toLocaleString('es-CL')}
                             </td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot className="bg-amber-50 border-t border-amber-200">
+                      <tfoot className="bg-amber-50/80 border-t border-amber-200">
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 text-right font-black text-amber-800 uppercase text-xs">Total Pendiente:</td>
-                          <td className="px-6 py-4 text-right font-black text-amber-600 text-base">
+                          <td colSpan={6} className="px-6 py-5 text-right font-black text-amber-900 uppercase text-xs">Total Pendiente:</td>
+                          <td className="px-6 py-5 text-right font-black text-amber-700 text-base">
                             ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
                           </td>
                         </tr>
@@ -379,25 +376,25 @@ export default function DetalleLiquidacionPage() {
             {cierresCompletados.length > 0 && (
               <div className="pt-8 border-t border-slate-100">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><History size={24} /></div>
+                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><History size={22} /></div>
                   <div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Historial de Liquidaciones</h2>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cierres completados y pagados en este mes</p>
+                    <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Historial de Liquidaciones</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Cierres completados y pagados en este mes</p>
                   </div>
                 </div>
 
                 <div className="space-y-6">
                   {cierresCompletados.map((cierre) => (
-                    <div key={cierre.id} className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-sm">
-                      <div className="p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-emerald-50/50">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-xl bg-emerald-100 text-emerald-600"><CheckCircle2 size={20} /></div>
+                    <div key={cierre.id} className="overflow-hidden rounded-[2.5rem] border border-emerald-100 bg-white shadow-sm">
+                      <div className="p-6 md:p-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-emerald-50/40">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-2xl bg-emerald-100 text-emerald-600"><CheckCircle2 size={20} /></div>
                           <div>
-                            <h3 className="font-black uppercase tracking-widest text-sm text-emerald-800">{cierre.titulo}</h3>
+                            <h3 className="font-black uppercase tracking-wider text-sm text-emerald-900">{cierre.titulo}</h3>
                             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Cierre bloqueado e inmodificable</p>
                           </div>
                         </div>
-                        <div className="px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase flex items-center gap-2 bg-emerald-100 text-emerald-700">
+                        <div className="px-5 py-2.5 rounded-2xl text-xs font-black tracking-widest uppercase flex items-center gap-2 bg-emerald-100 text-emerald-800 shadow-sm">
                           Pagado: ${(cierre.montoTotal || 0).toLocaleString('es-CL')}
                         </div>
                       </div>
@@ -406,20 +403,20 @@ export default function DetalleLiquidacionPage() {
                         <table className="w-full text-left min-w-[800px]">
                           <thead className="bg-slate-50/50 border-y border-slate-100">
                             <tr>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase">Fecha</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase">Paciente</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase">Prestación</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Ingreso Bruto</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Costo Lab</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Base Imponible</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Pagado al Dr.</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Paciente</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Prestación</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Ingreso Bruto</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Costo Lab</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Base Imponible</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Pagado al Dr.</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
                             {cierre.items.map((item: any, idx: number) => (
-                              <tr key={idx} className="text-xs font-bold text-slate-500 hover:bg-slate-50/50 transition-colors opacity-90">
+                              <tr key={idx} className="text-xs font-bold text-slate-600 hover:bg-slate-50/50 transition-colors opacity-90">
                                 <td className="px-6 py-4">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
-                                <td className="px-6 py-4 uppercase">{item.paciente}</td>
+                                <td className="px-6 py-4 uppercase font-black">{item.paciente}</td>
                                 <td className="px-6 py-4 uppercase max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
                                 <td className="px-6 py-4 text-right">${(item.montoPago || 0).toLocaleString('es-CL')}</td>
                                 <td className="px-6 py-4 text-right">
@@ -432,7 +429,7 @@ export default function DetalleLiquidacionPage() {
                                   ) : <span className="text-slate-300">-</span>}
                                 </td>
                                 <td className="px-6 py-4 text-right">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
-                                <td className="px-6 py-4 text-right font-black text-slate-400">
+                                <td className="px-6 py-4 text-right font-black text-slate-500">
                                   ${Math.round(item.honorario).toLocaleString('es-CL')}
                                 </td>
                               </tr>
@@ -541,6 +538,6 @@ export default function DetalleLiquidacionPage() {
         </div>
 
       </div>
-    </div>
+    </main>
   )
 }
