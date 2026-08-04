@@ -2,9 +2,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { crearCuentaStaff, actualizarCuentaStaff, eliminarCuentaStaff } from '../actions' 
+// 1. IMPORTAMOS CREATEPORTAL
+import { createPortal } from 'react-dom'
 import { 
   Plus, Search, Lock, Trash2, Stethoscope, X, Save, 
-  Loader2, UserCircle, KeyRound, UserCog, ShieldCheck, AtSign, Fingerprint, Activity
+  Loader2, UserCircle, KeyRound, UserCog, ShieldCheck, AtSign, Fingerprint, Activity,
+  Mail, CreditCard, Shield, Building2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -18,6 +21,9 @@ export default function GestionStaffPage() {
   const [editandoUser, setEditandoUser] = useState<any>(null)
   const [busqueda, setBusqueda] = useState('')
 
+  // 2. ESTADO PARA LOS PORTALS (Asegurar que carga en el cliente)
+  const [isMounted, setIsMounted] = useState(false)
+
   const initialState = { 
     nombre: '', 
     apellido: '', 
@@ -29,7 +35,10 @@ export default function GestionStaffPage() {
   }
   const [form, setForm] = useState(initialState)
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { 
+    setIsMounted(true) // Indicamos que ya cargó en el navegador
+    fetchData() 
+  }, [])
 
   async function fetchData() {
     setCargando(true)
@@ -125,198 +134,250 @@ export default function GestionStaffPage() {
     setForm(initialState);
   }
 
+  // Utilidades para los colores de las tarjetas
+  const getRoleColors = (rol: string) => {
+    switch (rol) {
+      case 'ADMIN': return { bg: 'bg-[#C9A24B]', text: 'text-[#C9A24B]', lightBg: 'bg-[#C9A24B]/10', paleBg: 'bg-[#fcfaf5]', border: 'border-[#C9A24B]/20' };
+      case 'DENTISTA': return { bg: 'bg-blue-500', text: 'text-blue-500', lightBg: 'bg-blue-500/10', paleBg: 'bg-blue-50/50', border: 'border-blue-200' };
+      case 'ASISTENTE': return { bg: 'bg-purple-500', text: 'text-purple-500', lightBg: 'bg-purple-500/10', paleBg: 'bg-purple-50/50', border: 'border-purple-200' };
+      default: return { bg: 'bg-emerald-500', text: 'text-emerald-500', lightBg: 'bg-emerald-500/10', paleBg: 'bg-emerald-50/50', border: 'border-emerald-200' };
+    }
+  }
+
+  const getRoleLabel = (rol: string) => {
+    switch (rol) {
+      case 'ADMIN': return 'ADMINISTRADOR(A)';
+      case 'DENTISTA': return 'DENTISTA / ESPECIALISTA';
+      case 'ASISTENTE': return 'ASISTENTE DENTAL';
+      default: return 'RECEPCIONISTA';
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-8 pb-20 font-sans relative text-left">
-      <div className="max-w-7xl mx-auto space-y-8 text-left">
+    <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
+      
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
+      ></div>
+
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10 text-left">
         
-        <header className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
-          <div className="flex items-center gap-6 text-left">
-            <div className="bg-slate-900 p-5 rounded-[2rem] text-white shadow-xl">
-              <UserCog size={32} />
+        {/* HEADER TIPO TARJETA BLANCA */}
+        <header className="bg-white/90 backdrop-blur-md p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
+          <div className="flex items-center gap-5 text-left w-full md:w-auto">
+            <div className="bg-[#0A111F] w-16 h-16 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
+              <UserCog size={28} />
             </div>
             <div className="text-left">
-              <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none text-left">Equipo Clínico</h1>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-2 text-left">Seguridad y Personal</p>
+              <h1 className="text-2xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">
+                EQUIPO CLÍNICO
+              </h1>
+              <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase tracking-widest mt-1.5 text-left">
+                Seguridad y Personal
+              </p>
             </div>
           </div>
           
           <div className="flex items-center gap-4 w-full md:w-auto text-left">
-            <div className="relative flex-1 text-left">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+            <div className="relative flex-1 md:w-64 text-left">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
                 type="text" 
                 placeholder="Filtrar por nombre..." 
-                className="pl-12 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-xs font-bold w-full outline-none shadow-inner text-slate-900"
+                className="pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-full text-xs font-bold w-full outline-none shadow-inner text-slate-900 focus:border-[#C9A24B]/50 transition-colors"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
               />
             </div>
             <button 
               onClick={() => { resetForm(); setModalAbierto(true); }} 
-              className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase hover:bg-slate-900 transition-all shadow-xl flex items-center gap-2 shrink-0 text-left"
+              className="bg-[#0A111F] text-white px-6 py-3 rounded-full font-bold text-[11px] uppercase tracking-wider hover:bg-[#1a2538] transition-all shadow-md flex items-center gap-2 shrink-0 text-left"
             >
-              <Plus size={18} /> Nuevo Staff
+              <Plus size={16} /> Nuevo Staff
             </button>
           </div>
         </header>
 
         {cargando ? (
-           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" size={40}/></div>
+           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#C9A24B]" size={40}/></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
             {staff
               .filter(p => (p.nombre_completo || '').toLowerCase().includes(busqueda.toLowerCase()))
-              .map(persona => (
+              .map(persona => {
+                const colors = getRoleColors(persona.rol);
+                const roleLabel = getRoleLabel(persona.rol);
+                const esAdmin = persona.rol === 'ADMIN';
+
+                return (
                   <motion.div 
                       key={persona.id} 
-                      whileHover={{ y: -5 }} 
+                      whileHover={{ y: -4 }} 
                       onClick={() => abrirEditor(persona)} 
-                      className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm cursor-pointer group relative overflow-hidden text-left"
+                      className="bg-white rounded-[2rem] shadow-sm hover:shadow-md cursor-pointer group relative overflow-hidden text-left flex flex-col justify-between border border-slate-100 transition-shadow"
                   >
-                      <div className={`absolute top-0 right-0 px-5 py-2 text-[8px] font-black uppercase tracking-widest rounded-bl-2xl shadow-sm text-left ${
-                          persona.rol === 'ADMIN' ? 'bg-red-500 text-white' : 
-                          persona.rol === 'DENTISTA' ? 'bg-blue-500 text-white' : 
-                          persona.rol === 'ASISTENTE' ? 'bg-purple-500 text-white' : 
-                          'bg-emerald-500 text-white'
-                      }`}>
+                      {/* BADGE ROL TOP RIGHT */}
+                      <div className={`absolute top-5 right-5 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-full text-white shadow-sm ${colors.bg}`}>
                           {persona.rol}
                       </div>
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-inner ${
-                          persona.rol === 'DENTISTA' ? 'bg-blue-50 text-blue-600' : 
-                          persona.rol === 'ASISTENTE' ? 'bg-purple-50 text-purple-600' :
-                          'bg-emerald-50 text-emerald-600'
-                      }`}>
-                          {persona.rol === 'DENTISTA' ? <Stethoscope size={28}/> : 
-                           persona.rol === 'ASISTENTE' ? <Activity size={28}/> : 
-                           <UserCircle size={28}/>}
-                      </div>
-                      <h3 className="text-lg font-black text-slate-800 uppercase leading-none text-left">{persona.nombre_completo}</h3>
-                      
-                      <div className="space-y-1 mt-3 text-left">
-                        <div className="flex items-center gap-2 text-left">
-                          <AtSign size={10} className="text-blue-500"/>
-                          <p className="text-slate-400 text-[10px] font-bold text-left">{persona.username || 'sin_usuario'}</p>
+
+                      <div className="p-8 pb-6">
+                        {/* ICONO ROL TOP LEFT */}
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-5 ${colors.lightBg} ${colors.text}`}>
+                            {persona.rol === 'DENTISTA' ? <Stethoscope size={24}/> : 
+                             persona.rol === 'ASISTENTE' ? <Activity size={24}/> : 
+                             persona.rol === 'ADMIN' ? <ShieldCheck size={24}/> :
+                             <UserCircle size={24}/>}
                         </div>
-                        <div className="flex items-center gap-2 text-left">
-                          <Fingerprint size={10} className="text-slate-400"/>
-                          <p className="text-slate-400 text-[10px] font-bold uppercase text-left">RUT: {persona.rut || 'No reg.'}</p>
+                        
+                        <h3 className="text-lg font-black text-[#0A111F] uppercase leading-tight text-left mb-4 pr-16">
+                          {persona.nombre_completo}
+                        </h3>
+                        
+                        <div className="space-y-2.5 text-left">
+                          <div className={`flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-wider ${colors.text}`}>
+                            <Shield size={12} strokeWidth={2.5}/>
+                            {roleLabel}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 text-slate-500 text-xs font-medium">
+                            <Mail size={12} className="text-slate-400 shrink-0"/>
+                            <span className="truncate">{persona.username || 'sin_usuario'}@clinicadignidad.cl</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2.5 text-slate-500 text-xs font-medium">
+                            <CreditCard size={12} className="text-slate-400 shrink-0"/>
+                            <span>RUT: {persona.rut || 'No reg.'}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <p className="text-slate-300 text-[9px] font-black uppercase mt-4 tracking-tighter text-left">
-                          {persona.especialidad || 'Área Administrativa / Apoyo'}
-                      </p>
+                      {/* BOTTOM BAR ÁREA */}
+                      <div className={`p-4 border-t ${colors.border} ${colors.paleBg} flex items-center gap-2`}>
+                        <Building2 size={14} className={colors.text} />
+                        <p className={`text-[9px] font-black uppercase tracking-widest ${colors.text}`}>
+                            {esAdmin ? 'Área Administrativa / Apoyo' : 'Área Clínica / Asistencial'}
+                        </p>
+                      </div>
                   </motion.div>
-              ))}
+                )
+              })}
           </div>
         )}
       </div>
 
-      <AnimatePresence>
-        {modalAbierto && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[999999] flex justify-end items-start p-4 text-left">
-            <div className="absolute inset-0" onClick={() => !guardando && setModalAbierto(false)} />
+      {/* 3. MODAL ENVOLVIDO EN CREATEPORTAL */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {modalAbierto && (
+            <div className="fixed inset-0 bg-[#0A111F]/60 backdrop-blur-sm z-[999999] flex justify-end items-start p-4 text-left">
+              <div className="absolute inset-0" onClick={() => !guardando && setModalAbierto(false)} />
 
-            <motion.div 
-              initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
-              className="bg-white w-full max-w-lg mt-24 rounded-[3rem] shadow-2xl flex flex-col relative z-10 overflow-hidden h-[calc(100vh-140px)] text-left"
-            >
-              <div className="p-10 flex justify-between items-center border-b border-slate-100 bg-slate-50/50 text-left">
-                <h2 className="text-2xl font-black text-slate-800 uppercase italic text-left">
-                    {editandoUser ? 'Editar Perfil' : 'Nuevo Staff'}
-                </h2>
-                <button onClick={() => setModalAbierto(false)} className="p-4 bg-white shadow-lg border border-slate-100 rounded-2xl text-slate-400 hover:text-red-500 transition-all text-left">
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="flex-1 p-10 space-y-6 overflow-y-auto text-left">
-                <div className="space-y-3 text-left">
-                  <label className="text-[10px] font-black text-slate-400 uppercase italic ml-3 flex items-center gap-2 text-left">
-                    <ShieldCheck size={12}/> Tipo de Cuenta
-                  </label>
-                  <select 
-                    className="w-full bg-slate-50 p-5 rounded-2xl text-xs font-bold border-none shadow-inner outline-none text-slate-900 cursor-pointer text-left focus:ring-2 ring-blue-500/20" 
-                    value={form.rol} 
-                    onChange={(e) => setForm({...form, rol: e.target.value})}
-                  >
-                    <option value="ASISTENTE">Asistente Dental</option>
-                    <option value="RECEPCIONISTA">Recepcionista</option>
-                    <option value="DENTISTA">Dentista / Especialista</option>
-                    <option value="ADMIN">Administrador General</option>
-                  </select>
+              <motion.div 
+                initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
+                className="bg-white w-full max-w-lg mt-24 rounded-[2.5rem] shadow-2xl flex flex-col relative z-10 overflow-hidden h-[calc(100vh-140px)] text-left"
+              >
+                <div className="p-8 flex justify-between items-center border-b border-slate-100 bg-[#FBF8F2] text-left">
+                  <h2 className="text-xl font-black text-[#0A111F] uppercase italic text-left tracking-tight">
+                      {editandoUser ? 'Editar Perfil' : 'Nuevo Staff'}
+                  </h2>
+                  <button onClick={() => setModalAbierto(false)} className="p-3 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-all text-left">
+                    <X size={20} />
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-left">
-                  <Input label="Nombre" value={form.nombre} onChange={(v:any) => setForm({...form, nombre: v})} icon={<UserCircle size={14}/>} />
-                  <Input label="Apellido" value={form.apellido} onChange={(v:any) => setForm({...form, apellido: v})} icon={<UserCircle size={14}/>} />
-                </div>
-
-                <Input 
-                  label="RUT del Profesional" 
-                  placeholder="12.345.678-9"
-                  value={form.rut} 
-                  onChange={(v:any) => setForm({...form, rut: v})} 
-                  icon={<Fingerprint size={14}/>} 
-                />
-
-                {!editandoUser && (
-                  <div className="space-y-4 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 shadow-inner text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase italic flex items-center gap-2 mb-2 text-left"><KeyRound size={12}/> Credenciales de Acceso</p>
-                    <Input label="Usuario (Para ingresar)" value={form.username} icon={<AtSign size={14}/>} onChange={(v:any) => setForm({...form, username: v.toLowerCase().replace(/\s+/g, '')})} />
-                    <Input label="Contraseña" value={form.password} type="password" icon={<Lock size={14}/>} onChange={(v:any) => setForm({...form, password: v})} />
-                  </div>
-                )}
-
-                {form.rol === 'DENTISTA' && (
+                <div className="flex-1 p-8 space-y-6 overflow-y-auto text-left custom-scrollbar">
                   <div className="space-y-3 text-left">
-                    <label className="text-[10px] font-black text-slate-400 uppercase italic ml-3 flex items-center gap-2 text-left">
-                        <Stethoscope size={12}/> Especialidad Clínica
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2 text-left">
+                      <ShieldCheck size={12} className="text-[#C9A24B]"/> Tipo de Cuenta
                     </label>
                     <select 
-                      className="w-full bg-slate-50 p-5 rounded-2xl text-xs font-bold border-none shadow-inner outline-none text-slate-900 cursor-pointer text-left focus:ring-2 ring-blue-500/20" 
-                      value={form.especialidad_id} 
-                      onChange={(e) => setForm({...form, especialidad_id: e.target.value})}
+                      className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold border border-slate-200 shadow-sm outline-none text-slate-900 cursor-pointer text-left focus:border-[#C9A24B] transition-colors" 
+                      value={form.rol} 
+                      onChange={(e) => setForm({...form, rol: e.target.value})}
                     >
-                      <option value="">Seleccionar especialidad...</option>
-                      {especialidades.map(esp => <option key={esp.id} value={esp.id}>{esp.nombre}</option>)}
+                      <option value="ASISTENTE">Asistente Dental</option>
+                      <option value="RECEPCIONISTA">Recepcionista</option>
+                      <option value="DENTISTA">Dentista / Especialista</option>
+                      <option value="ADMIN">Administrador General</option>
                     </select>
                   </div>
-                )}
 
-                {editandoUser && (
-                  <div className="pt-6 border-t border-slate-100 text-left">
-                    <button onClick={() => { setModalAbierto(false); toast.promise(eliminarCuentaStaff(editandoUser.id), { loading: 'Eliminando...', success: () => { fetchData(); return 'Staff eliminado'; }, error: 'Error' }); }} className="w-full p-5 bg-red-50 text-red-500 font-black text-[10px] uppercase hover:bg-red-500 hover:text-white rounded-3xl transition-all flex items-center justify-center gap-2 text-left">
-                      <Trash2 size={16}/> Eliminar accesos permanentemente
-                    </button>
+                  <div className="grid grid-cols-2 gap-4 text-left">
+                    <Input label="Nombre" value={form.nombre} onChange={(v:any) => setForm({...form, nombre: v})} icon={<UserCircle size={14}/>} />
+                    <Input label="Apellido" value={form.apellido} onChange={(v:any) => setForm({...form, apellido: v})} icon={<UserCircle size={14}/>} />
                   </div>
-                )}
-              </div>
 
-              <div className="p-10 border-t bg-white text-left">
-                <button onClick={handleGuardar} disabled={guardando} className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xs uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 disabled:bg-slate-300 text-left">
-                  {guardando ? <Loader2 className="animate-spin" /> : <Save size={18}/>}
-                  {editandoUser ? 'Guardar Cambios' : 'Generar Credenciales'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
+                  <Input 
+                    label="RUT del Profesional" 
+                    placeholder="12.345.678-9"
+                    value={form.rut} 
+                    onChange={(v:any) => setForm({...form, rut: v})} 
+                    icon={<Fingerprint size={14}/>} 
+                  />
+
+                  {!editandoUser && (
+                    <div className="space-y-4 bg-[#FBF8F2] p-6 rounded-3xl border border-[#C9A24B]/20 shadow-sm text-left">
+                      <p className="text-[10px] font-black text-[#8A6D2F] uppercase tracking-widest flex items-center gap-2 mb-1 text-left"><KeyRound size={12}/> Credenciales de Acceso</p>
+                      <Input label="Usuario (Para ingresar)" value={form.username} icon={<AtSign size={14}/>} onChange={(v:any) => setForm({...form, username: v.toLowerCase().replace(/\s+/g, '')})} />
+                      <Input label="Contraseña" value={form.password} type="password" icon={<Lock size={14}/>} onChange={(v:any) => setForm({...form, password: v})} />
+                    </div>
+                  )}
+
+                  {form.rol === 'DENTISTA' && (
+                    <div className="space-y-3 text-left">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2 text-left">
+                          <Stethoscope size={12} className="text-[#C9A24B]"/> Especialidad Clínica
+                      </label>
+                      <select 
+                        className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold border border-slate-200 shadow-sm outline-none text-slate-900 cursor-pointer text-left focus:border-[#C9A24B] transition-colors" 
+                        value={form.especialidad_id} 
+                        onChange={(e) => setForm({...form, especialidad_id: e.target.value})}
+                      >
+                        <option value="">Seleccionar especialidad...</option>
+                        {especialidades.map(esp => <option key={esp.id} value={esp.id}>{esp.nombre}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {editandoUser && (
+                    <div className="pt-6 border-t border-slate-100 text-left">
+                      <button onClick={() => { setModalAbierto(false); toast.promise(eliminarCuentaStaff(editandoUser.id), { loading: 'Eliminando...', success: () => { fetchData(); return 'Staff eliminado'; }, error: 'Error' }); }} className="w-full p-4 bg-red-50 text-red-500 font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white rounded-2xl transition-all flex items-center justify-center gap-2 text-left border border-red-100">
+                        <Trash2 size={16}/> Eliminar accesos permanentemente
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-8 border-t border-slate-100 bg-white text-left shrink-0">
+                  <button onClick={handleGuardar} disabled={guardando} className="w-full bg-[#0A111F] text-white py-5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 disabled:bg-slate-300 text-left">
+                    {guardando ? <Loader2 className="animate-spin" /> : <Save size={18}/>}
+                    {editandoUser ? 'Guardar Cambios' : 'Generar Credenciales'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
+    </main>
   )
 }
 
 function Input({ label, value, onChange, icon, type = "text", placeholder = "" }: any) {
   return (
     <div className="space-y-2 text-left">
-      <label className="text-[10px] font-black text-slate-400 uppercase italic ml-3 flex items-center gap-2 text-left">{icon} {label}</label>
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2 text-left">
+        <span className="text-[#C9A24B]">{icon}</span> {label}
+      </label>
       <input 
         type={type} 
         value={value || ''} 
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)} 
-        className="w-full bg-white p-5 rounded-2xl text-xs font-bold outline-none border border-slate-100 shadow-sm focus:ring-2 ring-blue-500/10 text-slate-900 text-left" 
+        className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold outline-none border border-slate-200 shadow-sm focus:border-[#C9A24B] text-slate-900 text-left transition-colors placeholder:text-slate-400" 
       />
     </div>
   )
