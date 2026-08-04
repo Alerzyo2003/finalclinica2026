@@ -213,7 +213,7 @@ const pendientesHoy = citasHoy.filter(c => c.estado === 'programada').length
       if (isAdmin || isRecepcionista) {
         const { data: citasAyerData } = await supabase
           .from('citas')
-          .select('inicio, fin, estado_confirmacion')
+          .select('inicio, fin, estado_confirmacion, estado') // <-- Agregado
           .gte('inicio', rAyer.inicio)
           .lte('inicio', rAyer.fin)
           .neq('estado', 'cancelada')
