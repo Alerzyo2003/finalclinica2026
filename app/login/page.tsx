@@ -23,8 +23,8 @@ export default function LoginPage() {
   // Estado puramente visual
   const [showPassword, setShowPassword] = useState(false)
 
-  // Ruta del logo local en la carpeta public
-  const LOGO_URL = "/icon.png";
+  // Ruta del logo en Supabase
+  const LOGO_URL = "https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/icon.png";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -97,7 +97,7 @@ export default function LoginPage() {
         />
         <OrbitField />
 
-        {/* Emblema circular con logo local (Ajustado para que sea círculo perfecto) */}
+        {/* Emblema circular con logo de Supabase */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -182,7 +182,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Ícono + halo (Alineación corregida y matemáticamente centrada) */}
+          {/* Ícono + halo (Con el halo subido y el círculo centrado) */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -190,13 +190,13 @@ export default function LoginPage() {
             className="flex flex-col items-center mb-8"
           >
             <div className="relative w-28 mb-5 mt-2">
-  {/* Agregamos este div con -translate-y-4 para subir la línea */}
-  <div className="-translate-y-4"> 
-    <TopHalo />
-  </div>
+              {/* Aquí se sube la línea del halo */}
+              <div className="-translate-y-4">
+                <TopHalo />
+              </div>
               
-              {/* El contenedor ancla al centro absoluto usando transform */}
-              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[35%] flex items-center justify-center">
+              {/* El contenedor ancla el círculo del diente al centro absoluto */}
+              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-0 flex items-center justify-center">
                 <div
                   className="w-12 h-12 rounded-full flex items-center justify-center"
                   style={{ 
@@ -204,7 +204,6 @@ export default function LoginPage() {
                     border: `1px solid rgba(212,163,78,0.4)`
                   }}
                 >
-                  {/* Círculo interior con el diente */}
                   <div 
                     className="w-full h-full rounded-full flex items-center justify-center" 
                     style={{ backgroundColor: 'rgba(212,163,78,0.1)' }}
