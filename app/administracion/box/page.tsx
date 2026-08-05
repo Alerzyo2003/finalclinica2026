@@ -7,7 +7,7 @@ import {
   Save, Loader2, Clock, Calendar, Trash2,
   LayoutGrid, Sparkles, CalendarDays, AlertCircle, XCircle,
   MessageCircle, Phone, X, CalendarClock, Ban, CheckCircle2, UserCircle,
-  ChevronLeft, ChevronRight, Users, Stethoscope
+  ChevronLeft, ChevronRight, Users, Stethoscope, Info // <--- Add Info here
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
