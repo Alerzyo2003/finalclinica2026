@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { UserCircle, Lock, Eye, EyeOff, Shield, TrendingUp, Check, ArrowRight, Loader2 } from 'lucide-react'
+import { UserCircle, Lock, Eye, EyeOff, Shield, TrendingUp, ArrowRight, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // ── Paleta de marca AureoDent ──────────────────────────────
@@ -21,12 +20,11 @@ export default function LoginPage() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
-  // Estado puramente visual — no altera la lógica de autenticación
+  // Estado puramente visual
   const [showPassword, setShowPassword] = useState(false)
-  const [recordarme, setRecordarme] = useState(true)
 
-  // URL de Supabase proporcionada
-  const LOGO_URL = "https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/logos/logo.jpeg";
+  // Ruta del logo local en la carpeta public
+  const LOGO_URL = "/icon.png";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -83,23 +81,23 @@ export default function LoginPage() {
 
       {/* ── PANEL IZQUIERDO — identidad de marca ── */}
       <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between px-16 py-14 overflow-hidden">
-  {/* Imagen de fondo */}
- <img
-  src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/fondo-login.png"
-  alt=""
-  className="absolute inset-0 w-full h-full object-cover"
-  style={{ objectPosition: '20% center' }}
-/>
-  {/* Overlay oscuro para legibilidad */}
-  <div
-    className="absolute inset-0"
-    style={{
-      background: `linear-gradient(160deg, rgba(6,11,18,0.55) 0%, rgba(6,11,18,0.85) 100%)`,
-    }}
-  />
-  <OrbitField />
+        {/* Imagen de fondo */}
+        <img
+          src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/fondo-login.png"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectPosition: '20% center' }}
+        />
+        {/* Overlay oscuro para legibilidad */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(160deg, rgba(6,11,18,0.55) 0%, rgba(6,11,18,0.85) 100%)`,
+          }}
+        />
+        <OrbitField />
 
-        {/* Emblema circular */}
+        {/* Emblema circular con logo local (Ajustado para que sea círculo perfecto) */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -108,10 +106,10 @@ export default function LoginPage() {
         >
           <div className="relative">
             <div
-              className="w-24 h-24 rounded-full flex items-center justify-center"
+              className="w-24 h-24 rounded-full flex items-center justify-center overflow-hidden bg-white"
               style={{ border: `1.5px solid ${GOLD}`, boxShadow: `0 0 0 1px rgba(212,163,78,0.15), 0 0 40px rgba(212,163,78,0.08)` }}
             >
-              <span className="font-display italic text-5xl" style={{ color: GOLD_LIGHT }}>A</span>
+              <img src={LOGO_URL} alt="AureoDent Logo" className="w-[75%] h-[75%] object-contain" />
             </div>
             <Spark className="absolute -top-1 -right-1 w-4 h-4" delay={0.6} />
           </div>
@@ -172,36 +170,51 @@ export default function LoginPage() {
           {/* Encabezado móvil */}
           <div className="flex lg:hidden justify-center mb-8">
             <div
-              className="w-16 h-16 rounded-full overflow-hidden"
+              className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden bg-white"
               style={{ border: `1.5px solid ${GOLD}` }}
             >
               <img
                 src={LOGO_URL}
                 alt="Logo AureoDent"
-                className="w-full h-full object-cover"
+                className="w-[75%] h-[75%] object-contain"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             </div>
           </div>
 
-          {/* Ícono + halo */}
+          {/* Ícono + halo (Alineación corregida y matemáticamente centrada) */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.7, delay: 0.15 }}
             className="flex flex-col items-center mb-8"
           >
-            <div className="relative w-24 mb-3">
-              <TopHalo />
-              <div className="absolute inset-x-0 -bottom-1 flex justify-center">
+            <div className="relative w-28 mb-5 mt-2">
+  {/* Agregamos este div con -translate-y-4 para subir la línea */}
+  <div className="-translate-y-4"> 
+    <TopHalo />
+  </div>
+              
+              {/* El contenedor ancla al centro absoluto usando transform */}
+              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[35%] flex items-center justify-center">
                 <div
-                  className="w-11 h-11 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(212,163,78,0.08)', border: `1px solid rgba(212,163,78,0.35)` }}
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ 
+                    backgroundColor: NAVY, // Oculta la línea de atrás
+                    border: `1px solid rgba(212,163,78,0.4)`
+                  }}
                 >
-                  <ToothIcon size={20} style={{ color: GOLD_LIGHT }} />
+                  {/* Círculo interior con el diente */}
+                  <div 
+                    className="w-full h-full rounded-full flex items-center justify-center" 
+                    style={{ backgroundColor: 'rgba(212,163,78,0.1)' }}
+                  >
+                    <ToothIcon size={20} style={{ color: GOLD_LIGHT }} />
+                  </div>
                 </div>
               </div>
-              <Spark className="absolute top-0 right-1 w-3 h-3" delay={0.9} />
+              
+              <Spark className="absolute -top-1 right-2 w-4 h-4" delay={0.9} />
             </div>
 
             <p className="text-[11px] font-semibold uppercase tracking-[0.35em]" style={{ color: GOLD }}>
@@ -218,7 +231,7 @@ export default function LoginPage() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.3 }}
             onSubmit={handleLogin}
-            className="space-y-5 text-left"
+            className="space-y-6 text-left"
           >
             {/* Campo: Identificador */}
             <div className="space-y-2">
@@ -280,41 +293,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Recordarme + olvidaste clave */}
-            <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
-                onClick={() => setRecordarme((v) => !v)}
-                className="flex items-center gap-2.5 group"
-              >
-                <span
-                  className="w-4 h-4 rounded flex items-center justify-center transition-colors"
-                  style={{
-                    backgroundColor: recordarme ? GOLD : 'transparent',
-                    border: `1.5px solid ${recordarme ? GOLD : 'rgba(212,163,78,0.4)'}`,
-                  }}
-                >
-                  <AnimatePresence>
-                    {recordarme && (
-                      <motion.span
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.5 }}
-                        transition={{ duration: 0.15 }}
-                      >
-                        <Check size={11} strokeWidth={3} color={NAVY_DEEP} />
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </span>
-                <span className="text-[13px]" style={{ color: '#B9C2D0' }}>Recordarme</span>
-              </button>
-
-              <Link href="/recuperar-clave" className="text-[13px] hover:underline" style={{ color: GOLD_LIGHT }}>
-                ¿Olvidaste tu clave?
-              </Link>
-            </div>
-
             <AnimatePresence>
               {error && (
                 <motion.div
@@ -334,7 +312,7 @@ export default function LoginPage() {
               disabled={cargando}
               whileHover={{ scale: cargando ? 1 : 1.01 }}
               whileTap={{ scale: cargando ? 1 : 0.98 }}
-              className="w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] flex justify-center items-center gap-3 disabled:opacity-50"
+              className="w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] flex justify-center items-center gap-3 disabled:opacity-50 mt-2"
               style={{
                 background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 55%, ${GOLD_DEEP} 100%)`,
                 color: NAVY_DEEP,
@@ -469,48 +447,6 @@ function TopHalo() {
         initial={{ pathLength: 0, opacity: 0 }}
         animate={{ pathLength: 1, opacity: 0.8 }}
         transition={{ duration: 1.2, ease: 'easeInOut' }}
-      />
-    </svg>
-  )
-}
-
-// Busto clásico estilizado (ilustración vectorial original, no una reproducción fotográfica)
-function ClassicalBust() {
-  return (
-    <svg
-      className="absolute -left-16 bottom-0 h-[92%] w-auto opacity-[0.9] pointer-events-none"
-      viewBox="0 0 340 600"
-      fill="none"
-      preserveAspectRatio="xMinYMax meet"
-    >
-      <defs>
-        <linearGradient id="bustGrad" x1="0" y1="0" x2="340" y2="600" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#2A3547" />
-          <stop offset="1" stopColor="#131B27" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M40,600 L40,420 C40,360 55,300 90,260 C75,240 68,215 70,190
-           C58,182 50,168 52,150 C54,132 68,120 84,120
-           C90,95 108,72 132,58 C120,44 118,26 132,14
-           C146,2 168,4 178,18 C186,10 198,8 208,14
-           C222,22 224,40 214,52 C236,64 252,86 258,112
-           C274,114 286,128 286,146 C286,164 274,180 258,184
-           C258,208 250,230 236,248 C264,286 280,336 280,392
-           L280,600 Z"
-        fill="url(#bustGrad)"
-      />
-      <path
-        d="M40,600 L40,420 C40,360 55,300 90,260 C75,240 68,215 70,190
-           C58,182 50,168 52,150 C54,132 68,120 84,120
-           C90,95 108,72 132,58 C120,44 118,26 132,14
-           C146,2 168,4 178,18 C186,10 198,8 208,14
-           C222,22 224,40 214,52 C236,64 252,86 258,112
-           C274,114 286,128 286,146 C286,164 274,180 258,184
-           C258,208 250,230 236,248 C264,286 280,336 280,392
-           L280,600"
-        stroke="rgba(212,163,78,0.25)"
-        strokeWidth="1.5"
       />
     </svg>
   )
