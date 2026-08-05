@@ -2,14 +2,15 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { createPortal } from 'react-dom'
 import { 
   ArrowLeft, Loader2, CheckCircle2, 
-  XCircle, RefreshCw, Plus, X, Save, Trash2, Search
+  XCircle, RefreshCw, Plus, X, Save, Trash2, Search, Tag, BookMarked
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
-// 🔥 AÑADIMOS LA LISTA OFICIAL DE ICONOS DEL ODONTOGRAMA 🔥
+// Lista oficial de iconos del odontograma
 const ICONOS_DISPONIBLES = [
   { id: "default", label: "Círculo (Genérico)" },
   { id: "extraccion", label: "Extracción (X Roja/Verde)" },
@@ -36,16 +37,19 @@ export default function DetalleArancelPage() {
   const [nuevoPrecio, setNuevoPrecio] = useState<string>('');
   const [busqueda, setBusqueda] = useState('')
 
-  // 🔥 NUEVO ESTADO PARA LAS PESTAÑAS 🔥
+  // Estado para las pestañas
   const [tabActiva, setTabActiva] = useState<'habilitados' | 'deshabilitados'>('habilitados');
   
   // Estados para el Modal de Nueva Prestación
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   
+  // Estado para los Portals
+  const [isMounted, setIsMounted] = useState(false)
+  
   const decodedCat = decodeURIComponent(categoria as string)
 
-  // Formulario inicial con el icono 'default' para que coincida con el odontograma
+  // Formulario inicial
   const formInicial = {
     nombre_accion: '',
     codigo_accion: '',
@@ -58,6 +62,7 @@ export default function DetalleArancelPage() {
   const [form, setForm] = useState(formInicial)
 
   useEffect(() => {
+    setIsMounted(true)
     fetchItems()
   }, [])
 
@@ -79,7 +84,6 @@ export default function DetalleArancelPage() {
       const prestacionIds = prestacionesData.map(p => p.id);
       const usageMap = new Map<string, number>();
 
-      // 🔥 PASO 1: Contar desde los planes de tratamiento (presupuesto_items)
       const { data: realizadoItems, error: realizadoError } = await supabase
         .from('presupuesto_items')
         .select('prestacion_id')
@@ -96,8 +100,6 @@ export default function DetalleArancelPage() {
         }
       }
 
-      // 🔥 PASO 2: Contar desde atenciones directas (atenciones_realizadas)
-      // Esta tabla registra prestaciones que no necesariamente están en un plan de tratamiento.
       const { data: atencionesDirectas, error: atencionesError } = await supabase
         .from('atenciones_realizadas')
         .select('prestacion_id')
@@ -157,7 +159,7 @@ export default function DetalleArancelPage() {
       toast.success("Prestación creada con éxito.")
       setModalAbierto(false)
       setForm(formInicial)
-      fetchItems() // Recargar lista
+      fetchItems()
     } catch (err: any) {
       toast.error("Error al guardar la prestación")
     } finally {
@@ -198,7 +200,7 @@ export default function DetalleArancelPage() {
     }
   }
 
-  // 🔥 NUEVA FUNCIÓN PARA ELIMINAR PRESTACIÓN 🔥
+  // FUNCIÓN PARA ELIMINAR PRESTACIÓN
   async function handleEliminarPrestacion(id: string, nombre: string) {
     if (!window.confirm(`¿Estás seguro de que quieres eliminar "${nombre}" de forma permanente? Esta acción no se puede deshacer.`)) {
       return;
@@ -243,7 +245,7 @@ export default function DetalleArancelPage() {
   
     if (precioFinal === Number(itemOriginal?.Precio || 0)) {
       setEditandoPrecioId(null);
-      return; // No changes
+      return;
     }
   
     setActualizandoId(id);
@@ -271,12 +273,12 @@ export default function DetalleArancelPage() {
   }
 
   if (cargando) return (
-    <div className="h-screen flex items-center justify-center bg-[#F8FAFC]">
-      <Loader2 className="animate-spin text-blue-600" size={40}/>
+    <div className="h-screen flex flex-col items-center justify-center bg-[#FBF8F2] gap-4">
+      <Loader2 className="animate-spin text-[#C9A24B]" size={40}/>
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando arancel...</p>
     </div>
   )
 
-  // 🔥 FILTRADO DE ITEMS PARA LAS PESTAÑAS 🔥
   const itemsHabilitados = items.filter(item => {
     const valor = (item.Habilitado || "").trim().toLowerCase();
     return valor === 'si' || valor === 'sí';
@@ -289,7 +291,6 @@ export default function DetalleArancelPage() {
 
   let itemsMostrados = tabActiva === 'habilitados' ? itemsHabilitados : itemsDeshabilitados;
 
-  // 🔥 NUEVO FILTRADO POR BÚSQUEDA 🔥
   if (busqueda) {
     const busquedaLower = busqueda.toLowerCase();
     itemsMostrados = itemsMostrados.filter(item => 
@@ -299,74 +300,86 @@ export default function DetalleArancelPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-8 pb-20">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
+      
+      {/* IMAGEN DE FONDO GLOBAL */}
+      <div 
+        className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
+      ></div>
+
+      <div className="max-w-6xl mx-auto space-y-8 relative z-10 text-left">
         
         {/* NAVEGACIÓN */}
         <button 
           onClick={() => router.back()} 
-          className="flex items-center gap-2 font-black text-[10px] text-slate-400 uppercase hover:text-blue-600 transition-colors group"
+          className="flex items-center gap-2 font-black text-[10px] text-slate-400 uppercase hover:text-[#0A111F] transition-all group w-fit"
         >
-          <div className="p-2 bg-white rounded-lg shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all border border-slate-100">
+          <div className="p-2 bg-white rounded-xl shadow-sm group-hover:bg-[#0A111F] group-hover:text-white transition-all border border-slate-200">
             <ArrowLeft size={14}/>
           </div>
           Volver a Categorías
         </button>
 
         {/* HEADER */}
-        <header className="bg-white p-12 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
-           <div>
-             <span className="bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">Arancel Clínico</span>
-             <h1 className="text-4xl font-black text-slate-800 uppercase italic leading-none mt-4">{decodedCat}</h1>
-           </div>
-           <button 
+        <header className="bg-white/90 backdrop-blur-md p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
+          <div className="flex items-center gap-5 text-left w-full md:w-auto">
+            <div className="bg-[#0A111F] w-16 h-16 rounded-full flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
+              <BookMarked size={28} />
+            </div>
+            <div className="text-left">
+              <span className="bg-[#C9A24B]/10 text-[#8A6D2F] px-3.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-[#C9A24B]/20 inline-block mb-2">Arancel Clínico</span>
+              <h1 className="text-2xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">{decodedCat}</h1>
+            </div>
+          </div>
+          
+          <button 
             onClick={() => setModalAbierto(true)}
-            className="bg-slate-900 text-white px-8 py-5 rounded-3xl font-black text-xs uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center gap-2 active:scale-95"
-           >
-             <Plus size={18} /> Nueva Acción
-           </button>
+            className="bg-[#0A111F] text-white px-6 py-4 rounded-full font-bold text-[11px] uppercase tracking-wider hover:bg-[#1a2538] transition-all shadow-md flex items-center justify-center gap-2 shrink-0 w-full md:w-auto text-left"
+          >
+            <Plus size={16} /> Nueva Acción
+          </button>
         </header>
 
         {/* BUSCADOR */}
-        <div className="relative group">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+        <div className="relative group max-w-md text-left">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#C9A24B] transition-colors" size={18} />
           <input 
             type="text"
-            placeholder="Buscar por nombre o código..."
-            className="w-full max-w-md bg-white p-4 pl-12 rounded-2xl border border-slate-100 shadow-sm outline-none focus:ring-2 ring-blue-500/20 font-bold text-xs transition-all"
+            placeholder="BUSCAR POR NOMBRE O CÓDIGO..."
+            className="w-full bg-white/95 backdrop-blur-sm p-4 pl-12 pr-6 rounded-full border border-slate-200 shadow-sm outline-none focus:border-[#C9A24B] transition-all font-bold text-xs uppercase text-slate-900 placeholder:text-slate-400"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
 
         {/* TABLA DE ACCIONES */}
-        <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="bg-white/95 backdrop-blur-sm rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden text-left">
           
-          {/* 🔥 PESTAÑAS HABILITADOS / DESHABILITADOS 🔥 */}
-          <div className="p-6 border-b border-slate-100 flex items-center gap-2">
-            <button onClick={() => setTabActiva('habilitados')} className={`px-6 py-3 rounded-2xl text-xs font-black uppercase transition-all flex items-center gap-2 ${tabActiva === 'habilitados' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <CheckCircle2 size={16}/> Habilitados ({itemsHabilitados.length})
+          {/* PESTAÑAS HABILITADOS / DESHABILITADOS */}
+          <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-[#FBF8F2]/50">
+            <button onClick={() => setTabActiva('habilitados')} className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${tabActiva === 'habilitados' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
+              <CheckCircle2 size={14}/> Habilitados ({itemsHabilitados.length})
             </button>
-            <button onClick={() => setTabActiva('deshabilitados')} className={`px-6 py-3 rounded-2xl text-xs font-black uppercase transition-all flex items-center gap-2 ${tabActiva === 'deshabilitados' ? 'bg-red-50 text-red-500 shadow-sm' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <XCircle size={16}/> Deshabilitados ({itemsDeshabilitados.length})
+            <button onClick={() => setTabActiva('deshabilitados')} className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${tabActiva === 'deshabilitados' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
+              <XCircle size={14}/> Deshabilitados ({itemsDeshabilitados.length})
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto text-left">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-50/50 text-slate-400 text-[9px] font-black uppercase tracking-[0.2em]">
-                  <th className="p-10">Tratamiento / Acción</th>
-                  <th className="p-10 text-center">Uso (Realizadas)</th>
-                  <th className="p-10 text-center">Estado</th>
-                  <th className="p-10 text-center">Precio</th>
-                  <th className="p-10 text-center">Acciones</th>
+                <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-400 text-[9px] font-black uppercase tracking-[0.2em]">
+                  <th className="px-8 py-5">Tratamiento / Acción</th>
+                  <th className="px-6 py-5 text-center">Uso (Realizadas)</th>
+                  <th className="px-6 py-5 text-center">Estado</th>
+                  <th className="px-6 py-5 text-center">Precio</th>
+                  <th className="px-8 py-5 text-center">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100/60 text-left">
                 {itemsMostrados.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center p-20 text-slate-400 font-bold text-sm">
+                    <td colSpan={5} className="text-center p-20 text-slate-400 font-bold text-xs uppercase tracking-widest">
                       {busqueda 
                         ? 'No se encontraron prestaciones con ese criterio.' 
                         : 'No hay prestaciones en esta sección.'
@@ -379,32 +392,32 @@ export default function DetalleArancelPage() {
                   const esSi = valorNormalizado === 'si' || valorNormalizado === 'sí';
 
                   return (
-                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-all">
-                      <td className="p-10">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-black text-slate-800 uppercase italic group-hover:text-blue-600 transition-colors leading-tight">
+                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-all text-left">
+                      <td className="px-8 py-5 text-left">
+                        <div className="flex flex-col text-left">
+                          <span className="text-xs font-black text-[#0A111F] uppercase italic group-hover:text-[#C9A24B] transition-colors leading-tight text-left">
                             {item["Nombre Accion"]}
                           </span>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase mt-2">
+                          <span className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-wider text-left">
                             Cod: {item["Codigo Accion"] || '---'} | Icono: {item.icono_tipo || 'default'}
                           </span>
                         </div>
                       </td>
 
-                      <td className="p-10 text-center">
+                      <td className="px-6 py-5 text-center">
                         {item.veces_usado > 0 ? (
-                          <span className="font-black text-emerald-600 text-lg">{item.veces_usado}</span>
+                          <span className="font-black text-emerald-600 text-sm">{item.veces_usado}</span>
                         ) : (
                           <span className="font-bold text-slate-300">-</span>
                         )}
                       </td>
 
-                      <td className="p-10 text-center">
+                      <td className="px-6 py-5 text-center">
                         <button 
                           onClick={() => toggleEstado(item.id, item.Habilitado)}
                           disabled={actualizandoId === item.id}
                           className={`
-                            relative inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all shadow-sm
+                            relative inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-sm
                             ${esSi 
                               ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
                               : 'bg-red-50 text-red-500 border border-red-100'
@@ -413,17 +426,17 @@ export default function DetalleArancelPage() {
                           `}
                         >
                           {actualizandoId === item.id ? (
-                            <RefreshCw size={14} className="animate-spin" />
+                            <RefreshCw size={12} className="animate-spin" />
                           ) : esSi ? (
-                            <CheckCircle2 size={14} />
+                            <CheckCircle2 size={12} />
                           ) : (
-                            <XCircle size={14} />
+                            <XCircle size={12} />
                           )}
                           {esSi ? 'Habilitado' : 'Deshabilitado'}
                         </button>
                       </td>
 
-                      <td className="p-10 text-center font-black text-slate-900 text-xl tracking-tighter relative">
+                      <td className="px-6 py-5 text-center font-black text-[#0A111F] text-sm tracking-tight relative">
                         {editandoPrecioId === item.id ? (
                           <input
                             type="number"
@@ -432,27 +445,28 @@ export default function DetalleArancelPage() {
                             onBlur={() => handleActualizarPrecio(item.id)}
                             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                             autoFocus
-                            className="w-36 text-center bg-white border-2 border-blue-500 rounded-xl p-2 font-black text-slate-900 text-xl tracking-tighter outline-none shadow-lg"
+                            className="w-28 text-center bg-white border-2 border-[#C9A24B] rounded-xl p-1.5 font-black text-[#0A111F] text-sm tracking-tight outline-none shadow-md"
                           />
                         ) : (
                           <span 
                             onClick={() => { setEditandoPrecioId(item.id); setNuevoPrecio(String(item.Precio || 0)); }}
-                            className="cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-all"
+                            className="cursor-pointer hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-all inline-block"
+                            title="Haz clic para editar el precio"
                           >
                             ${Number(item.Precio || 0).toLocaleString('es-CL')}
                           </span>
                         )}
-                        {actualizandoId === item.id && editandoPrecioId !== item.id && <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-blue-500" />}
+                        {actualizandoId === item.id && editandoPrecioId !== item.id && <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-[#C9A24B]" size={16} />}
                       </td>
 
-                      <td className="p-10 text-center">
+                      <td className="px-8 py-5 text-center">
                         <button 
                           onClick={() => handleEliminarPrestacion(item.id, item["Nombre Accion"])}
                           disabled={actualizandoId === item.id}
-                          className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
+                          className="w-9 h-9 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 transition-all mx-auto shadow-sm disabled:opacity-50"
                           title="Eliminar Prestación Permanentemente"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </td>
                     </tr>
@@ -464,93 +478,97 @@ export default function DetalleArancelPage() {
         </div>
       </div>
 
-      {/* MODAL NUEVA PRESTACIÓN */}
-      <AnimatePresence>
-        {modalAbierto && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl relative border border-white/20 overflow-y-auto max-h-[90vh]"
-            >
-              <button onClick={() => setModalAbierto(false)} className="absolute top-8 right-8 text-slate-400 hover:text-red-500 transition-colors">
-                <X size={24}/>
-              </button>
-              
-              <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-2">Añadir Acción</h2>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-8">Categoría: {decodedCat}</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block">Nombre de la Acción Clínica</label>
-                  <input 
-                    className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none focus:ring-2 ring-blue-500/20 shadow-inner"
-                    placeholder="Ej: Obturación Resina Composite"
-                    value={form.nombre_accion}
-                    onChange={(e) => setForm({...form, nombre_accion: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block">Código Interno</label>
-                  <input 
-                    className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none focus:ring-2 ring-blue-500/20 shadow-inner"
-                    placeholder="0101001"
-                    value={form.codigo_accion}
-                    onChange={(e) => setForm({...form, codigo_accion: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block">Precio ($)</label>
-                  <input 
-                    type="number"
-                    className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none focus:ring-2 ring-blue-500/20 shadow-inner"
-                    placeholder="0"
-                    value={form.precio}
-                    onChange={(e) => setForm({...form, precio: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block">Valor UCO</label>
-                  <input 
-                    type="number" step="0.01"
-                    className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none focus:ring-2 ring-blue-500/20 shadow-inner"
-                    placeholder="0.00"
-                    value={form.uco}
-                    onChange={(e) => setForm({...form, uco: e.target.value})}
-                  />
-                </div>
-
-                {/* 🔥 SELECT DE ICONOS ACTUALIZADO 🔥 */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block">Icono en Odontograma</label>
-                  <select 
-                    className="w-full p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none shadow-inner text-xs appearance-none"
-                    value={form.icono_tipo}
-                    onChange={(e) => setForm({...form, icono_tipo: e.target.value})}
-                  >
-                    {ICONOS_DISPONIBLES.map(ico => (
-                      <option key={ico.id} value={ico.id}>{ico.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleCrearPrestacion}
-                disabled={guardando}
-                className="w-full mt-10 bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xs uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 disabled:bg-slate-200"
+      {/* MODAL NUEVA PRESTACIÓN ENVOLVIDO EN CREATEPORTAL */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {modalAbierto && (
+            <div className="fixed inset-0 bg-[#0A111F]/60 backdrop-blur-sm z-[999999] flex items-center justify-center p-4 text-left">
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                className="bg-white w-full max-w-lg rounded-[3rem] p-8 md:p-10 shadow-2xl relative border border-slate-100 overflow-y-auto max-h-[90vh] text-left"
               >
-                {guardando ? <Loader2 className="animate-spin" /> : <Save size={18} />} 
-                {guardando ? 'Guardando...' : 'Guardar Prestación'}
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
+                <button onClick={() => setModalAbierto(false)} className="absolute top-8 right-8 p-2 bg-slate-50 rounded-full text-slate-400 hover:text-red-500 transition-colors shadow-sm">
+                  <X size={20}/>
+                </button>
+                
+                <h2 className="text-xl font-black text-[#0A111F] tracking-tight uppercase italic leading-none mb-1">Añadir Acción</h2>
+                <p className="text-[#C9A24B] text-[10px] font-bold uppercase tracking-widest mb-6">Categoría: {decodedCat}</p>
+
+                <div className="space-y-5 text-left">
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 block">Nombre de la Acción Clínica</label>
+                    <input 
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#C9A24B] text-slate-900 shadow-sm placeholder:text-slate-400"
+                      placeholder="Ej: Obturación Resina Composite"
+                      value={form.nombre_accion}
+                      onChange={(e) => setForm({...form, nombre_accion: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 block">Código Interno</label>
+                      <input 
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#C9A24B] text-slate-900 shadow-sm placeholder:text-slate-400"
+                        placeholder="0101001"
+                        value={form.codigo_accion}
+                        onChange={(e) => setForm({...form, codigo_accion: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 block">Precio ($)</label>
+                      <input 
+                        type="number"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#C9A24B] text-slate-900 shadow-sm placeholder:text-slate-400"
+                        placeholder="0"
+                        value={form.precio}
+                        onChange={(e) => setForm({...form, precio: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 block">Valor UCO</label>
+                      <input 
+                        type="number" step="0.01"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#C9A24B] text-slate-900 shadow-sm placeholder:text-slate-400"
+                        placeholder="0.00"
+                        value={form.uco}
+                        onChange={(e) => setForm({...form, uco: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 block">Icono en Odontograma</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#C9A24B] text-slate-900 shadow-sm cursor-pointer"
+                        value={form.icono_tipo}
+                        onChange={(e) => setForm({...form, icono_tipo: e.target.value})}
+                      >
+                        {ICONOS_DISPONIBLES.map(ico => (
+                          <option key={ico.id} value={ico.id}>{ico.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleCrearPrestacion}
+                    disabled={guardando}
+                    className="w-full mt-6 bg-[#0A111F] text-white py-5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 disabled:bg-slate-300"
+                  >
+                    {guardando ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} 
+                    {guardando ? 'Guardando...' : 'Guardar Prestación'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
+    </main>
   )
 }
